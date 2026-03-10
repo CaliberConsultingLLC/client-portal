@@ -1,26 +1,122 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   North Star Partners — Design System CSS
+   ============================================================ */
 
+/* --- Custom Theme (Tailwind v4 inline theme) --- */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Fonts */
+  --font-sans: "Montserrat", "Inter", "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", monospace;
+
+  /* Brand Colors */
+  --color-nsp-blue-50: #F0F5F8;
+  --color-nsp-blue-100: #D9E5EC;
+  --color-nsp-blue-200: #B3CBDA;
+  --color-nsp-blue-300: #8DB1C7;
+  --color-nsp-blue-400: #6393AA;
+  --color-nsp-blue-500: #3F647B;
+  --color-nsp-blue-600: #345367;
+  --color-nsp-blue-700: #294253;
+  --color-nsp-blue-800: #1E313E;
+  --color-nsp-blue-900: #13202A;
+
+  --color-nsp-orange-50: #FEF4EE;
+  --color-nsp-orange-100: #FDE5D5;
+  --color-nsp-orange-200: #F1C4A5;
+  --color-nsp-orange-300: #F1A06A;
+  --color-nsp-orange-400: #E07A3F;
+  --color-nsp-orange-500: #C85A2A;
+  --color-nsp-orange-600: #A84520;
+  --color-nsp-orange-700: #83351A;
+  --color-nsp-orange-800: #5E2613;
+  --color-nsp-orange-900: #3A170C;
+
+  --color-nsp-green-50: #F0F6F3;
+  --color-nsp-green-100: #D5E6DC;
+  --color-nsp-green-200: #ABCDB9;
+  --color-nsp-green-300: #6F9A83;
+  --color-nsp-green-400: #5A8570;
+  --color-nsp-green-500: #48705D;
+
+  --color-nsp-yellow-50: #FBF9F0;
+  --color-nsp-yellow-100: #F3EFD5;
+  --color-nsp-yellow-200: #E8DFB0;
+  --color-nsp-yellow-300: #D7C97E;
+  --color-nsp-yellow-400: #C4B35E;
+
+  --color-nsp-red-50: #FAF3F2;
+  --color-nsp-red-100: #F0DDDA;
+  --color-nsp-red-200: #E1BBB5;
+  --color-nsp-red-300: #C88D86;
+  --color-nsp-red-400: #B57069;
+
+  /* Surface & Neutral */
+  --color-surface-1: #FFFFFF;
+  --color-surface-2: #F8FAFC;
+  --color-surface-3: #EFF3F8;
+  --color-surface-4: #E2E8F0;
+
+  --color-border-default: #E2E8F0;
+  --color-border-subtle: #F1F5F9;
+  --color-border-strong: #CBD5E1;
+
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94A3B8;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 6px 20px rgba(15, 23, 42, 0.08), 0 3px 6px rgba(15, 23, 42, 0.04);
+  --shadow-glass: 0 8px 32px rgba(15, 23, 42, 0.06);
+
+  /* Border Radius */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --radius-pill: 999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* --- Base Styles --- */
+:root {
+  --background: var(--color-surface-2);
+  --foreground: var(--color-text-primary);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Glass Surface Utility --- */
+.glass-surface {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-glass);
+}
+
+/* --- Smooth Scrolling --- */
+html {
+  scroll-behavior: smooth;
+}
+
+/* --- Focus Ring --- */
+*:focus-visible {
+  outline: 2px solid var(--color-nsp-blue-400);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* --- Selection --- */
+::selection {
+  background: var(--color-nsp-blue-100);
+  color: var(--color-nsp-blue-900);
 }

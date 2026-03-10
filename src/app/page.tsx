@@ -1,65 +1,231 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Navbar } from "@/components/marketing/navbar";
+import { Footer } from "@/components/marketing/footer";
+import { Hero } from "@/components/marketing/hero";
+import { ServiceCard } from "@/components/marketing/service-card";
+import { Button } from "@/components/ui/button";
+import {
+  ClipboardList,
+  Compass,
+  TrendingUp,
+  GitMerge,
+  Users,
+  Activity,
+  ArrowRight,
+  CheckCircle2,
+} from "lucide-react";
 
-export default function Home() {
+const services = [
+  {
+    icon: ClipboardList,
+    title: "Culture Surveys",
+    description:
+      "Comprehensive employee engagement and culture assessments tailored to your organization's unique needs.",
+    accent: "nsp-blue",
+  },
+  {
+    icon: Compass,
+    title: "The Compass",
+    description:
+      "Individual leadership assessment that maps strengths, blind spots, and growth opportunities for every leader.",
+    accent: "nsp-orange",
+  },
+  {
+    icon: TrendingUp,
+    title: "Leadership Development",
+    description:
+      "Targeted programs built on data — 360 feedback, coaching frameworks, and measurable growth tracking.",
+    accent: "nsp-green",
+  },
+  {
+    icon: GitMerge,
+    title: "M&A Integration",
+    description:
+      "Cultural alignment assessments that surface risks and opportunities during mergers and acquisitions.",
+    accent: "nsp-yellow",
+  },
+  {
+    icon: Users,
+    title: "Department Collaboration",
+    description:
+      "Cross-functional effectiveness analysis that identifies friction points and builds bridges between teams.",
+    accent: "nsp-blue",
+  },
+  {
+    icon: Activity,
+    title: "Sentiment Analysis",
+    description:
+      "Ongoing pulse surveys and sentiment tracking that keep you connected to your organization's heartbeat.",
+    accent: "nsp-orange",
+  },
+];
+
+const processSteps = [
+  {
+    step: "01",
+    title: "Listen",
+    description:
+      "We design and deploy confidential surveys that capture honest employee perspectives across your organization.",
+  },
+  {
+    step: "02",
+    title: "Analyze",
+    description:
+      "Our automated pipeline cleans, normalizes, and analyzes response data — surfacing trends, patterns, and actionable insights.",
+  },
+  {
+    step: "03",
+    title: "Report",
+    description:
+      "Beautiful, interactive dashboards deliver insights to every level of leadership through a secure client portal.",
+  },
+  {
+    step: "04",
+    title: "Act",
+    description:
+      "We partner with you to translate insights into concrete action plans that drive measurable organizational improvement.",
+  },
+];
+
+export default function HomePage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <>
+      <Navbar />
+      <main>
+        {/* Hero */}
+        <Hero />
+
+        {/* Services Section */}
+        <section className="bg-surface-2 py-20 md:py-28">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="mx-auto mb-14 max-w-2xl text-center">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
+                Solutions for every stage of your journey
+              </h2>
+              <p className="mt-4 text-base text-text-secondary">
+                Whether you need a comprehensive culture assessment or a
+                targeted leadership tool, we build the right solution for your
+                organization.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {services.map((service) => (
+                <ServiceCard
+                  key={service.title}
+                  icon={service.icon}
+                  title={service.title}
+                  description={service.description}
+                  accentColor={service.accent}
+                />
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Process Section */}
+        <section className="bg-white py-20 md:py-28">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="mx-auto mb-14 max-w-2xl text-center">
+              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
+                How we work
+              </h2>
+              <p className="mt-4 text-base text-text-secondary">
+                A proven process that transforms raw feedback into
+                organizational growth.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
+              {processSteps.map((item) => (
+                <div key={item.step} className="relative">
+                  <div className="mb-4 text-3xl font-extrabold text-nsp-blue-100">
+                    {item.step}
+                  </div>
+                  <h3 className="mb-2 text-lg font-bold text-text-primary">
+                    {item.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-text-secondary">
+                    {item.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Why NSP Section */}
+        <section className="bg-surface-2 py-20 md:py-28">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
+              <div>
+                <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
+                  Why North Star Partners?
+                </h2>
+                <p className="mt-4 text-base leading-relaxed text-text-secondary">
+                  We combine deep consulting expertise with modern technology to
+                  deliver insights that actually drive change — not just reports
+                  that sit on a shelf.
+                </p>
+                <ul className="mt-8 flex flex-col gap-4">
+                  {[
+                    "Custom solutions built for your specific challenges",
+                    "Confidential, enterprise-grade data security",
+                    "Automated pipeline from survey to insight",
+                    "Beautiful reporting that leadership actually uses",
+                    "Ongoing partnership, not one-time engagements",
+                  ].map((item) => (
+                    <li key={item} className="flex items-start gap-3">
+                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-nsp-green-300" />
+                      <span className="text-sm text-text-primary">{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Visual placeholder */}
+              <div className="flex items-center justify-center">
+                <div className="glass-surface flex h-80 w-full items-center justify-center rounded-[--radius-xl]">
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-nsp-blue-50">
+                      <Compass className="h-8 w-8 text-nsp-blue-500" />
+                    </div>
+                    <p className="text-sm font-medium text-text-muted">
+                      Dashboard preview coming soon
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA Section */}
+        <section className="bg-nsp-blue-500 py-20">
+          <div className="mx-auto max-w-3xl px-6 text-center">
+            <h2 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl">
+              Ready to understand your organization better?
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-base text-nsp-blue-100">
+              Let&apos;s start with a conversation about your goals. We&apos;ll
+              design a solution that fits your organization&apos;s unique needs.
+            </p>
+            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <Button
+                size="lg"
+                className="bg-white text-nsp-blue-600 hover:bg-nsp-blue-50"
+                asChild
+              >
+                <Link href="/contact">
+                  Schedule a Conversation
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
       </main>
-    </div>
+      <Footer />
+    </>
   );
 }
