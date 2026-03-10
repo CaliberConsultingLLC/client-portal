@@ -8,6 +8,7 @@
 @theme inline {
   /* Fonts */
   --font-sans: "Montserrat", "Inter", "Segoe UI", sans-serif;
+  --font-serif: "Playfair Display", "Georgia", "Times New Roman", serif;
   --font-mono: "Geist Mono", monospace;
 
   /* Brand Colors */

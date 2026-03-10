@@ -1,42 +1,61 @@
 import { cn } from "@/lib/utils";
-import { Compass } from "lucide-react";
+import { NspLogoMark } from "./nsp-logo-mark";
 
 interface LogoProps {
   className?: string;
   size?: "sm" | "default" | "lg";
   showText?: boolean;
+  /** Use light text (for dark backgrounds) */
+  variant?: "default" | "light";
 }
 
-export function Logo({ className, size = "default", showText = true }: LogoProps) {
-  const iconSize = {
-    sm: "h-6 w-6",
-    default: "h-8 w-8",
-    lg: "h-10 w-10",
-  }[size];
+export function Logo({
+  className,
+  size = "default",
+  showText = true,
+  variant = "default",
+}: LogoProps) {
+  const markSize = { sm: 28, default: 36, lg: 48 }[size];
 
-  const textSize = {
-    sm: "text-base",
+  const nameSize = {
+    sm: "text-[15px]",
     default: "text-lg",
     lg: "text-xl",
   }[size];
 
+  const tagSize = {
+    sm: "text-[9px]",
+    default: "text-[10px]",
+    lg: "text-xs",
+  }[size];
+
+  const textColor =
+    variant === "light" ? "text-white" : "text-text-primary";
+  const mutedColor =
+    variant === "light" ? "text-white/70" : "text-text-muted";
+
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
-      <div className="flex items-center justify-center rounded-[--radius-md] bg-nsp-blue-500 p-1.5 text-white">
-        <Compass className={iconSize} strokeWidth={2.5} />
-      </div>
+      <NspLogoMark size={markSize} />
       {showText && (
-        <div className="flex flex-col">
+        <div className="flex flex-col leading-none">
           <span
             className={cn(
-              "font-extrabold leading-tight tracking-tight text-text-primary",
-              textSize
+              "font-serif font-bold tracking-tight",
+              nameSize,
+              textColor
             )}
           >
-            North Star
+            North Star Partners
           </span>
-          <span className="text-xs font-semibold uppercase tracking-widest text-text-muted">
-            Partners
+          <span
+            className={cn(
+              "mt-0.5 font-sans font-semibold uppercase tracking-[0.2em]",
+              tagSize,
+              mutedColor
+            )}
+          >
+            Est 2025
           </span>
         </div>
       )}
