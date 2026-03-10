@@ -62,3 +62,16 @@ export const chartDefaults = {
     easing: "ease-out",
   },
 } as const;
+
+// Combined theme object for chart components
+export const chartTheme = {
+  colors: chartColors,
+  defaults: {
+    ...chartDefaults,
+    gridStroke: chartDefaults.grid.stroke,
+    gridStrokeDasharray: chartDefaults.grid.strokeDasharray,
+    tooltipBg: chartDefaults.tooltip.background,
+    tooltipBorder: chartDefaults.tooltip.border,
+    animationDuration: chartDefaults.animation.duration,
+  },
+} as const;
