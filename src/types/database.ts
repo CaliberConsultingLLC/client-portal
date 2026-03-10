@@ -142,3 +142,24 @@ export interface MagicLinkToken {
   used_at: string | null;
   created_at: string;
 }
+
+// ── Collaboration Campaign ──────────────────────────────────
+export type CollabCampaignStatus = "draft" | "processing" | "ready" | "error";
+
+export interface CollabCampaign {
+  id: string;
+  org_id: string;
+  campaign_id: string | null;
+  name: string;
+  slug: string;
+  status: CollabCampaignStatus;
+  config: Record<string, unknown>;
+  respondent_count: number;
+  department_count: number;
+  processed_data: Record<string, unknown> | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  organization?: Organization;
+}

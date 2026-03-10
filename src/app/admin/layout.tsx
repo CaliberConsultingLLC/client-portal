@@ -13,12 +13,14 @@ import {
   BarChart3,
   Settings,
   LogOut,
+  GitCompareArrows,
 } from "lucide-react";
 
 const sidebarLinks = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard },
   { label: "Clients", href: "/admin/clients", icon: Building2 },
   { label: "Campaigns", href: "/admin/campaigns", icon: Megaphone },
+  { label: "Collab", href: "/admin/collab", icon: GitCompareArrows },
   { label: "Surveys", href: "/admin/surveys", icon: ClipboardList },
   { label: "Data", href: "/admin/data", icon: Database },
   { label: "Reports", href: "/admin/reports", icon: BarChart3 },
