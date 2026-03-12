@@ -15,10 +15,10 @@ export function Logo({
   showText = true,
   variant = "default",
 }: LogoProps) {
-  const markSize = { sm: 40, default: 52, lg: 72 }[size];
+  const markSize = { sm: 28, default: 36, lg: 48 }[size];
 
   const nameSize = {
-    sm: "text-[14px]",
+    sm: "text-[15px]",
     default: "text-lg",
     lg: "text-xl",
   }[size];

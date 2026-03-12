@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowUp, Compass, Flag, Sparkles } from "lucide-react";
+import { Compass, Flag, Sparkles } from "lucide-react";
 import { Navbar } from "@/components/marketing/navbar";
 import { Footer } from "@/components/marketing/footer";
 import { Button } from "@/components/ui/button";
+import { NspLogoMark } from "@/components/shared/nsp-logo-mark";
 
 const journeySteps = [
   {
@@ -27,53 +26,65 @@ const journeySteps = [
 ];
 
 export default function HomePage() {
-  useEffect(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
-  }, []);
-
   return (
     <>
       <Navbar />
 
-      <main className="bg-black">
-        {/* TOP OF STORY — light destination */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-white via-[#f8f3e7] to-[#f0e2c2] py-24">
-          <div className="mx-auto max-w-6xl px-6">
-            <div className="mx-auto max-w-3xl text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
-                End State
-              </p>
-              <h1 className="mt-4 font-serif text-4xl font-bold leading-tight text-nsp-blue-900 md:text-6xl">
-                A clearer future.
-                <br />
-                A stronger direction.
-              </h1>
-              <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-nsp-blue-700 md:text-lg">
-                North Star Partners helps organizations move from ambiguity to
-                aligned action through people-centered diagnostics, analytics,
-                and practical strategy.
-              </p>
+      <main className="relative overflow-hidden bg-gradient-to-b from-white via-[#f2e7cf] to-[#0b0b0d]">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-35"
+          style={{
+            backgroundImage:
+              "radial-gradient(1px 1px at 15% 20%, rgba(20,18,20,0.24), transparent 60%), radial-gradient(1px 1px at 72% 18%, rgba(20,18,20,0.16), transparent 60%), radial-gradient(1.5px 1.5px at 83% 58%, rgba(255,255,255,0.42), transparent 60%), radial-gradient(1px 1px at 35% 74%, rgba(255,255,255,0.3), transparent 60%), radial-gradient(1px 1px at 60% 88%, rgba(255,255,255,0.36), transparent 60%)",
+          }}
+        />
 
-              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <Button size="lg" asChild>
-                  <Link href="/contact">Start your journey</Link>
-                </Button>
-                <Button size="lg" variant="secondary" asChild>
-                  <Link href="/services">Explore services</Link>
-                </Button>
+        {/* Top: light introduction */}
+        <section className="relative py-24">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
+                  Directionally Correct
+                </p>
+                <h1 className="mt-4 font-serif text-4xl font-bold leading-tight text-nsp-blue-900 md:text-6xl">
+                  Move your organization
+                  <br />
+                  forward with clarity.
+                </h1>
+                <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-blue-700 md:text-lg">
+                  North Star Partners combines consulting insight and practical
+                  analytics to align teams, reveal friction early, and build
+                  momentum around the right priorities.
+                </p>
+
+                <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row">
+                  <Button size="lg" asChild>
+                    <Link href="/contact">Start your journey</Link>
+                  </Button>
+                  <Button size="lg" variant="secondary" asChild>
+                    <Link href="/services">Explore services</Link>
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center">
+                <div className="rounded-[--radius-xl] border border-nsp-orange-300/70 bg-white/80 p-8 shadow-xl">
+                  <NspLogoMark size={220} />
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* MIDDLE OF STORY — gold transition */}
-        <section className="relative border-y border-nsp-orange-500/40 bg-gradient-to-b from-[#e6c37d] via-[#d6ae5c] to-[#a9823f] py-24">
+        {/* Mid: soft gold narrative */}
+        <section className="relative border-y border-nsp-orange-500/25 py-24">
           <div className="mx-auto max-w-6xl px-6">
             <div className="mx-auto mb-12 max-w-2xl text-center">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-900/80">
-                The Climb
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-800/90">
+                The Journey
               </p>
-              <h2 className="mt-4 font-serif text-3xl font-bold text-nsp-blue-900 md:text-4xl">
+              <h2 className="mt-4 font-serif text-3xl font-bold text-nsp-blue-900/95 md:text-4xl">
                 Direction over drift
               </h2>
             </div>
@@ -97,44 +108,21 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* BOTTOM OF STORY — dark starting point */}
-        <section className="relative min-h-[95vh] overflow-hidden bg-black py-20 text-white">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_85%,rgba(201,154,60,0.34),rgba(0,0,0,0.95)_62%)]" />
-
+        {/* Bottom: dark finish */}
+        <section className="relative min-h-[56vh] py-20 text-white">
           <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-200">
-              You begin here
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-100">
+              Keep moving forward
             </p>
             <h2 className="mt-4 max-w-3xl font-serif text-4xl font-bold leading-tight md:text-6xl">
-              Start at the edge.
-              <br />
-              Then move upward.
+              Insight that points true north.
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-orange-100/85 md:text-lg">
-              Most organizations feel progress pressure without directional
-              confidence. Scroll up to experience the journey North Star
-              Partners builds: clarity, alignment, and forward motion.
+              We help your teams listen better, align faster, and execute with
+              confidence using practical tools and measurable outcomes.
             </p>
 
-            <div className="mt-10 rounded-[--radius-xl] border border-nsp-orange-300/35 bg-nsp-blue-900/40 px-4 py-3 text-nsp-orange-100">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <ArrowUp className="h-4 w-4" />
-                Scroll up to move forward
-              </div>
-            </div>
-
-            <div className="mt-12 w-full max-w-md">
-              <Image
-                src="/brand/forest-city-reference.png"
-                alt="North Star Partners brand crest"
-                width={576}
-                height={1024}
-                className="mx-auto h-auto w-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.55)]"
-                priority
-              />
-            </div>
-
-            <div className="mt-10 grid w-full max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-3">
+            <div className="mt-12 grid w-full max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-3">
               <div className="rounded-[--radius-lg] border border-nsp-orange-300/30 bg-white/5 p-4">
                 <Compass className="mb-2 h-5 w-5 text-nsp-orange-200" />
                 <p className="text-sm text-nsp-orange-100">Directional clarity</p>
