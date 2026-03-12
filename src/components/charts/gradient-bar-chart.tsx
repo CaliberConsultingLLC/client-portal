@@ -11,7 +11,6 @@ import {
   ReferenceLine,
   LabelList,
 } from "recharts";
-import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
 
 interface GradientBarItem {
   name: string;
@@ -24,10 +23,30 @@ interface GradientBarChartProps {
   average?: number;
   minValue?: number;
   maxValue?: number;
-  /** Midpoint where color shifts from red to green */
+  /** Midpoint where color shifts from red to teal */
   midpoint?: number;
   showAvgLine?: boolean;
   className?: string;
+}
+
+/** Interpolate between red/pink and teal based on score */
+function scoreColor(value: number, min: number, mid: number, max: number): string {
+  if (value <= min) return "#e8a0a0"; // pink-red
+  if (value >= max) return "#2d8f8f"; // deep teal
+  if (value < mid) {
+    // Interpolate red -> light pink
+    const t = (value - min) / (mid - min);
+    const r = Math.round(232 - t * 40);
+    const g = Math.round(160 + t * 50);
+    const b = Math.round(160 + t * 50);
+    return `rgb(${r},${g},${b})`;
+  }
+  // Interpolate light teal -> deep teal
+  const t = (value - mid) / (max - mid);
+  const r = Math.round(170 - t * 125);
+  const g = Math.round(210 - t * 67);
+  const b = Math.round(210 - t * 67);
+  return `rgb(${r},${g},${b})`;
 }
 
 export function GradientBarChart({
@@ -54,7 +73,7 @@ export function GradientBarChart({
           <XAxis
             type="number"
             domain={[minValue, maxValue]}
-            tick={{ fontSize: 11, fill: "var(--color-text-muted)" }}
+            tick={{ fontSize: 11, fill: "#94a3b8" }}
             axisLine={false}
             tickLine={false}
             hide
@@ -62,32 +81,32 @@ export function GradientBarChart({
           <YAxis
             dataKey="name"
             type="category"
-            tick={{ fontSize: 12, fill: "var(--color-text-secondary)", fontWeight: 500 }}
+            tick={{ fontSize: 12, fill: "#334155", fontWeight: 500 }}
             width={180}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "var(--color-surface-1)",
-              border: "1px solid var(--color-border-default)",
+              backgroundColor: "#fff",
+              border: "1px solid #e2e8f0",
               borderRadius: "8px",
               fontSize: "13px",
-              boxShadow: "0 4px 12px rgba(9, 19, 31, 0.12)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
             }}
             formatter={(value) => [Number(value).toFixed(1), "Score"]}
           />
           {showAvgLine && average && (
             <ReferenceLine
               x={average}
-              stroke="var(--color-text-muted)"
+              stroke="#94a3b8"
               strokeDasharray="4 4"
               strokeWidth={1.5}
               label={{
                 value: `Avg: ${average.toFixed(2)}`,
                 position: "bottom",
                 fontSize: 11,
-                fill: "var(--color-text-secondary)",
+                fill: "#64748b",
               }}
             />
           )}
@@ -95,14 +114,14 @@ export function GradientBarChart({
             {data.map((entry, i) => (
               <Cell
                 key={`cell-${i}`}
-                fill={scoreScaleColor(entry.value, minValue, midpoint, maxValue)}
+                fill={scoreColor(entry.value, minValue, midpoint, maxValue)}
               />
             ))}
             <LabelList
               dataKey="value"
               position="right"
               formatter={(v) => Number(v).toFixed(1)}
-              style={{ fontSize: 12, fontWeight: 600, fill: "var(--color-text-secondary)" }}
+              style={{ fontSize: 12, fontWeight: 600, fill: "#334155" }}
             />
           </Bar>
         </BarChart>
