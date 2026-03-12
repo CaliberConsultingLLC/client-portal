@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Compass, Flag, Sparkles } from "lucide-react";
+import { ArrowRight, Compass, Flag, TrendingUp } from "lucide-react";
 import { Navbar } from "@/components/marketing/navbar";
 import { Footer } from "@/components/marketing/footer";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,31 @@ const journeySteps = [
     title: "Move forward with confidence",
     body:
       "Dashboards, action plans, and measurable follow-through keep your organization progressing in a directionally correct way.",
+  },
+];
+
+const proofPoints = [
+  { metric: "90-180", label: "day action plans" },
+  { metric: "24 hrs", label: "initial response time" },
+  { metric: "3 levels", label: "leadership-ready reporting" },
+  { metric: "1 source", label: "single insight system" },
+];
+
+const outcomes = [
+  {
+    title: "Cross-functional friction surfaced early",
+    body:
+      "Departmental relationship maps reveal where execution breaks down before delivery risk compounds.",
+  },
+  {
+    title: "Leadership alignment becomes measurable",
+    body:
+      "Teams move from opinion-driven conversations to shared metrics and practical commitments.",
+  },
+  {
+    title: "Insights convert into execution plans",
+    body:
+      "Every engagement culminates in a prioritized roadmap that defines owners, timing, and checkpoints.",
   },
 ];
 
@@ -48,25 +73,28 @@ export default function HomePage() {
             <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
               <div className="max-w-3xl">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
-                  Directionally Correct
+                  Built For Leadership Teams
                 </p>
                 <h1 className="mt-4 font-serif text-4xl font-bold leading-[1.05] text-nsp-blue-900 md:text-6xl">
                   Move your organization
                   <br />
-                  forward with clarity.
+                  forward with confidence.
                 </h1>
                 <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-blue-700/95 md:text-lg">
-                  North Star Partners combines consulting insight and practical
-                  analytics to align teams, reveal friction early, and build
-                  momentum around the right priorities.
+                  North Star Partners helps executive teams identify people and
+                  culture risk, align around the right priorities, and execute
+                  with measurable momentum.
                 </p>
 
                 <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-                  <Button size="lg" asChild>
-                    <Link href="/contact">Start your journey</Link>
+                  <Button size="lg" className="gap-2" asChild>
+                    <Link href="/contact">
+                      Schedule a conversation
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
                   </Button>
                   <Button size="lg" variant="secondary" asChild>
-                    <Link href="/services">Explore services</Link>
+                    <Link href="/services">View engagement options</Link>
                   </Button>
                 </div>
               </div>
@@ -80,15 +108,32 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* Proof strip */}
+        <section className="relative z-10 border-y border-nsp-orange-500/25 bg-white/45 py-8 backdrop-blur-sm">
+          <div className="mx-auto grid max-w-6xl grid-cols-2 gap-5 px-6 md:grid-cols-4">
+            {proofPoints.map((item) => (
+              <div
+                key={item.metric}
+                className="rounded-[--radius-md] border border-nsp-blue-900/10 bg-white/60 px-4 py-3 text-center shadow-sm"
+              >
+                <p className="text-xl font-extrabold text-nsp-blue-900">{item.metric}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-nsp-blue-700/90">
+                  {item.label}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* Mid: soft gold narrative */}
         <section className="relative z-10 border-y border-nsp-orange-500/25 py-24">
           <div className="mx-auto max-w-6xl px-6">
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-800/90">
-                The Journey
+                Operating Model
               </p>
               <h2 className="mt-4 font-serif text-3xl font-bold text-nsp-blue-900/95 md:text-4xl">
-                Direction over drift
+                A practical path from feedback to execution
               </h2>
             </div>
 
@@ -111,18 +156,48 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section className="relative z-10 py-20">
+          <div className="mx-auto max-w-6xl px-6">
+            <div className="mx-auto mb-10 max-w-3xl text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-800/90">
+                Outcomes
+              </p>
+              <h2 className="mt-3 font-serif text-3xl font-bold text-nsp-blue-900 md:text-4xl">
+                Evidence-focused consulting, not generic decks
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              {outcomes.map((item) => (
+                <article
+                  key={item.title}
+                  className="rounded-[--radius-lg] border border-nsp-blue-900/15 bg-white/75 p-6 shadow-[0_14px_30px_rgba(20,18,20,0.08)]"
+                >
+                  <div className="mb-3 inline-flex rounded-full border border-nsp-green-300/60 bg-nsp-green-50 px-2.5 py-1 text-xs font-semibold text-nsp-green-700">
+                    Outcome
+                  </div>
+                  <h3 className="text-lg font-bold text-nsp-blue-900">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-nsp-blue-700">
+                    {item.body}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Bottom: dark finish */}
         <section className="relative z-10 min-h-[56vh] py-20 text-white">
           <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-100">
-              Keep moving forward
+              Why NSP
             </p>
             <h2 className="mt-4 max-w-3xl font-serif text-4xl font-bold leading-tight md:text-6xl">
               Insight that points true north.
             </h2>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-orange-100/85 md:text-lg">
-              We help your teams listen better, align faster, and execute with
-              confidence using practical tools and measurable outcomes.
+              We combine consulting depth, structured analytics, and leadership
+              communication discipline so recommendations actually translate into
+              action.
             </p>
 
             <div className="mt-12 grid w-full max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-3">
@@ -135,10 +210,17 @@ export default function HomePage() {
                 <p className="text-sm text-nsp-orange-100">Aligned execution</p>
               </div>
               <div className="rounded-[--radius-lg] border border-nsp-orange-300/30 bg-white/5 p-4">
-                <Sparkles className="mb-2 h-5 w-5 text-nsp-orange-200" />
+                <TrendingUp className="mb-2 h-5 w-5 text-nsp-orange-200" />
                 <p className="text-sm text-nsp-orange-100">Measurable momentum</p>
               </div>
             </div>
+
+            <Button size="lg" className="mt-12 gap-2" asChild>
+              <Link href="/contact">
+                Talk with our team
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </section>
       </main>

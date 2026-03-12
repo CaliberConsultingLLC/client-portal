@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ServiceCard } from "@/components/marketing/service-card";
 import { Button } from "@/components/ui/button";
 import {
   ClipboardList,
@@ -123,9 +122,18 @@ const services = [
 export default function ServicesPage() {
   return (
     <>
-      {/* Header */}
-      <section className="bg-white py-20">
+      <section className="relative overflow-hidden bg-gradient-to-b from-white via-[#f7f1e4] to-[#e7d4aa] py-20">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-35"
+          style={{
+            backgroundImage:
+              "radial-gradient(1px 1px at 12% 20%, rgba(20,18,20,0.18), transparent 60%), radial-gradient(1px 1px at 74% 16%, rgba(20,18,20,0.14), transparent 60%), radial-gradient(1px 1px at 82% 54%, rgba(255,255,255,0.4), transparent 60%), radial-gradient(1px 1px at 56% 82%, rgba(255,255,255,0.3), transparent 60%)",
+          }}
+        />
         <div className="mx-auto max-w-3xl px-6 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
+            Engagement Options
+          </p>
           <h1 className="text-4xl font-extrabold tracking-tight text-text-primary md:text-5xl">
             Our Services
           </h1>
@@ -137,10 +145,10 @@ export default function ServicesPage() {
       </section>
 
       {/* Services Detail */}
-      <section className="bg-surface-2 py-16">
+      <section className="bg-gradient-to-b from-[#e7d4aa] via-[#d6b573] to-[#111724] py-16">
         <div className="mx-auto max-w-5xl px-6">
           <div className="flex flex-col gap-16">
-            {services.map((service, i) => (
+            {services.map((service) => (
               <div
                 key={service.id}
                 id={service.id}
@@ -169,7 +177,10 @@ export default function ServicesPage() {
                           key={feature}
                           className="flex items-start gap-2 text-sm text-text-primary"
                         >
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-nsp-blue-400" />
+                          <span
+                            className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: `var(--color-${service.accent}-400)` }}
+                          />
                           {feature}
                         </li>
                       ))}
@@ -182,13 +193,15 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="bg-white py-20">
+      <section className="bg-[#111724] py-20 text-white">
         <div className="mx-auto max-w-2xl px-6 text-center">
-          <h2 className="text-3xl font-extrabold text-text-primary">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-200">
+            Not sure where to begin?
+          </p>
+          <h2 className="mt-3 text-3xl font-extrabold text-white">
             Not sure which solution fits?
           </h2>
-          <p className="mt-4 text-base text-text-secondary">
+          <p className="mt-4 text-base text-nsp-orange-100/90">
             We start every engagement with a conversation. Tell us about your
             organization and we&apos;ll recommend the right approach.
           </p>

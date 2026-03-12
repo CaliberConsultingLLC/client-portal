@@ -12,9 +12,18 @@ export const metadata: Metadata = {
 export default function AboutPage() {
   return (
     <>
-      {/* Header */}
-      <section className="bg-white py-20">
+      <section className="relative overflow-hidden bg-gradient-to-b from-white via-[#f7f1e4] to-[#e7d4aa] py-20">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-35"
+          style={{
+            backgroundImage:
+              "radial-gradient(1px 1px at 12% 22%, rgba(20,18,20,0.17), transparent 60%), radial-gradient(1px 1px at 76% 18%, rgba(20,18,20,0.12), transparent 60%), radial-gradient(1px 1px at 84% 52%, rgba(255,255,255,0.4), transparent 60%), radial-gradient(1px 1px at 59% 84%, rgba(255,255,255,0.3), transparent 60%)",
+          }}
+        />
         <div className="mx-auto max-w-3xl px-6 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
+            About NSP
+          </p>
           <h1 className="text-4xl font-extrabold tracking-tight text-text-primary md:text-5xl">
             About North Star Partners
           </h1>
@@ -28,7 +37,7 @@ export default function AboutPage() {
       </section>
 
       {/* Mission / Vision / Values */}
-      <section className="bg-surface-2 py-20">
+      <section className="bg-gradient-to-b from-[#e7d4aa] via-[#d6b573] to-[#111724] py-20">
         <div className="mx-auto max-w-5xl px-6">
           <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             {[
@@ -55,7 +64,7 @@ export default function AboutPage() {
                 key={item.title}
                 className="rounded-[--radius-lg] border border-border-default bg-white p-8 shadow-sm"
               >
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[--radius-md] bg-nsp-blue-50 text-nsp-blue-500">
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-[--radius-md] bg-nsp-green-50 text-nsp-green-500">
                   <item.icon className="h-5 w-5" />
                 </div>
                 <h3 className="mb-3 text-lg font-bold text-text-primary">
@@ -71,12 +80,12 @@ export default function AboutPage() {
       </section>
 
       {/* Our Approach */}
-      <section className="bg-white py-20">
+      <section className="bg-[#111724] py-20">
         <div className="mx-auto max-w-3xl px-6">
-          <h2 className="mb-8 text-center text-3xl font-extrabold text-text-primary">
+          <h2 className="mb-8 text-center text-3xl font-extrabold text-white">
             Our Approach
           </h2>
-          <div className="prose prose-slate mx-auto max-w-none text-text-secondary">
+          <div className="mx-auto max-w-none text-nsp-orange-100/90">
             <p className="text-base leading-relaxed">
               Most consulting firms hand you a generic survey, run the numbers,
               and deliver a deck. We take a different approach. Every solution we
@@ -103,12 +112,12 @@ export default function AboutPage() {
       </section>
 
       {/* CTA */}
-      <section className="bg-surface-2 py-20">
+      <section className="bg-[#0b0f19] py-20">
         <div className="mx-auto max-w-2xl px-6 text-center">
-          <h2 className="text-3xl font-extrabold text-text-primary">
+          <h2 className="text-3xl font-extrabold text-white">
             Let&apos;s work together
           </h2>
-          <p className="mt-4 text-base text-text-secondary">
+          <p className="mt-4 text-base text-nsp-orange-100/90">
             Ready to learn more about how we can help your organization? Start
             with a conversation.
           </p>
