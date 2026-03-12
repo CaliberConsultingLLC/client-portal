@@ -12,60 +12,74 @@
   --font-mono: "Geist Mono", monospace;
 
   /* Brand Colors */
-  --color-nsp-blue-50: #F0F5F8;
-  --color-nsp-blue-100: #D9E5EC;
-  --color-nsp-blue-200: #B3CBDA;
-  --color-nsp-blue-300: #8DB1C7;
-  --color-nsp-blue-400: #6393AA;
-  --color-nsp-blue-500: #3F647B;
-  --color-nsp-blue-600: #345367;
-  --color-nsp-blue-700: #294253;
-  --color-nsp-blue-800: #1E313E;
-  --color-nsp-blue-900: #13202A;
+  --color-nsp-blue-50: #EEF3F8;
+  --color-nsp-blue-100: #D7E3EF;
+  --color-nsp-blue-200: #B0C7DF;
+  --color-nsp-blue-300: #89AACA;
+  --color-nsp-blue-400: #5B7EA8;
+  --color-nsp-blue-500: #1E3A5F;
+  --color-nsp-blue-600: #172F4E;
+  --color-nsp-blue-700: #12253D;
+  --color-nsp-blue-800: #0D1B2C;
+  --color-nsp-blue-900: #09131F;
 
-  --color-nsp-orange-50: #FEF4EE;
-  --color-nsp-orange-100: #FDE5D5;
-  --color-nsp-orange-200: #F1C4A5;
-  --color-nsp-orange-300: #F1A06A;
-  --color-nsp-orange-400: #E07A3F;
-  --color-nsp-orange-500: #C85A2A;
-  --color-nsp-orange-600: #A84520;
-  --color-nsp-orange-700: #83351A;
-  --color-nsp-orange-800: #5E2613;
-  --color-nsp-orange-900: #3A170C;
+  --color-nsp-orange-50: #FFF8EA;
+  --color-nsp-orange-100: #F8E9C8;
+  --color-nsp-orange-200: #F0D79F;
+  --color-nsp-orange-300: #E8C576;
+  --color-nsp-orange-400: #DDB157;
+  --color-nsp-orange-500: #C99A3C;
+  --color-nsp-orange-600: #A47C2F;
+  --color-nsp-orange-700: #7F6024;
+  --color-nsp-orange-800: #59431A;
+  --color-nsp-orange-900: #33270F;
 
-  --color-nsp-green-50: #F0F6F3;
-  --color-nsp-green-100: #D5E6DC;
-  --color-nsp-green-200: #ABCDB9;
-  --color-nsp-green-300: #6F9A83;
-  --color-nsp-green-400: #5A8570;
-  --color-nsp-green-500: #48705D;
+  --color-nsp-green-50: #EDF7F0;
+  --color-nsp-green-100: #D4EAD9;
+  --color-nsp-green-200: #A9D6B4;
+  --color-nsp-green-300: #7EC38F;
+  --color-nsp-green-400: #56AD6E;
+  --color-nsp-green-500: #2F9151;
+  --color-nsp-green-600: #257542;
+  --color-nsp-green-700: #1C5932;
+  --color-nsp-green-800: #133D23;
+  --color-nsp-green-900: #0B2515;
 
-  --color-nsp-yellow-50: #FBF9F0;
-  --color-nsp-yellow-100: #F3EFD5;
-  --color-nsp-yellow-200: #E8DFB0;
-  --color-nsp-yellow-300: #D7C97E;
-  --color-nsp-yellow-400: #C4B35E;
+  --color-nsp-yellow-50: #FFFCEB;
+  --color-nsp-yellow-100: #FFF4BF;
+  --color-nsp-yellow-200: #FDE98A;
+  --color-nsp-yellow-300: #F8DB4F;
+  --color-nsp-yellow-400: #EBC61E;
+  --color-nsp-yellow-500: #C9A60E;
+  --color-nsp-yellow-600: #A0830A;
+  --color-nsp-yellow-700: #786207;
+  --color-nsp-yellow-800: #504205;
+  --color-nsp-yellow-900: #2C2502;
 
-  --color-nsp-red-50: #FAF3F2;
-  --color-nsp-red-100: #F0DDDA;
-  --color-nsp-red-200: #E1BBB5;
-  --color-nsp-red-300: #C88D86;
-  --color-nsp-red-400: #B57069;
+  --color-nsp-red-50: #FFF1F0;
+  --color-nsp-red-100: #FFDAD6;
+  --color-nsp-red-200: #FFB4AB;
+  --color-nsp-red-300: #FF8A7D;
+  --color-nsp-red-400: #F16657;
+  --color-nsp-red-500: #D94A3A;
+  --color-nsp-red-600: #B63A2D;
+  --color-nsp-red-700: #8E2D23;
+  --color-nsp-red-800: #642019;
+  --color-nsp-red-900: #3A120E;
 
   /* Surface & Neutral */
   --color-surface-1: #FFFFFF;
-  --color-surface-2: #F8FAFC;
-  --color-surface-3: #EFF3F8;
-  --color-surface-4: #E2E8F0;
+  --color-surface-2: #F7F4EC;
+  --color-surface-3: #EFE9DB;
+  --color-surface-4: #E2D8C2;
 
-  --color-border-default: #E2E8F0;
-  --color-border-subtle: #F1F5F9;
-  --color-border-strong: #CBD5E1;
+  --color-border-default: #D9CCB3;
+  --color-border-subtle: #EDE4D3;
+  --color-border-strong: #B8AA8E;
 
-  --color-text-primary: #0F172A;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94A3B8;
+  --color-text-primary: #152238;
+  --color-text-secondary: #3B4B63;
+  --color-text-muted: #6E7E96;
 
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -97,7 +111,7 @@ body {
 
 /* --- Glass Surface Utility --- */
 .glass-surface {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 250, 240, 0.88);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--color-border-subtle);
@@ -111,13 +125,13 @@ html {
 
 /* --- Focus Ring --- */
 *:focus-visible {
-  outline: 2px solid var(--color-nsp-blue-400);
+  outline: 2px solid var(--color-nsp-green-400);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
 /* --- Selection --- */
 ::selection {
-  background: var(--color-nsp-blue-100);
+  background: var(--color-nsp-orange-200);
   color: var(--color-nsp-blue-900);
 }

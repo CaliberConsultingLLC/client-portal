@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import {
+  scoreScaleColor,
+  scoreScaleTextColor,
+} from "@/components/collaboration/score-color-scale";
 
 interface HeatmapChartProps {
   /** Row labels (source departments) */
@@ -16,34 +20,6 @@ interface HeatmapChartProps {
   minValue?: number;
   maxValue?: number;
   midpoint?: number;
-}
-
-function cellColor(
-  value: number | null,
-  min: number,
-  mid: number,
-  max: number
-): string {
-  if (value === null || value === 0) return "#f8fafc";
-  if (value <= min) return "#e8a0a0";
-  if (value >= max) return "#2d8f8f";
-  if (value < mid) {
-    const t = (value - min) / (mid - min);
-    const r = Math.round(232 - t * 40);
-    const g = Math.round(160 + t * 50);
-    const b = Math.round(160 + t * 50);
-    return `rgb(${r},${g},${b})`;
-  }
-  const t = (value - mid) / (max - mid);
-  const r = Math.round(170 - t * 125);
-  const g = Math.round(210 - t * 67);
-  const b = Math.round(210 - t * 67);
-  return `rgb(${r},${g},${b})`;
-}
-
-function textColor(value: number | null, mid: number): string {
-  if (value === null) return "#94a3b8";
-  return value > mid + 1 || value < mid - 1 ? "#fff" : "#334155";
 }
 
 export function HeatmapChart({
@@ -127,10 +103,10 @@ export function HeatmapChart({
                       style={{
                         backgroundColor: isSelf
                           ? "#f1f5f9"
-                          : cellColor(val, minValue, midpoint, maxValue),
+                          : scoreScaleColor(val, minValue, midpoint, maxValue),
                         color: isSelf
                           ? "#cbd5e1"
-                          : textColor(val, midpoint),
+                          : scoreScaleTextColor(val, midpoint),
                         opacity: isHovered ? 1 : 0.92,
                         transform: isHovered ? "scale(1.08)" : "scale(1)",
                       }}
@@ -146,13 +122,13 @@ export function HeatmapChart({
                   <span
                     className="inline-block rounded px-1.5 py-0.5 text-[11px] font-bold"
                     style={{
-                      backgroundColor: cellColor(
+                      backgroundColor: scoreScaleColor(
                         rowTotals[row.department] ?? null,
                         minValue,
                         midpoint,
                         maxValue
                       ),
-                      color: textColor(
+                      color: scoreScaleTextColor(
                         rowTotals[row.department] ?? null,
                         midpoint
                       ),
@@ -174,13 +150,13 @@ export function HeatmapChart({
                   <span
                     className="inline-block rounded px-1 py-0.5 text-[11px] font-bold"
                     style={{
-                      backgroundColor: cellColor(
+                      backgroundColor: scoreScaleColor(
                         columnTotals[col] ?? null,
                         minValue,
                         midpoint,
                         maxValue
                       ),
-                      color: textColor(columnTotals[col] ?? null, midpoint),
+                      color: scoreScaleTextColor(columnTotals[col] ?? null, midpoint),
                     }}
                   >
                     {columnTotals[col]?.toFixed(1) ?? ""}

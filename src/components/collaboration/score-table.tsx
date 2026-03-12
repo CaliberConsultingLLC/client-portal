@@ -1,4 +1,8 @@
 "use client";
+import {
+  scoreScaleColor,
+  scoreScaleTextColor,
+} from "@/components/collaboration/score-color-scale";
 
 interface ScoreTableRow {
   label: string;
@@ -14,23 +18,6 @@ interface ScoreTableProps {
   midpoint?: number;
   showIndicator?: boolean;
   className?: string;
-}
-
-function indicatorColor(value: number, min: number, mid: number, max: number): string {
-  if (value <= min) return "#e8a0a0";
-  if (value >= max) return "#2d8f8f";
-  if (value < mid) {
-    const t = (value - min) / (mid - min);
-    const r = Math.round(232 - t * 40);
-    const g = Math.round(160 + t * 50);
-    const b = Math.round(160 + t * 50);
-    return `rgb(${r},${g},${b})`;
-  }
-  const t = (value - mid) / (max - mid);
-  const r = Math.round(170 - t * 125);
-  const g = Math.round(210 - t * 67);
-  const b = Math.round(210 - t * 67);
-  return `rgb(${r},${g},${b})`;
 }
 
 export function ScoreTable({
@@ -74,7 +61,7 @@ export function ScoreTable({
                       <span
                         className="inline-block h-3 w-3 shrink-0 rounded-full"
                         style={{
-                          backgroundColor: indicatorColor(
+                          backgroundColor: scoreScaleColor(
                             row.score,
                             minValue,
                             midpoint,
@@ -90,13 +77,13 @@ export function ScoreTable({
                   <span
                     className="inline-block min-w-[40px] rounded px-2 py-0.5 text-center text-xs font-bold"
                     style={{
-                      backgroundColor: indicatorColor(
+                      backgroundColor: scoreScaleColor(
                         row.score,
                         minValue,
                         midpoint,
                         maxValue
                       ),
-                      color: row.score > midpoint + 0.5 || row.score < midpoint - 0.5 ? "#fff" : "#334155",
+                      color: scoreScaleTextColor(row.score, midpoint),
                     }}
                   >
                     {row.score.toFixed(1)}

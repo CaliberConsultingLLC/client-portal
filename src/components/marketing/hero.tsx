@@ -5,13 +5,13 @@ import { ArrowRight, BarChart3, Shield, Zap } from "lucide-react";
 export function Hero() {
   return (
     <section className="relative overflow-hidden bg-white">
-      {/* Subtle background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-nsp-blue-50/50 via-white to-nsp-orange-50/30" />
+      {/* Brand-forward background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-nsp-blue-100/60 via-white to-nsp-green-100/55" />
 
       <div className="relative mx-auto max-w-6xl px-6 pb-20 pt-20 md:pb-28 md:pt-28">
         <div className="mx-auto max-w-3xl text-center">
           {/* Tag */}
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-nsp-blue-200 bg-nsp-blue-50 px-4 py-1.5 text-xs font-semibold text-nsp-blue-600">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-nsp-green-200 bg-nsp-green-50 px-4 py-1.5 text-xs font-semibold text-nsp-green-700">
             <Zap className="h-3.5 w-3.5" />
             People-Centered Consulting
           </div>
@@ -19,7 +19,7 @@ export function Hero() {
           {/* Headline */}
           <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-text-primary md:text-5xl lg:text-6xl">
             Turn employee insights into{" "}
-            <span className="bg-gradient-to-r from-nsp-blue-500 to-nsp-blue-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-nsp-blue-500 via-nsp-green-500 to-nsp-orange-400 bg-clip-text text-transparent">
               organizational growth
             </span>
           </h1>

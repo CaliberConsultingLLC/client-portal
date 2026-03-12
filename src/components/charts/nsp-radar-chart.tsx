@@ -39,11 +39,11 @@ export function NspRadarChart({
         <PolarGrid stroke={chartTheme.defaults.gridStroke} />
         <PolarAngleAxis
           dataKey="dimension"
-          tick={{ fontSize: 11, fill: "#64748b" }}
+          tick={{ fontSize: 11, fill: chartTheme.defaults.axisPrimary }}
         />
         <PolarRadiusAxis
           domain={[0, maxValue]}
-          tick={{ fontSize: 10, fill: "#94a3b8" }}
+          tick={{ fontSize: 10, fill: chartTheme.defaults.axisMuted }}
           axisLine={false}
         />
         <Tooltip
@@ -52,7 +52,7 @@ export function NspRadarChart({
             border: `1px solid ${chartTheme.defaults.tooltipBorder}`,
             borderRadius: "8px",
             fontSize: "13px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+            boxShadow: chartTheme.defaults.tooltipShadow,
           }}
         />
         <Radar

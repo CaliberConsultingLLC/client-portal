@@ -52,11 +52,11 @@ export function NspBarChart({
         )}
         {horizontal ? (
           <>
-            <XAxis type="number" tick={{ fontSize: 12, fill: "#64748b" }} />
+            <XAxis type="number" tick={{ fontSize: 12, fill: chartTheme.defaults.axisPrimary }} />
             <YAxis
               dataKey="name"
               type="category"
-              tick={{ fontSize: 12, fill: "#64748b" }}
+              tick={{ fontSize: 12, fill: chartTheme.defaults.axisPrimary }}
               width={80}
             />
           </>
@@ -64,12 +64,12 @@ export function NspBarChart({
           <>
             <XAxis
               dataKey="name"
-              tick={{ fontSize: 12, fill: "#64748b" }}
+              tick={{ fontSize: 12, fill: chartTheme.defaults.axisPrimary }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fontSize: 12, fill: "#64748b" }}
+              tick={{ fontSize: 12, fill: chartTheme.defaults.axisPrimary }}
               axisLine={false}
               tickLine={false}
             />
@@ -81,7 +81,7 @@ export function NspBarChart({
             border: `1px solid ${chartTheme.defaults.tooltipBorder}`,
             borderRadius: "8px",
             fontSize: "13px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+            boxShadow: chartTheme.defaults.tooltipShadow,
           }}
         />
         <Bar

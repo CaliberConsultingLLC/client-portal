@@ -53,12 +53,12 @@ export function NspLineChart({
         )}
         <XAxis
           dataKey={xAxisKey}
-          tick={{ fontSize: 12, fill: "#64748b" }}
+          tick={{ fontSize: 12, fill: chartTheme.defaults.axisPrimary }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tick={{ fontSize: 12, fill: "#64748b" }}
+          tick={{ fontSize: 12, fill: chartTheme.defaults.axisPrimary }}
           axisLine={false}
           tickLine={false}
         />
@@ -68,7 +68,7 @@ export function NspLineChart({
             border: `1px solid ${chartTheme.defaults.tooltipBorder}`,
             borderRadius: "8px",
             fontSize: "13px",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+            boxShadow: chartTheme.defaults.tooltipShadow,
           }}
         />
         {showLegend && (
