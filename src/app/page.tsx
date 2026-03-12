@@ -30,35 +30,38 @@ export default function HomePage() {
     <>
       <Navbar />
 
-      <main className="relative overflow-hidden bg-gradient-to-b from-white via-[#f2e7cf] to-[#0b0b0d]">
+      <main className="relative overflow-hidden bg-gradient-to-b from-white via-[#f6f1e6] via-45% via-[#ead7ab] via-70% to-[#0b0b0d]">
+        <div className="pointer-events-none absolute -left-44 -top-56 z-0 h-[620px] w-[620px] rounded-full border border-black/5 bg-white/25 p-10 shadow-[0_20px_90px_rgba(0,0,0,0.12)]">
+          <NspLogoMark size={540} className="opacity-30" />
+        </div>
         <div
-          className="pointer-events-none absolute inset-0 opacity-35"
+          className="pointer-events-none absolute inset-0 z-0 opacity-45"
           style={{
             backgroundImage:
-              "radial-gradient(1px 1px at 15% 20%, rgba(20,18,20,0.24), transparent 60%), radial-gradient(1px 1px at 72% 18%, rgba(20,18,20,0.16), transparent 60%), radial-gradient(1.5px 1.5px at 83% 58%, rgba(255,255,255,0.42), transparent 60%), radial-gradient(1px 1px at 35% 74%, rgba(255,255,255,0.3), transparent 60%), radial-gradient(1px 1px at 60% 88%, rgba(255,255,255,0.36), transparent 60%)",
+              "radial-gradient(1px 1px at 8% 16%, rgba(20,18,20,0.26), transparent 60%), radial-gradient(1px 1px at 18% 22%, rgba(20,18,20,0.16), transparent 60%), radial-gradient(1px 1px at 29% 13%, rgba(20,18,20,0.18), transparent 60%), radial-gradient(1px 1px at 73% 20%, rgba(20,18,20,0.13), transparent 60%), radial-gradient(1.5px 1.5px at 88% 44%, rgba(255,255,255,0.38), transparent 60%), radial-gradient(1px 1px at 72% 64%, rgba(255,255,255,0.24), transparent 60%), radial-gradient(1px 1px at 56% 82%, rgba(255,255,255,0.3), transparent 60%), radial-gradient(1px 1px at 35% 76%, rgba(255,255,255,0.26), transparent 60%), radial-gradient(1px 1px at 82% 90%, rgba(255,255,255,0.28), transparent 60%)",
           }}
         />
 
         {/* Top: light introduction */}
-        <section className="relative py-24">
+        <section className="relative z-10 py-24">
           <div className="mx-auto max-w-6xl px-6">
-            <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-              <div>
+            <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
+              <div className="max-w-3xl">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
                   Directionally Correct
                 </p>
-                <h1 className="mt-4 font-serif text-4xl font-bold leading-tight text-nsp-blue-900 md:text-6xl">
+                <h1 className="mt-4 font-serif text-4xl font-bold leading-[1.05] text-nsp-blue-900 md:text-6xl">
                   Move your organization
                   <br />
                   forward with clarity.
                 </h1>
-                <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-blue-700 md:text-lg">
+                <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-blue-700/95 md:text-lg">
                   North Star Partners combines consulting insight and practical
                   analytics to align teams, reveal friction early, and build
                   momentum around the right priorities.
                 </p>
 
-                <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row">
+                <div className="mt-10 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                   <Button size="lg" asChild>
                     <Link href="/contact">Start your journey</Link>
                   </Button>
@@ -69,8 +72,8 @@ export default function HomePage() {
               </div>
 
               <div className="flex items-center justify-center">
-                <div className="rounded-[--radius-xl] border border-nsp-orange-300/70 bg-white/80 p-8 shadow-xl">
-                  <NspLogoMark size={220} />
+                <div className="rounded-[--radius-xl] border border-nsp-orange-300/65 bg-white/70 p-8 shadow-[0_24px_50px_rgba(20,18,20,0.14)] backdrop-blur-sm">
+                  <NspLogoMark size={250} />
                 </div>
               </div>
             </div>
@@ -78,7 +81,7 @@ export default function HomePage() {
         </section>
 
         {/* Mid: soft gold narrative */}
-        <section className="relative border-y border-nsp-orange-500/25 py-24">
+        <section className="relative z-10 border-y border-nsp-orange-500/25 py-24">
           <div className="mx-auto max-w-6xl px-6">
             <div className="mx-auto mb-12 max-w-2xl text-center">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-800/90">
@@ -109,7 +112,7 @@ export default function HomePage() {
         </section>
 
         {/* Bottom: dark finish */}
-        <section className="relative min-h-[56vh] py-20 text-white">
+        <section className="relative z-10 min-h-[56vh] py-20 text-white">
           <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-100">
               Keep moving forward

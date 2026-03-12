@@ -17,7 +17,10 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-nsp-orange-400/30 bg-nsp-blue-900/90 backdrop-blur-lg">
+    <header className="sticky top-0 z-50 w-full overflow-hidden border-b border-nsp-orange-400/30 bg-nsp-blue-900/90 backdrop-blur-lg">
+      <div className="pointer-events-none absolute -left-10 -top-8 opacity-20">
+        <Logo size="lg" showText={false} />
+      </div>
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center">
