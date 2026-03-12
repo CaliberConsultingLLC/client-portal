@@ -1,230 +1,157 @@
+"use client";
+
+import { useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
+import { ArrowUp, Compass, Flag, Sparkles } from "lucide-react";
 import { Navbar } from "@/components/marketing/navbar";
 import { Footer } from "@/components/marketing/footer";
-import { Hero } from "@/components/marketing/hero";
-import { ServiceCard } from "@/components/marketing/service-card";
 import { Button } from "@/components/ui/button";
-import {
-  ClipboardList,
-  Compass,
-  TrendingUp,
-  GitMerge,
-  Users,
-  Activity,
-  ArrowRight,
-  CheckCircle2,
-} from "lucide-react";
 
-const services = [
+const journeySteps = [
   {
-    icon: ClipboardList,
-    title: "Culture Surveys",
-    description:
-      "Comprehensive employee engagement and culture assessments tailored to your organization's unique needs.",
-    accent: "nsp-blue",
+    title: "Discover your true position",
+    body:
+      "We start by listening deeply through surveys and targeted prompts so leadership can see where alignment and friction actually exist.",
   },
   {
-    icon: Compass,
-    title: "The Compass",
-    description:
-      "Individual leadership assessment that maps strengths, blind spots, and growth opportunities for every leader.",
-    accent: "nsp-orange",
+    title: "Align the right teams",
+    body:
+      "North Star Partners translates your data into cross-functional priorities, helping teams move in the same direction with less drag.",
   },
   {
-    icon: TrendingUp,
-    title: "Leadership Development",
-    description:
-      "Targeted programs built on data — 360 feedback, coaching frameworks, and measurable growth tracking.",
-    accent: "nsp-green",
-  },
-  {
-    icon: GitMerge,
-    title: "M&A Integration",
-    description:
-      "Cultural alignment assessments that surface risks and opportunities during mergers and acquisitions.",
-    accent: "nsp-yellow",
-  },
-  {
-    icon: Users,
-    title: "Department Collaboration",
-    description:
-      "Cross-functional effectiveness analysis that identifies friction points and builds bridges between teams.",
-    accent: "nsp-blue",
-  },
-  {
-    icon: Activity,
-    title: "Sentiment Analysis",
-    description:
-      "Ongoing pulse surveys and sentiment tracking that keep you connected to your organization's heartbeat.",
-    accent: "nsp-orange",
-  },
-];
-
-const processSteps = [
-  {
-    step: "01",
-    title: "Listen",
-    description:
-      "We design and deploy confidential surveys that capture honest employee perspectives across your organization.",
-  },
-  {
-    step: "02",
-    title: "Analyze",
-    description:
-      "Our automated pipeline cleans, normalizes, and analyzes response data — surfacing trends, patterns, and actionable insights.",
-  },
-  {
-    step: "03",
-    title: "Report",
-    description:
-      "Beautiful, interactive dashboards deliver insights to every level of leadership through a secure client portal.",
-  },
-  {
-    step: "04",
-    title: "Act",
-    description:
-      "We partner with you to translate insights into concrete action plans that drive measurable organizational improvement.",
+    title: "Move forward with confidence",
+    body:
+      "Dashboards, action plans, and measurable follow-through keep your organization progressing in a directionally correct way.",
   },
 ];
 
 export default function HomePage() {
+  useEffect(() => {
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "auto" });
+  }, []);
+
   return (
     <>
       <Navbar />
-      <main>
-        {/* Hero */}
-        <Hero />
 
-        {/* Services Section */}
-        <section className="bg-surface-2 py-20 md:py-28">
+      <main className="bg-black">
+        {/* TOP OF STORY — light destination */}
+        <section className="relative overflow-hidden bg-gradient-to-b from-white via-[#f8f3e7] to-[#f0e2c2] py-24">
           <div className="mx-auto max-w-6xl px-6">
-            <div className="mx-auto mb-14 max-w-2xl text-center">
-              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-                Solutions for every stage of your journey
-              </h2>
-              <p className="mt-4 text-base text-text-secondary">
-                Whether you need a comprehensive culture assessment or a
-                targeted leadership tool, we build the right solution for your
-                organization.
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
+                End State
               </p>
-            </div>
+              <h1 className="mt-4 font-serif text-4xl font-bold leading-tight text-nsp-blue-900 md:text-6xl">
+                A clearer future.
+                <br />
+                A stronger direction.
+              </h1>
+              <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-nsp-blue-700 md:text-lg">
+                North Star Partners helps organizations move from ambiguity to
+                aligned action through people-centered diagnostics, analytics,
+                and practical strategy.
+              </p>
 
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {services.map((service) => (
-                <ServiceCard
-                  key={service.title}
-                  icon={service.icon}
-                  title={service.title}
-                  description={service.description}
-                  accentColor={service.accent}
-                />
-              ))}
+              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <Button size="lg" asChild>
+                  <Link href="/contact">Start your journey</Link>
+                </Button>
+                <Button size="lg" variant="secondary" asChild>
+                  <Link href="/services">Explore services</Link>
+                </Button>
+              </div>
             </div>
           </div>
         </section>
 
-        {/* Process Section */}
-        <section className="bg-white py-20 md:py-28">
+        {/* MIDDLE OF STORY — gold transition */}
+        <section className="relative border-y border-nsp-orange-500/40 bg-gradient-to-b from-[#e6c37d] via-[#d6ae5c] to-[#a9823f] py-24">
           <div className="mx-auto max-w-6xl px-6">
-            <div className="mx-auto mb-14 max-w-2xl text-center">
-              <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-                How we work
-              </h2>
-              <p className="mt-4 text-base text-text-secondary">
-                A proven process that transforms raw feedback into
-                organizational growth.
+            <div className="mx-auto mb-12 max-w-2xl text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-900/80">
+                The Climb
               </p>
+              <h2 className="mt-4 font-serif text-3xl font-bold text-nsp-blue-900 md:text-4xl">
+                Direction over drift
+              </h2>
             </div>
 
-            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-4">
-              {processSteps.map((item) => (
-                <div key={item.step} className="relative">
-                  <div className="mb-4 text-3xl font-extrabold text-nsp-blue-100">
-                    {item.step}
-                  </div>
-                  <h3 className="mb-2 text-lg font-bold text-text-primary">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm leading-relaxed text-text-secondary">
-                    {item.description}
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              {journeySteps.map((step, index) => (
+                <article
+                  key={step.title}
+                  className="rounded-[--radius-lg] border border-nsp-blue-900/20 bg-white/70 p-6 shadow-lg backdrop-blur"
+                >
+                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-nsp-green-700">
+                    0{index + 1}
                   </p>
-                </div>
+                  <h3 className="text-lg font-bold text-nsp-blue-900">{step.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-nsp-blue-700">
+                    {step.body}
+                  </p>
+                </article>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Why NSP Section */}
-        <section className="bg-surface-2 py-20 md:py-28">
-          <div className="mx-auto max-w-6xl px-6">
-            <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-2">
-              <div>
-                <h2 className="text-3xl font-extrabold tracking-tight text-text-primary md:text-4xl">
-                  Why North Star Partners?
-                </h2>
-                <p className="mt-4 text-base leading-relaxed text-text-secondary">
-                  We combine deep consulting expertise with modern technology to
-                  deliver insights that actually drive change — not just reports
-                  that sit on a shelf.
-                </p>
-                <ul className="mt-8 flex flex-col gap-4">
-                  {[
-                    "Custom solutions built for your specific challenges",
-                    "Confidential, enterprise-grade data security",
-                    "Automated pipeline from survey to insight",
-                    "Beautiful reporting that leadership actually uses",
-                    "Ongoing partnership, not one-time engagements",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-3">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-nsp-green-300" />
-                      <span className="text-sm text-text-primary">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+        {/* BOTTOM OF STORY — dark starting point */}
+        <section className="relative min-h-[95vh] overflow-hidden bg-black py-20 text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_85%,rgba(201,154,60,0.34),rgba(0,0,0,0.95)_62%)]" />
 
-              {/* Visual placeholder */}
-              <div className="flex items-center justify-center">
-                <div className="glass-surface flex h-80 w-full items-center justify-center rounded-[--radius-xl]">
-                  <div className="text-center">
-                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-nsp-blue-50">
-                      <Compass className="h-8 w-8 text-nsp-blue-500" />
-                    </div>
-                    <p className="text-sm font-medium text-text-muted">
-                      Dashboard preview coming soon
-                    </p>
-                  </div>
-                </div>
+          <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-200">
+              You begin here
+            </p>
+            <h2 className="mt-4 max-w-3xl font-serif text-4xl font-bold leading-tight md:text-6xl">
+              Start at the edge.
+              <br />
+              Then move upward.
+            </h2>
+            <p className="mt-6 max-w-2xl text-base leading-relaxed text-nsp-orange-100/85 md:text-lg">
+              Most organizations feel progress pressure without directional
+              confidence. Scroll up to experience the journey North Star
+              Partners builds: clarity, alignment, and forward motion.
+            </p>
+
+            <div className="mt-10 rounded-[--radius-xl] border border-nsp-orange-300/35 bg-nsp-blue-900/40 px-4 py-3 text-nsp-orange-100">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <ArrowUp className="h-4 w-4" />
+                Scroll up to move forward
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* CTA Section */}
-        <section className="bg-nsp-blue-500 py-20">
-          <div className="mx-auto max-w-3xl px-6 text-center">
-            <h2 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl">
-              Ready to understand your organization better?
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-nsp-blue-100">
-              Let&apos;s start with a conversation about your goals. We&apos;ll
-              design a solution that fits your organization&apos;s unique needs.
-            </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Button
-                size="lg"
-                className="bg-white text-nsp-blue-600 hover:bg-nsp-blue-50"
-                asChild
-              >
-                <Link href="/contact">
-                  Schedule a Conversation
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+            <div className="mt-12 w-full max-w-md">
+              <Image
+                src="/brand/forest-city-reference.png"
+                alt="North Star Partners brand crest"
+                width={576}
+                height={1024}
+                className="mx-auto h-auto w-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.55)]"
+                priority
+              />
+            </div>
+
+            <div className="mt-10 grid w-full max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-3">
+              <div className="rounded-[--radius-lg] border border-nsp-orange-300/30 bg-white/5 p-4">
+                <Compass className="mb-2 h-5 w-5 text-nsp-orange-200" />
+                <p className="text-sm text-nsp-orange-100">Directional clarity</p>
+              </div>
+              <div className="rounded-[--radius-lg] border border-nsp-orange-300/30 bg-white/5 p-4">
+                <Flag className="mb-2 h-5 w-5 text-nsp-orange-200" />
+                <p className="text-sm text-nsp-orange-100">Aligned execution</p>
+              </div>
+              <div className="rounded-[--radius-lg] border border-nsp-orange-300/30 bg-white/5 p-4">
+                <Sparkles className="mb-2 h-5 w-5 text-nsp-orange-200" />
+                <p className="text-sm text-nsp-orange-100">Measurable momentum</p>
+              </div>
             </div>
           </div>
         </section>
       </main>
+
       <Footer />
     </>
   );

@@ -17,7 +17,7 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border-subtle bg-white/80 backdrop-blur-lg">
+    <header className="sticky top-0 z-50 w-full border-b border-nsp-orange-400/30 bg-nsp-blue-900/90 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center">
@@ -30,7 +30,7 @@ export function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-[--radius-md] px-4 py-2 text-sm font-medium text-text-secondary transition-colors duration-[180ms] hover:bg-surface-3 hover:text-text-primary"
+              className="rounded-[--radius-md] px-4 py-2 text-sm font-medium text-nsp-orange-100/90 transition-colors duration-[180ms] hover:bg-white/10 hover:text-white"
             >
               {link.label}
             </Link>
@@ -49,7 +49,7 @@ export function Navbar() {
 
         {/* Mobile Menu Toggle */}
         <button
-          className="rounded-[--radius-md] p-2 text-text-secondary transition-colors hover:bg-surface-3 md:hidden"
+          className="rounded-[--radius-md] p-2 text-nsp-orange-100 transition-colors hover:bg-white/10 md:hidden"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label={mobileOpen ? "Close menu" : "Open menu"}
         >
@@ -60,7 +60,7 @@ export function Navbar() {
       {/* Mobile Menu */}
       <div
         className={cn(
-          "overflow-hidden border-t border-border-subtle bg-white transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] md:hidden",
+          "overflow-hidden border-t border-nsp-orange-400/30 bg-nsp-blue-900 transition-all duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] md:hidden",
           mobileOpen ? "max-h-80 pb-6" : "max-h-0"
         )}
       >
@@ -69,16 +69,16 @@ export function Navbar() {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-[--radius-md] px-4 py-3 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-3 hover:text-text-primary"
+              className="rounded-[--radius-md] px-4 py-3 text-sm font-medium text-nsp-orange-100/90 transition-colors hover:bg-white/10 hover:text-white"
               onClick={() => setMobileOpen(false)}
             >
               {link.label}
             </Link>
           ))}
-          <hr className="my-2 border-border-subtle" />
+          <hr className="my-2 border-nsp-orange-400/30" />
           <Link
             href="/sign-in"
-            className="rounded-[--radius-md] px-4 py-3 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-3"
+            className="rounded-[--radius-md] px-4 py-3 text-sm font-medium text-nsp-orange-100/90 transition-colors hover:bg-white/10"
             onClick={() => setMobileOpen(false)}
           >
             Sign In

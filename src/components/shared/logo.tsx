@@ -15,10 +15,10 @@ export function Logo({
   showText = true,
   variant = "default",
 }: LogoProps) {
-  const markSize = { sm: 28, default: 36, lg: 48 }[size];
+  const markSize = { sm: 40, default: 52, lg: 72 }[size];
 
   const nameSize = {
-    sm: "text-[15px]",
+    sm: "text-[14px]",
     default: "text-lg",
     lg: "text-xl",
   }[size];
@@ -32,10 +32,10 @@ export function Logo({
   const textColor =
     variant === "light" ? "text-white" : "text-text-primary";
   const mutedColor =
-    variant === "light" ? "text-white/70" : "text-text-muted";
+    variant === "light" ? "text-nsp-orange-100/80" : "text-text-muted";
 
   return (
-    <div className={cn("flex items-center gap-2.5", className)}>
+    <div className={cn("flex items-center gap-3", className)}>
       <NspLogoMark size={markSize} />
       {showText && (
         <div className="flex flex-col leading-none">
