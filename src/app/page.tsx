@@ -56,8 +56,11 @@ export default function HomePage() {
       <Navbar />
 
       <main className="relative overflow-hidden bg-gradient-to-b from-white via-[#f6f1e6] via-45% via-[#ead7ab] via-70% to-[#0b0b0d]">
-        <div className="pointer-events-none absolute -left-44 -top-56 z-0 h-[620px] w-[620px] rounded-full border border-black/5 bg-white/25 p-10 shadow-[0_20px_90px_rgba(0,0,0,0.12)]">
-          <NspLogoMark size={540} className="opacity-30" />
+        <div className="pointer-events-none absolute -left-56 -top-44 z-30">
+          <NspLogoMark
+            size={640}
+            className="mix-blend-multiply saturate-125 contrast-110"
+          />
         </div>
         <div
           className="pointer-events-none absolute inset-0 z-0 opacity-45"
@@ -99,11 +102,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-center">
-                <div className="rounded-[--radius-xl] border border-nsp-orange-300/65 bg-white/70 p-8 shadow-[0_24px_50px_rgba(20,18,20,0.14)] backdrop-blur-sm">
-                  <NspLogoMark size={250} />
-                </div>
-              </div>
             </div>
           </div>
         </section>

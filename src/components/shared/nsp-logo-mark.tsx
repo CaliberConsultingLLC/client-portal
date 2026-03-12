@@ -18,7 +18,7 @@ export function NspLogoMark({ className, size = 40 }: NspLogoMarkProps) {
         alt=""
         fill
         sizes={`${size}px`}
-        className="object-cover object-top scale-[1.42]"
+        className="object-cover object-[50%_8%] scale-[1.62]"
         priority={size >= 96}
       />
     </div>
