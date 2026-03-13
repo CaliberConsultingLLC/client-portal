@@ -10,7 +10,7 @@ export default function CollaborationLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#1c1d22]">
+    <div className="min-h-screen bg-surface-2">
       {children}
     </div>
   );
