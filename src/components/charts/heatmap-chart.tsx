@@ -1,10 +1,6 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import {
-  scoreScaleColor,
-  scoreScaleTextColor,
-} from "@/components/collaboration/score-color-scale";
 
 interface HeatmapChartProps {
   /** Row labels (source departments) */
@@ -20,6 +16,34 @@ interface HeatmapChartProps {
   minValue?: number;
   maxValue?: number;
   midpoint?: number;
+}
+
+function cellColor(
+  value: number | null,
+  min: number,
+  mid: number,
+  max: number
+): string {
+  if (value === null || value === 0) return "#f8fafc";
+  if (value <= min) return "#e8a0a0";
+  if (value >= max) return "#2d8f8f";
+  if (value < mid) {
+    const t = (value - min) / (mid - min);
+    const r = Math.round(232 - t * 40);
+    const g = Math.round(160 + t * 50);
+    const b = Math.round(160 + t * 50);
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = (value - mid) / (max - mid);
+  const r = Math.round(170 - t * 125);
+  const g = Math.round(210 - t * 67);
+  const b = Math.round(210 - t * 67);
+  return `rgb(${r},${g},${b})`;
+}
+
+function textColor(value: number | null, mid: number): string {
+  if (value === null) return "#94a3b8";
+  return value > mid + 1 || value < mid - 1 ? "#fff" : "#334155";
 }
 
 export function HeatmapChart({
@@ -59,13 +83,13 @@ export function HeatmapChart({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 min-w-[140px] bg-[#1a1b20] p-2 text-left font-semibold text-slate-300">
+            <th className="sticky left-0 z-10 min-w-[140px] bg-white p-2 text-left font-semibold text-text-secondary">
               Department
             </th>
             {columns.map((col) => (
               <th
                 key={col}
-                className="min-w-[48px] max-w-[56px] bg-[#1a1b20] p-1 text-center font-medium text-slate-300"
+                className="min-w-[48px] max-w-[56px] bg-white p-1 text-center font-medium text-text-secondary"
                 title={col}
               >
                 <div className="mx-auto w-[52px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-tight">
@@ -74,7 +98,7 @@ export function HeatmapChart({
               </th>
             ))}
             {rowTotals && (
-              <th className="min-w-[52px] bg-black p-2 text-center font-bold text-white">
+              <th className="min-w-[52px] bg-surface-3 p-2 text-center font-bold text-text-primary">
                 Total
               </th>
             )}
@@ -82,8 +106,8 @@ export function HeatmapChart({
         </thead>
         <tbody>
           {sortedData.map((row, ri) => (
-            <tr key={row.department} className="border-t border-black">
-              <td className="sticky left-0 z-10 bg-[#23242a] p-2 font-medium text-slate-100">
+            <tr key={row.department} className="border-t border-border-subtle">
+              <td className="sticky left-0 z-10 bg-white p-2 font-medium text-text-primary">
                 {row.department}
               </td>
               {columns.map((col, ci) => {
@@ -102,11 +126,11 @@ export function HeatmapChart({
                       className="flex h-7 items-center justify-center rounded-sm text-[11px] font-semibold transition-all"
                       style={{
                         backgroundColor: isSelf
-                          ? "#111111"
-                          : scoreScaleColor(val, minValue, midpoint, maxValue),
+                          ? "#f1f5f9"
+                          : cellColor(val, minValue, midpoint, maxValue),
                         color: isSelf
-                          ? "#475569"
-                          : scoreScaleTextColor(val, midpoint),
+                          ? "#cbd5e1"
+                          : textColor(val, midpoint),
                         opacity: isHovered ? 1 : 0.92,
                         transform: isHovered ? "scale(1.08)" : "scale(1)",
                       }}
@@ -118,17 +142,17 @@ export function HeatmapChart({
                 );
               })}
               {rowTotals && (
-                <td className="bg-black p-1 text-center">
+                <td className="bg-surface-3 p-1 text-center">
                   <span
                     className="inline-block rounded px-1.5 py-0.5 text-[11px] font-bold"
                     style={{
-                      backgroundColor: scoreScaleColor(
+                      backgroundColor: cellColor(
                         rowTotals[row.department] ?? null,
                         minValue,
                         midpoint,
                         maxValue
                       ),
-                      color: scoreScaleTextColor(
+                      color: textColor(
                         rowTotals[row.department] ?? null,
                         midpoint
                       ),
@@ -141,29 +165,29 @@ export function HeatmapChart({
             </tr>
           ))}
           {columnTotals && (
-            <tr className="border-t-2 border-black">
-              <td className="sticky left-0 z-10 bg-black p-2 font-bold text-white">
+            <tr className="border-t-2 border-border-strong">
+              <td className="sticky left-0 z-10 bg-surface-3 p-2 font-bold text-text-primary">
                 Total
               </td>
               {columns.map((col) => (
-                <td key={col} className="bg-black p-1 text-center">
+                <td key={col} className="bg-surface-3 p-1 text-center">
                   <span
                     className="inline-block rounded px-1 py-0.5 text-[11px] font-bold"
                     style={{
-                      backgroundColor: scoreScaleColor(
+                      backgroundColor: cellColor(
                         columnTotals[col] ?? null,
                         minValue,
                         midpoint,
                         maxValue
                       ),
-                      color: scoreScaleTextColor(columnTotals[col] ?? null, midpoint),
+                      color: textColor(columnTotals[col] ?? null, midpoint),
                     }}
                   >
                     {columnTotals[col]?.toFixed(1) ?? ""}
                   </span>
                 </td>
               ))}
-              {rowTotals && <td className="bg-black" />}
+              {rowTotals && <td className="bg-surface-3" />}
             </tr>
           )}
         </tbody>

@@ -1,8 +1,4 @@
 "use client";
-import {
-  scoreScaleColor,
-  scoreScaleTextColor,
-} from "@/components/collaboration/score-color-scale";
 
 interface ScoreTableRow {
   label: string;
@@ -20,6 +16,23 @@ interface ScoreTableProps {
   className?: string;
 }
 
+function indicatorColor(value: number, min: number, mid: number, max: number): string {
+  if (value <= min) return "#e8a0a0";
+  if (value >= max) return "#2d8f8f";
+  if (value < mid) {
+    const t = (value - min) / (mid - min);
+    const r = Math.round(232 - t * 40);
+    const g = Math.round(160 + t * 50);
+    const b = Math.round(160 + t * 50);
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = (value - mid) / (max - mid);
+  const r = Math.round(170 - t * 125);
+  const g = Math.round(210 - t * 67);
+  const b = Math.round(210 - t * 67);
+  return `rgb(${r},${g},${b})`;
+}
+
 export function ScoreTable({
   title,
   headers,
@@ -31,18 +44,18 @@ export function ScoreTable({
   className,
 }: ScoreTableProps) {
   return (
-    <div className={`rounded-xl border border-black bg-[#23242a] ${className ?? ""}`}>
-      <div className="border-b border-black px-4 py-3">
-        <h3 className="text-sm font-bold text-white">{title}</h3>
+    <div className={`rounded-xl border border-border-default bg-white ${className ?? ""}`}>
+      <div className="border-b border-border-subtle px-4 py-3">
+        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
       </div>
       <div className="max-h-[600px] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#1a1b20]">
+          <thead className="sticky top-0 bg-surface-3">
             <tr>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
                 {headers[0]}
               </th>
-              <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">
                 {headers[1]}
               </th>
             </tr>
@@ -51,17 +64,17 @@ export function ScoreTable({
             {rows.map((row, i) => (
               <tr
                 key={row.label}
-                className={`border-t border-black ${
-                  i % 2 === 0 ? "bg-[#23242a]" : "bg-[#1d1e24]"
+                className={`border-t border-border-subtle ${
+                  i % 2 === 0 ? "bg-white" : "bg-surface-2/50"
                 }`}
               >
-                <td className="px-4 py-2 text-slate-100">
+                <td className="px-4 py-2 text-text-primary">
                   <div className="flex items-center gap-2">
                     {showIndicator && (
                       <span
                         className="inline-block h-3 w-3 shrink-0 rounded-full"
                         style={{
-                          backgroundColor: scoreScaleColor(
+                          backgroundColor: indicatorColor(
                             row.score,
                             minValue,
                             midpoint,
@@ -77,13 +90,13 @@ export function ScoreTable({
                   <span
                     className="inline-block min-w-[40px] rounded px-2 py-0.5 text-center text-xs font-bold"
                     style={{
-                      backgroundColor: scoreScaleColor(
+                      backgroundColor: indicatorColor(
                         row.score,
                         minValue,
                         midpoint,
                         maxValue
                       ),
-                      color: scoreScaleTextColor(row.score, midpoint),
+                      color: row.score > midpoint + 0.5 || row.score < midpoint - 0.5 ? "#fff" : "#334155",
                     }}
                   >
                     {row.score.toFixed(1)}
