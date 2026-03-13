@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Compass, Flag, TrendingUp } from "lucide-react";
 import { Navbar } from "@/components/marketing/navbar";
@@ -179,6 +180,44 @@ export default function HomePage() {
                   </p>
                 </article>
               ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="relative z-10 py-18">
+          <div className="mx-auto grid max-w-6xl items-center gap-8 px-6 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="rounded-[--radius-xl] border border-nsp-blue-900/15 bg-white/80 p-6 shadow-[0_18px_38px_rgba(20,18,20,0.08)]">
+              <div className="relative mx-auto aspect-square max-w-[280px]">
+                <Image
+                  src="/CollabLogo.png"
+                  alt="Collaboration analytics logo"
+                  fill
+                  sizes="280px"
+                  className="object-contain"
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-green-700">
+                Featured Platform
+              </p>
+              <h2 className="mt-3 font-serif text-3xl font-bold text-nsp-blue-900 md:text-4xl">
+                Collaboration analytics leaders can actually act on
+              </h2>
+              <p className="mt-5 max-w-2xl text-base leading-relaxed text-nsp-blue-700/95 md:text-lg">
+                Our collaboration dashboard helps organizations see where
+                cross-functional trust is strong, where friction is slowing
+                execution, and where intervention can create measurable movement.
+              </p>
+              <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                <Button size="lg" className="gap-2" asChild>
+                  <Link href="/services#collaboration">
+                    Explore collaboration analytics
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </section>

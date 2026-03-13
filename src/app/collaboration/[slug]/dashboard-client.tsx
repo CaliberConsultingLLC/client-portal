@@ -1,7 +1,7 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useMemo } from "react";
-import { NspLogoMark } from "@/components/shared/nsp-logo-mark";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { ScoreTable } from "@/components/collaboration/score-table";
@@ -39,14 +39,26 @@ export function CollaborationDashboardClient({
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6">
       {/* Header */}
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <NspLogoMark size={36} />
-          <div>
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-6 rounded-2xl border border-border-default bg-white px-5 py-5 shadow-sm">
+        <div className="flex items-center gap-5">
+          <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-border-default bg-surface-2 p-2 shadow-sm">
+            <Image
+              src="/CollabLogo.png"
+              alt="Collaboration dashboard logo"
+              fill
+              sizes="112px"
+              className="object-contain p-2"
+              priority
+            />
+          </div>
+          <div className="max-w-3xl">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-nsp-blue-600">
+              Collaboration Analytics
+            </p>
             <h1 className="font-serif text-2xl font-bold text-text-primary">
               {campaignName}
             </h1>
-            <p className="text-sm text-text-secondary">
+            <p className="mt-1 text-sm text-text-secondary">
               {organizationName
                 ? `${organizationName} — `
                 : ""}
@@ -54,7 +66,12 @@ export function CollaborationDashboardClient({
             </p>
           </div>
         </div>
-        <ColorLegend />
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">
+            Score Guide
+          </p>
+          <ColorLegend />
+        </div>
       </header>
 
       {/* Tab navigation */}
