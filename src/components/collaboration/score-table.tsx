@@ -3,6 +3,7 @@ import {
   scoreScaleColor,
   scoreScaleTextColor,
 } from "@/components/collaboration/score-color-scale";
+import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 
 interface ScoreTableRow {
   label: string;
@@ -24,38 +25,42 @@ export function ScoreTable({
   title,
   headers,
   rows,
-  minValue = 5.0,
+  minValue = 3.0,
   maxValue = 9.0,
-  midpoint = 7.0,
+  midpoint = 6.0,
   showIndicator = false,
   className,
 }: ScoreTableProps) {
+  const sortedRows = [...rows].sort(
+    (left, right) => right.score - left.score || left.label.localeCompare(right.label)
+  );
+
   return (
-    <div className={`rounded-xl border border-black bg-[#23242a] ${className ?? ""}`}>
-      <div className="border-b border-black px-4 py-3">
-        <h3 className="text-sm font-bold text-white">{title}</h3>
+    <div className={`overflow-hidden rounded-2xl border border-border-strong bg-white ${className ?? ""}`}>
+      <div className="border-b border-border-strong px-4 py-3">
+        <h3 className="text-sm font-bold text-text-primary">{title}</h3>
       </div>
       <div className="max-h-[600px] overflow-y-auto">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-[#1a1b20]">
+          <thead className="sticky top-0 bg-surface-3">
             <tr>
-              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-text-muted">
                 {headers[0]}
               </th>
-              <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-text-muted">
                 {headers[1]}
               </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, i) => (
+            {sortedRows.map((row, i) => (
               <tr
                 key={row.label}
-                className={`border-t border-black ${
-                  i % 2 === 0 ? "bg-[#23242a]" : "bg-[#1d1e24]"
+                className={`border-t border-border-strong ${
+                  i % 2 === 0 ? "bg-white" : "bg-surface-2/50"
                 }`}
               >
-                <td className="px-4 py-2 text-slate-100">
+                <td className="px-4 py-2 text-text-primary">
                   <div className="flex items-center gap-2">
                     {showIndicator && (
                       <span
@@ -75,7 +80,7 @@ export function ScoreTable({
                 </td>
                 <td className="px-4 py-2 text-right">
                   <span
-                    className="inline-block min-w-[40px] rounded px-2 py-0.5 text-center text-xs font-bold"
+                    className="inline-block min-w-[40px] rounded-2xl px-2 py-0.5 text-center text-xs font-bold"
                     style={{
                       backgroundColor: scoreScaleColor(
                         row.score,
@@ -83,10 +88,10 @@ export function ScoreTable({
                         midpoint,
                         maxValue
                       ),
-                      color: scoreScaleTextColor(row.score, midpoint),
+                      color: scoreScaleTextColor(row.score, midpoint, 0.8, minValue, maxValue),
                     }}
                   >
-                    {row.score.toFixed(1)}
+                    {formatScoreForDisplay(row.score)}
                   </span>
                 </td>
               </tr>

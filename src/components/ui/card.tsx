@@ -8,7 +8,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-[--radius-lg] border border-border-default bg-white shadow-sm",
+      "overflow-hidden rounded-[--radius-xl] border border-border-default bg-white shadow-sm",
       glass && "glass-surface",
       className
     )}

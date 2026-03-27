@@ -1,10 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import {
-  scoreScaleColor,
-  scoreScaleTextColor,
-} from "@/components/collaboration/score-color-scale";
+import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
+import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 
 interface HeatmapChartProps {
   /** Row labels (source departments) */
@@ -20,6 +18,10 @@ interface HeatmapChartProps {
   minValue?: number;
   maxValue?: number;
   midpoint?: number;
+  rowLabelHeader?: string;
+  abbreviateHeaders?: boolean;
+  columnMinWidthClassName?: string;
+  columnWidthClassName?: string;
 }
 
 export function HeatmapChart({
@@ -28,10 +30,16 @@ export function HeatmapChart({
   data,
   columnTotals,
   rowTotals,
-  minValue = 5.0,
+  minValue = 3.0,
   maxValue = 9.0,
-  midpoint = 7.0,
+  midpoint = 6.0,
+  rowLabelHeader = "Department",
+  abbreviateHeaders = false,
+  columnMinWidthClassName = "min-w-[112px]",
+  columnWidthClassName = "w-[112px]",
 }: HeatmapChartProps) {
+  const gridLineColor = "#7F91A8";
+  const strongGridLineColor = "#5E7898";
   const [hoveredCell, setHoveredCell] = useState<{
     row: number;
     col: number;
@@ -56,25 +64,47 @@ export function HeatmapChart({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-xs">
+      <table
+        className="w-full border-collapse text-xs"
+        style={{ border: `1px solid ${gridLineColor}` }}
+      >
         <thead>
           <tr>
-            <th className="sticky left-0 z-10 min-w-[140px] bg-[#1a1b20] p-2 text-left font-semibold text-slate-300">
-              Department
+            <th
+              className="sticky left-0 z-10 min-w-[140px] bg-white p-2 text-left font-semibold text-text-secondary"
+              style={{
+                borderRight: `1px solid ${gridLineColor}`,
+                borderBottom: `1px solid ${strongGridLineColor}`,
+              }}
+            >
+              {rowLabelHeader}
             </th>
             {columns.map((col) => (
               <th
                 key={col}
-                className="min-w-[48px] max-w-[56px] bg-[#1a1b20] p-1 text-center font-medium text-slate-300"
+                className={`${columnMinWidthClassName} ${columnWidthClassName} bg-white p-1 text-center font-bold text-text-primary`}
                 title={col}
+                style={{
+                  borderRight: `1px solid ${gridLineColor}`,
+                  borderBottom: `1px solid ${strongGridLineColor}`,
+                }}
               >
-                <div className="mx-auto w-[52px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] leading-tight">
-                  {abbreviate(col)}
+                <div
+                  className={`mx-auto text-[10px] leading-tight ${
+                    abbreviateHeaders
+                      ? "w-[52px] overflow-hidden text-ellipsis whitespace-nowrap"
+                      : "w-full whitespace-normal break-words"
+                  }`}
+                >
+                  {abbreviateHeaders ? abbreviate(col) : col}
                 </div>
               </th>
             ))}
             {rowTotals && (
-              <th className="min-w-[52px] bg-black p-2 text-center font-bold text-white">
+              <th
+                className="min-w-[52px] bg-surface-3 p-2 text-center font-bold text-text-primary"
+                style={{ borderBottom: `1px solid ${strongGridLineColor}` }}
+              >
                 Total
               </th>
             )}
@@ -82,8 +112,14 @@ export function HeatmapChart({
         </thead>
         <tbody>
           {sortedData.map((row, ri) => (
-            <tr key={row.department} className="border-t border-black">
-              <td className="sticky left-0 z-10 bg-[#23242a] p-2 font-medium text-slate-100">
+            <tr key={row.department}>
+              <td
+                className="sticky left-0 z-10 bg-white p-2 font-medium text-text-primary"
+                style={{
+                  borderRight: `1px solid ${gridLineColor}`,
+                  borderTop: `1px solid ${gridLineColor}`,
+                }}
+              >
                 {row.department}
               </td>
               {columns.map((col, ci) => {
@@ -94,76 +130,79 @@ export function HeatmapChart({
                 return (
                   <td
                     key={col}
-                    className="relative p-0.5 text-center"
+                    className="p-2 text-center text-[11px] font-semibold transition-all"
                     onMouseEnter={() => setHoveredCell({ row: ri, col: ci })}
                     onMouseLeave={() => setHoveredCell(null)}
+                    title={`${row.department} → ${col}: ${val ? formatScoreForDisplay(val) : "N/A"}`}
+                    style={{
+                      backgroundColor: isSelf
+                        ? "#EFE9DB"
+                        : scoreScaleColor(val, minValue, midpoint, maxValue),
+                      color: "#1C252A",
+                      opacity: isHovered ? 1 : 0.94,
+                      borderRight: `1px solid ${gridLineColor}`,
+                      borderTop: `1px solid ${gridLineColor}`,
+                    }}
                   >
-                    <div
-                      className="flex h-7 items-center justify-center rounded-sm text-[11px] font-semibold transition-all"
-                      style={{
-                        backgroundColor: isSelf
-                          ? "#111111"
-                          : scoreScaleColor(val, minValue, midpoint, maxValue),
-                        color: isSelf
-                          ? "#475569"
-                          : scoreScaleTextColor(val, midpoint),
-                        opacity: isHovered ? 1 : 0.92,
-                        transform: isHovered ? "scale(1.08)" : "scale(1)",
-                      }}
-                      title={`${row.department} → ${col}: ${val?.toFixed(1) ?? "N/A"}`}
-                    >
-                      {isSelf ? "–" : val ? val.toFixed(1) : ""}
-                    </div>
+                    {isSelf ? "–" : val ? formatScoreForDisplay(val) : ""}
                   </td>
                 );
               })}
               {rowTotals && (
-                <td className="bg-black p-1 text-center">
-                  <span
-                    className="inline-block rounded px-1.5 py-0.5 text-[11px] font-bold"
-                    style={{
-                      backgroundColor: scoreScaleColor(
-                        rowTotals[row.department] ?? null,
-                        minValue,
-                        midpoint,
-                        maxValue
-                      ),
-                      color: scoreScaleTextColor(
-                        rowTotals[row.department] ?? null,
-                        midpoint
-                      ),
-                    }}
-                  >
-                    {rowTotals[row.department]?.toFixed(1) ?? ""}
-                  </span>
+                <td
+                  className="p-2 text-center text-[11px] font-bold"
+                  style={{
+                    backgroundColor: scoreScaleColor(
+                      rowTotals[row.department] ?? null,
+                      minValue,
+                      midpoint,
+                      maxValue
+                    ),
+                    color: "#1C252A",
+                    borderTop: `1px solid ${gridLineColor}`,
+                  }}
+                >
+                  {formatScoreForDisplay(rowTotals[row.department] ?? null)}
                 </td>
               )}
             </tr>
           ))}
           {columnTotals && (
-            <tr className="border-t-2 border-black">
-              <td className="sticky left-0 z-10 bg-black p-2 font-bold text-white">
+            <tr>
+              <td
+                className="sticky left-0 z-10 bg-surface-3 p-2 font-bold text-text-primary"
+                style={{
+                  borderTop: `2px solid ${strongGridLineColor}`,
+                  borderRight: `1px solid ${gridLineColor}`,
+                }}
+              >
                 Total
               </td>
               {columns.map((col) => (
-                <td key={col} className="bg-black p-1 text-center">
-                  <span
-                    className="inline-block rounded px-1 py-0.5 text-[11px] font-bold"
-                    style={{
-                      backgroundColor: scoreScaleColor(
-                        columnTotals[col] ?? null,
-                        minValue,
-                        midpoint,
-                        maxValue
-                      ),
-                      color: scoreScaleTextColor(columnTotals[col] ?? null, midpoint),
-                    }}
-                  >
-                    {columnTotals[col]?.toFixed(1) ?? ""}
-                  </span>
+                <td
+                  key={col}
+                  className="p-2 text-center text-[11px] font-bold"
+                  style={{
+                    backgroundColor: scoreScaleColor(
+                      columnTotals[col] ?? null,
+                      minValue,
+                      midpoint,
+                      maxValue
+                    ),
+                    color: "#1C252A",
+                    borderTop: `2px solid ${strongGridLineColor}`,
+                    borderRight: `1px solid ${gridLineColor}`,
+                  }}
+                >
+                  {formatScoreForDisplay(columnTotals[col] ?? null)}
                 </td>
               ))}
-              {rowTotals && <td className="bg-black" />}
+              {rowTotals && (
+                <td
+                  className="bg-surface-3"
+                  style={{ borderTop: `2px solid ${strongGridLineColor}` }}
+                />
+              )}
             </tr>
           )}
         </tbody>

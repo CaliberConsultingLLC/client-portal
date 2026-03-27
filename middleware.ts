@@ -15,24 +15,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Protect portal routes — require authenticated user
-  if (pathname.startsWith("/portal")) {
-    if (!user) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/magic-link";
-      url.searchParams.set("expired", "true");
-      return NextResponse.redirect(url);
-    }
-  }
-
   return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    // Run middleware on admin and portal routes, plus auth callback
+    // Keep middleware focused on the remaining Supabase-backed admin routes.
     "/admin/:path*",
-    "/portal/:path*",
     "/auth/callback",
   ],
 };

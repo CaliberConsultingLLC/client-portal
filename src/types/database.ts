@@ -1,6 +1,12 @@
 // Database types matching Supabase schema (001_initial_schema.sql)
 
-export type UserRole = "nsp_admin" | "client_admin" | "client_viewer";
+export type UserRole =
+  | "super_admin"
+  | "admin"
+  | "analyst"
+  | "client_admin"
+  | "client_viewer"
+  | "nsp_admin";
 export type CampaignStatus = "draft" | "active" | "paused" | "completed" | "archived";
 export type SurveyStatus = "draft" | "active" | "closed";
 export type ReportStatus = "draft" | "published" | "archived";
@@ -9,10 +15,15 @@ export interface Organization {
   id: string;
   name: string;
   slug: string;
+  domain?: string | null;
   industry: string | null;
-  size_range: string | null;
+  size_range?: string | null;
+  employee_count?: number | null;
   logo_url: string | null;
-  primary_contact_email: string | null;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  primary_contact_email?: string | null;
+  status?: "active" | "paused" | "archived";
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -20,13 +31,15 @@ export interface Organization {
 
 export interface User {
   id: string;
-  auth_id: string | null;
-  org_id: string | null;
+  auth_id?: string | null;
+  org_id?: string | null;
+  organization_id?: string | null;
   role: UserRole;
   email: string;
   full_name: string | null;
   avatar_url: string | null;
-  last_login_at: string | null;
+  last_login_at?: string | null;
+  last_sign_in?: string | null;
   created_at: string;
   updated_at: string;
 }

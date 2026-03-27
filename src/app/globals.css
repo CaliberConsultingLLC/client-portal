@@ -69,13 +69,13 @@
 
   /* Surface & Neutral */
   --color-surface-1: #FFFFFF;
-  --color-surface-2: #F7F4EC;
-  --color-surface-3: #EFE9DB;
-  --color-surface-4: #E2D8C2;
+  --color-surface-2: #F1F4F7;
+  --color-surface-3: #E2E8EF;
+  --color-surface-4: #D2DBE5;
 
-  --color-border-default: #D9CCB3;
-  --color-border-subtle: #EDE4D3;
-  --color-border-strong: #B8AA8E;
+  --color-border-default: #B4C1CD;
+  --color-border-subtle: #D3DDE7;
+  --color-border-strong: #8798AA;
 
   --color-text-primary: #152238;
   --color-text-secondary: #3B4B63;

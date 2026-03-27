@@ -12,6 +12,7 @@ import {
   LabelList,
 } from "recharts";
 import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
+import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 
 interface GradientBarItem {
   name: string;
@@ -24,7 +25,7 @@ interface GradientBarChartProps {
   average?: number;
   minValue?: number;
   maxValue?: number;
-  /** Midpoint where color shifts from gold to green */
+  /** Midpoint where color shifts from low to high color */
   midpoint?: number;
   showAvgLine?: boolean;
   className?: string;
@@ -34,9 +35,9 @@ export function GradientBarChart({
   data,
   height,
   average,
-  minValue = 5.0,
+  minValue = 3.0,
   maxValue = 9.0,
-  midpoint = 7.0,
+  midpoint = 6.0,
   showAvgLine = true,
   className,
 }: GradientBarChartProps) {
@@ -62,37 +63,36 @@ export function GradientBarChart({
           <YAxis
             dataKey="name"
             type="category"
-            tick={{ fontSize: 12, fill: "#cbd5e1", fontWeight: 500 }}
+            tick={{ fontSize: 12, fill: "#334155", fontWeight: 500 }}
             width={180}
             axisLine={false}
             tickLine={false}
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "#17181d",
-              border: "1px solid #000",
-              borderRadius: "8px",
+              backgroundColor: "#fff",
+              border: "1px solid var(--color-border-strong)",
+              borderRadius: "12px",
               fontSize: "13px",
-              color: "#fff",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
             }}
-            formatter={(value) => [Number(value).toFixed(1), "Score"]}
+            formatter={(value) => [formatScoreForDisplay(Number(value)), "Score"]}
           />
           {showAvgLine && average && (
             <ReferenceLine
               x={average}
-              stroke="#475569"
+              stroke="#94a3b8"
               strokeDasharray="4 4"
               strokeWidth={1.5}
               label={{
-                value: `Avg: ${average.toFixed(2)}`,
+                value: `Avg: ${formatScoreForDisplay(average)}`,
                 position: "bottom",
                 fontSize: 11,
-                fill: "#94a3b8",
+                fill: "#64748b",
               }}
             />
           )}
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={24}>
+          <Bar dataKey="value" radius={[0, 12, 12, 0]} maxBarSize={24}>
             {data.map((entry, i) => (
               <Cell
                 key={`cell-${i}`}
@@ -102,8 +102,8 @@ export function GradientBarChart({
             <LabelList
               dataKey="value"
               position="right"
-              formatter={(v) => Number(v).toFixed(1)}
-              style={{ fontSize: 12, fontWeight: 600, fill: "#e2e8f0" }}
+              formatter={(v) => formatScoreForDisplay(Number(v))}
+              style={{ fontSize: 12, fontWeight: 600, fill: "#334155" }}
             />
           </Bar>
         </BarChart>

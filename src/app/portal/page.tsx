@@ -1,51 +1,26 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3, ClipboardList } from "lucide-react";
+import { PortalHomeContent } from "@/components/portal/portal-home-content";
+import { requireFirebasePortalUser } from "@/lib/firebase/auth";
+import { getAccessibleDashboardAssignments, getAccessiblePortalClients } from "@/lib/firebase/portal-access";
 
-export default function PortalHomePage() {
+export default async function PortalHomePage() {
+  const user = await requireFirebasePortalUser();
+  const [clients, assignments] = await Promise.all([
+    getAccessiblePortalClients(user),
+    getAccessibleDashboardAssignments(user),
+  ]);
+
   return (
-    <>
-      <div className="mb-8">
-        <h1 className="text-2xl font-extrabold text-text-primary">
-          Welcome to your portal
-        </h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Access your reports and track survey progress.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Card className="transition-shadow hover:shadow-md">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-nsp-blue-50 text-nsp-blue-500">
-                <BarChart3 className="h-5 w-5" />
-              </div>
-              <CardTitle>Reports</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-text-secondary">
-              View your published reports and dashboards.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="transition-shadow hover:shadow-md">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[--radius-md] bg-nsp-orange-50 text-nsp-orange-400">
-                <ClipboardList className="h-5 w-5" />
-              </div>
-              <CardTitle>Surveys</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-text-secondary">
-              Check the status of active surveys in your organization.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    </>
+    <PortalHomeContent
+      dashboardCount={assignments.length}
+      reportCount={0}
+      documentCount={0}
+      portalClientCount={clients.length}
+      welcomeTitle="A secure home base for dashboards, reports, and supporting materials."
+      welcomeBody={
+        clients.length > 0
+          ? `Your current access is scoped across ${clients.length} client workspace${clients.length === 1 ? "" : "s"}, with dashboard visibility controlled from Firebase-backed assignments.`
+          : "This portal is structured so each client workspace can remain fully separate, with its own dashboards, reports, documents, and resources."
+      }
+    />
   );
 }

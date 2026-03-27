@@ -2,6 +2,10 @@
 
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import {
+  formatScoreDeltaForDisplay,
+  formatScoreForDisplay,
+} from "@/lib/collaboration/display-format";
 
 interface ScoreCardProps {
   label: string;
@@ -36,7 +40,7 @@ export function ScoreCard({
           className="text-3xl font-extrabold"
           style={{ color }}
         >
-          {value.toFixed(1)}
+          {formatScoreForDisplay(value)}
           {suffix}
         </span>
         {delta !== undefined && (
@@ -58,7 +62,7 @@ export function ScoreCard({
               <Minus className="h-3.5 w-3.5" />
             )}
             {delta > 0 ? "+" : ""}
-            {delta.toFixed(1)}
+            {formatScoreDeltaForDisplay(delta)}
           </span>
         )}
       </div>

@@ -2,66 +2,10 @@ import { createServerClient } from "./server";
 import { redirect } from "next/navigation";
 import type { User } from "@/types/database";
 
-/**
- * Get the currently authenticated user from Supabase Auth + our users table.
- * Redirects to sign-in if not authenticated.
- */
-export async function requireAdmin(): Promise<User> {
-  const supabase = await createServerClient();
+const ADMIN_ROLES = new Set(["super_admin", "admin", "analyst", "nsp_admin"]);
+const PORTAL_ROLES = new Set(["client_admin", "client_viewer", "super_admin", "admin", "analyst"]);
 
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    redirect("/sign-in");
-  }
-
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("auth_id", authUser.id)
-    .single();
-
-  if (error || !user || user.role !== "nsp_admin") {
-    redirect("/sign-in");
-  }
-
-  return user as User;
-}
-
-/**
- * Get the currently authenticated portal user.
- * Redirects to magic-link page if not authenticated.
- */
-export async function requirePortalUser(): Promise<User> {
-  const supabase = await createServerClient();
-
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
-    redirect("/magic-link?expired=true");
-  }
-
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("auth_id", authUser.id)
-    .single();
-
-  if (error || !user) {
-    redirect("/magic-link?expired=true");
-  }
-
-  return user as User;
-}
-
-/**
- * Get the current auth user without redirecting. Returns null if not logged in.
- */
-export async function getOptionalUser(): Promise<User | null> {
+async function getCurrentAppUser(): Promise<User | null> {
   const supabase = await createServerClient();
 
   const {
@@ -73,8 +17,39 @@ export async function getOptionalUser(): Promise<User | null> {
   const { data: user } = await supabase
     .from("users")
     .select("*")
-    .eq("auth_id", authUser.id)
+    .eq("id", authUser.id)
     .single();
 
   return (user as User) || null;
+}
+
+/**
+ * Get the currently authenticated user from Supabase Auth + our users table.
+ * Redirects to sign-in if not authenticated.
+ */
+export async function requireAdmin(): Promise<User> {
+  const user = await getCurrentAppUser();
+  if (!user || !ADMIN_ROLES.has(user.role)) {
+    redirect("/sign-in");
+  }
+  return user;
+}
+
+/**
+ * Get the currently authenticated portal user.
+ * Redirects to the portal sign-in page if not authenticated.
+ */
+export async function requirePortalUser(): Promise<User> {
+  const user = await getCurrentAppUser();
+  if (!user || !PORTAL_ROLES.has(user.role)) {
+    redirect("/portal-login");
+  }
+  return user;
+}
+
+/**
+ * Get the current auth user without redirecting. Returns null if not logged in.
+ */
+export async function getOptionalUser(): Promise<User | null> {
+  return getCurrentAppUser();
 }
