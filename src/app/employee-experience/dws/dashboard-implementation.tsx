@@ -1,23 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Minus, SlidersHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { NspRadarChart } from "@/components/charts/nsp-radar-chart";
 import { ColorLegend } from "@/components/collaboration/color-legend";
-import {
-  scoreScaleColor,
-  scoreScaleTextColor,
-} from "@/components/collaboration/score-color-scale";
-import { ScoreTable } from "@/components/collaboration/score-table";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { DataTable } from "@/components/ui/data-table";
+import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
+import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import type {
   EmployeeExperienceDashboardData,
@@ -25,1289 +15,1311 @@ import type {
   EmployeeExperienceRespondent,
 } from "@/types/employee-experience";
 
-const EMPLOYEE_EXPERIENCE_SCALE = {
-  minValue: 6,
-  midpoint: 7.25,
-  maxValue: 8.5,
-  minLabel: "60",
-  maxLabel: "85",
-} as const;
+// ─── Constants ────────────────────────────────────────────────────────────────
 
-const MODE_SECTIONS = [
-  { id: "review", label: "Review", tabIds: ["investigation-hub"] },
-  { id: "reports", label: "Reports", tabIds: ["department-report", "supervisor-report"] },
+const EE = { min: 6, mid: 7.25, max: 8.5, minLabel: "60", maxLabel: "85" } as const;
+
+const DIM_ORDER = ["Acquisition", "Culture", "Daily Work", "Intent", "Supervisor", "Engage", "Balance"];
+
+const GROUPS = [
+  {
+    id: "executive" as const,
+    label: "Executive",
+    perspectives: [
+      { id: "exec-overview" as const, label: "Campaign Overview" },
+      { id: "exec-location" as const, label: "Location Breakdown" },
+    ],
+  },
+  {
+    id: "hr" as const,
+    label: "HR",
+    perspectives: [
+      { id: "hr-rankings" as const, label: "Department Rankings" },
+      { id: "hr-index-dive" as const, label: "Index Deep Dive" },
+      { id: "hr-supervisor" as const, label: "Supervisor Reports" },
+      { id: "hr-open-text" as const, label: "Open Text" },
+    ],
+  },
+  {
+    id: "department" as const,
+    label: "Department",
+    perspectives: [
+      { id: "dept-scorecard" as const, label: "Department Scorecard" },
+    ],
+  },
 ] as const;
 
-const INVESTIGATION_FIELDS = [
-  { id: "department", label: "Department" },
-  { id: "supervisor", label: "Supervisor" },
-  { id: "location", label: "Location" },
-  { id: "division", label: "Division" },
-  { id: "jobTitle", label: "Job Title" },
-  { id: "fieldCategory", label: "Field Category" },
-  { id: "leadership", label: "Leadership" },
-  { id: "generation", label: "Generation" },
-  { id: "rateType", label: "Rate Type" },
-  { id: "tenure", label: "Tenure" },
-  { id: "rating", label: "Rating" },
-] as const;
+type GroupId = (typeof GROUPS)[number]["id"];
+type PerspectiveId =
+  | "exec-overview" | "exec-location"
+  | "hr-rankings" | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
+  | "dept-scorecard";
 
-type InvestigationFieldId = (typeof INVESTIGATION_FIELDS)[number]["id"];
+const OPEN_TEXT_FIELDS = [
+  { id: "strengths" as const, label: "Greatest Strengths" },
+  { id: "improvement" as const, label: "Desired Changes" },
+  { id: "supervisor" as const, label: "Supervisor Feedback" },
+  { id: "acquisition" as const, label: "Acquisition Comments" },
+];
+type OpenTextField = "strengths" | "improvement" | "supervisor" | "acquisition";
 
-interface DashboardProps {
-  data: EmployeeExperienceDashboardData;
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function r1(v: number) { return Math.round(v * 10) / 10; }
+
+function avg(vals: number[]) {
+  if (vals.length === 0) return 0;
+  return vals.reduce((s, v) => s + v, 0) / vals.length;
 }
 
-interface FilterRowState {
-  id: string;
-  fieldId: InvestigationFieldId | "";
-  value: string;
-}
-
-interface DashboardTab {
-  id: string;
-  label: string;
-  content: React.ReactNode;
-}
-
-interface GroupComparisonRow {
-  id: string;
-  label: string;
-  score: number;
-  previousScore: number | null;
-  delta: number | null;
-  respondentCount: number;
-  previousRespondentCount: number;
-}
-
-function round2(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function average(values: number[]) {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function getFieldLabel(fieldId: InvestigationFieldId) {
-  return INVESTIGATION_FIELDS.find((field) => field.id === fieldId)?.label ?? fieldId;
-}
-
-function getFieldValue(respondent: EmployeeExperienceRespondent, fieldId: InvestigationFieldId) {
-  return respondent[fieldId];
-}
-
-function overallScore(respondents: EmployeeExperienceRespondent[], itemIds: number[]) {
-  const respondentScores = respondents
-    .map((respondent) => {
-      const values = itemIds
-        .map((itemId) => respondent.scores[itemId])
-        .filter((value): value is number => value !== null);
-      return values.length > 0 ? average(values) : null;
+function groupScore(respondents: EmployeeExperienceRespondent[], itemIds: number[]): number {
+  const scores = respondents
+    .map((r) => {
+      const vs = itemIds.map((id) => r.scores[id]).filter((v): v is number => v !== null);
+      return vs.length > 0 ? avg(vs) : null;
     })
-    .filter((value): value is number => value !== null);
-
-  return respondentScores.length > 0 ? round2(average(respondentScores)) : 0;
+    .filter((v): v is number => v !== null);
+  return scores.length > 0 ? r1(avg(scores)) : 0;
 }
 
-function questionAverage(
+function itemScore(respondents: EmployeeExperienceRespondent[], itemId: number): number {
+  const vals = respondents.map((r) => r.scores[itemId]).filter((v): v is number => v !== null);
+  return vals.length > 0 ? r1(avg(vals)) : 0;
+}
+
+function filterR(
   respondents: EmployeeExperienceRespondent[],
-  itemId: number
-) {
-  const values = respondents
-    .map((respondent) => respondent.scores[itemId])
-    .filter((value): value is number => value !== null);
-  return values.length > 0 ? round2(average(values)) : 0;
-}
-
-function buildQuestionMetrics(
-  questions: EmployeeExperienceQuestionDefinition[],
-  currentRespondents: EmployeeExperienceRespondent[],
-  comparisonRespondents: EmployeeExperienceRespondent[]
-) {
-  return questions
-    .map((question) => {
-      const score = questionAverage(currentRespondents, question.itemId);
-      const previousScore =
-        comparisonRespondents.length > 0 ? questionAverage(comparisonRespondents, question.itemId) : null;
-      const responseCount = currentRespondents.filter(
-        (respondent) => respondent.scores[question.itemId] !== null
-      ).length;
-
-      return {
-        ...question,
-        id: `item-${question.itemId}`,
-        score,
-        previousScore,
-        delta: previousScore === null ? null : round2(score - previousScore),
-        responseCount,
-      };
-    })
-    .sort((left, right) => left.score - right.score || left.itemId - right.itemId);
-}
-
-function buildDimensionMetrics(
-  questions: EmployeeExperienceQuestionDefinition[],
-  currentRespondents: EmployeeExperienceRespondent[],
-  comparisonRespondents: EmployeeExperienceRespondent[]
-) {
-  const grouped = new Map<string, EmployeeExperienceQuestionDefinition[]>();
-
-  questions.forEach((question) => {
-    const existing = grouped.get(question.dimension) ?? [];
-    existing.push(question);
-    grouped.set(question.dimension, existing);
-  });
-
-  return Array.from(grouped.entries())
-    .map(([dimension, dimensionQuestions]) => {
-      const itemIds = dimensionQuestions.map((question) => question.itemId);
-      const score = overallScore(currentRespondents, itemIds);
-      const previousScore =
-        comparisonRespondents.length > 0 ? overallScore(comparisonRespondents, itemIds) : null;
-
-      return {
-        id: dimension.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        label: dimension,
-        score,
-        previousScore,
-        delta: previousScore === null ? null : round2(score - previousScore),
-      };
-    })
-    .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label));
-}
-
-function buildGroupComparisonRows(
-  fieldId: InvestigationFieldId,
-  currentRespondents: EmployeeExperienceRespondent[],
-  comparisonRespondents: EmployeeExperienceRespondent[],
-  questions: EmployeeExperienceQuestionDefinition[],
-  minimumSegmentSize: number
-): GroupComparisonRow[] {
-  const itemIds = questions.map((question) => question.itemId);
-  const currentGroups = new Map<string, EmployeeExperienceRespondent[]>();
-  const comparisonGroups = new Map<string, EmployeeExperienceRespondent[]>();
-
-  currentRespondents.forEach((respondent) => {
-    const label = getFieldValue(respondent, fieldId);
-    const existing = currentGroups.get(label) ?? [];
-    existing.push(respondent);
-    currentGroups.set(label, existing);
-  });
-
-  comparisonRespondents.forEach((respondent) => {
-    const label = getFieldValue(respondent, fieldId);
-    const existing = comparisonGroups.get(label) ?? [];
-    existing.push(respondent);
-    comparisonGroups.set(label, existing);
-  });
-
-  return Array.from(currentGroups.entries())
-    .filter(([, respondents]) => respondents.length >= minimumSegmentSize)
-    .map(([label, respondents]) => {
-      const comparisonGroup = comparisonGroups.get(label) ?? [];
-      const comparisonValid = comparisonGroup.length >= minimumSegmentSize;
-      const score = overallScore(respondents, itemIds);
-      const previousScore = comparisonValid ? overallScore(comparisonGroup, itemIds) : null;
-
-      return {
-        id: `${fieldId}-${label}`,
-        label,
-        score,
-        previousScore,
-        delta: previousScore === null ? null : round2(score - previousScore),
-        respondentCount: respondents.length,
-        previousRespondentCount: comparisonValid ? comparisonGroup.length : 0,
-      };
-    })
-    .sort((left, right) => right.respondentCount - left.respondentCount || right.score - left.score);
-}
-
-function applyFilters(
-  respondents: EmployeeExperienceRespondent[],
-  filters: FilterRowState[]
-) {
-  return respondents.filter((respondent) =>
-    filters.every((filter) => {
-      if (!filter.fieldId || !filter.value) return true;
-      return getFieldValue(respondent, filter.fieldId) === filter.value;
+  filters: Record<string, string>
+): EmployeeExperienceRespondent[] {
+  return respondents.filter((r) =>
+    Object.entries(filters).every(([k, v]) => {
+      if (!v) return true;
+      return (r as unknown as Record<string, unknown>)[k] === v;
     })
   );
 }
 
-function getScoreCardStyle(score: number) {
-  return {
-    backgroundColor: scoreScaleColor(
-      score,
-      EMPLOYEE_EXPERIENCE_SCALE.minValue,
-      EMPLOYEE_EXPERIENCE_SCALE.midpoint,
-      EMPLOYEE_EXPERIENCE_SCALE.maxValue
-    ),
-    color: scoreScaleTextColor(
-      score,
-      EMPLOYEE_EXPERIENCE_SCALE.midpoint,
-      0.8,
-      EMPLOYEE_EXPERIENCE_SCALE.minValue,
-      EMPLOYEE_EXPERIENCE_SCALE.maxValue
-    ),
-  };
+function uniq(respondents: EmployeeExperienceRespondent[], field: keyof EmployeeExperienceRespondent, min: number): string[] {
+  const counts = new Map<string, number>();
+  respondents.forEach((r) => {
+    const v = r[field] as string;
+    if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .filter(([, n]) => n >= min)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([v]) => v);
 }
 
-function HeaderTitle({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">{children}</p>;
+type DimMetric = {
+  id: string; label: string; score: number;
+  prevScore: number | null; delta: number | null; itemIds: number[];
+};
+
+function buildDims(
+  questions: EmployeeExperienceQuestionDefinition[],
+  current: EmployeeExperienceRespondent[],
+  prior: EmployeeExperienceRespondent[]
+): DimMetric[] {
+  const byDim = new Map<string, number[]>();
+  questions.forEach((q) => {
+    const ids = byDim.get(q.dimension) ?? [];
+    ids.push(q.itemId);
+    byDim.set(q.dimension, ids);
+  });
+  return DIM_ORDER.filter((d) => byDim.has(d)).map((dim) => {
+    const ids = byDim.get(dim)!;
+    const score = groupScore(current, ids);
+    const prevScore = prior.length > 0 ? groupScore(prior, ids) : null;
+    return { id: dim.toLowerCase().replace(/[^a-z0-9]+/g, "-"), label: dim, score, prevScore, delta: prevScore !== null ? r1(score - prevScore) : null, itemIds: ids };
+  });
 }
 
-function DeltaIndicator({ delta }: { delta: number | null }) {
-  if (delta === null) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#EEF3F6] px-2.5 py-1 text-xs font-semibold text-[#60727D]">
-        <Minus className="h-3.5 w-3.5" />
-        No comparison
-      </span>
-    );
-  }
+function fmtDelta(delta: number | null): string {
+  if (delta === null || Number.isNaN(delta)) return "—";
+  if (Math.abs(delta) < 0.005) return "±0.0";
+  const s = Math.abs(delta * 10).toFixed(1);
+  return delta > 0 ? `+${s}` : `-${s}`;
+}
 
-  if (Math.abs(delta) < 0.01) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#EEF3F6] px-2.5 py-1 text-xs font-semibold text-[#60727D]">
-        <Minus className="h-3.5 w-3.5" />
-        Flat
-      </span>
-    );
-  }
+// ─── Shared UI ────────────────────────────────────────────────────────────────
 
-  const positive = delta > 0;
+function sColor(score: number) { return scoreScaleColor(score, EE.min, EE.mid, EE.max); }
+function sTColor(score: number) { return scoreScaleTextColor(score, EE.mid, 0.8, EE.min, EE.max); }
 
+function ScoreChip({ score, size = "md" }: { score: number; size?: "sm" | "md" | "lg" }) {
+  const cls =
+    size === "sm" ? "inline-flex min-w-[48px] justify-center rounded px-1.5 py-0.5 text-xs font-bold" :
+    size === "lg" ? "inline-flex min-w-[88px] justify-center rounded-2xl px-4 py-2 text-3xl font-extrabold" :
+    "inline-flex min-w-[60px] justify-center rounded-lg px-2.5 py-1 text-sm font-bold";
+  return <span className={cls} style={{ backgroundColor: sColor(score), color: sTColor(score) }}>{formatScoreForDisplay(score)}</span>;
+}
+
+function DeltaChip({ delta }: { delta: number | null }) {
+  if (delta === null) return <span className="inline-flex items-center gap-0.5 rounded-full bg-surface-3 px-2 py-0.5 text-xs font-semibold text-text-muted"><Minus className="h-3 w-3" />—</span>;
+  const pos = delta > 0.005;
+  const neg = delta < -0.005;
+  const cls = pos ? "bg-nsp-green-100 text-nsp-green-800" : neg ? "bg-nsp-red-100 text-nsp-red-800" : "bg-surface-3 text-text-muted";
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-        positive ? "bg-[#E7F2EB] text-[#24613A]" : "bg-[#F8E7E5] text-[#8A3D36]"
-      }`}
-    >
-      {positive ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
-      {positive ? "+" : ""}
-      {formatScoreForDisplay(delta)}
+    <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold ${cls}`}>
+      {pos ? <ArrowUp className="h-3 w-3" /> : neg ? <ArrowDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+      {fmtDelta(delta)}
     </span>
   );
 }
 
-function MetricCard({
-  label,
-  value,
-  subtext,
-  score,
-}: {
-  label: string;
-  value: string | number;
-  subtext: string;
-  score?: number;
-}) {
+function SLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">{children}</p>;
+}
+
+function PgHeader({ label, title, description }: { label: string; title: string; description?: string }) {
   return (
-    <div
-      className="flex min-h-[132px] flex-col justify-center rounded-2xl border border-border-strong px-4 py-4 shadow-sm"
-      style={typeof score === "number" ? getScoreCardStyle(score) : undefined}
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">{label}</p>
-      <p className="mt-2 text-4xl font-extrabold leading-none text-text-primary">{value}</p>
-      <p className="mt-2 text-sm leading-relaxed text-text-secondary">{subtext}</p>
+    <div className="mb-6">
+      <SLabel>{label}</SLabel>
+      <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-text-primary">{title}</h2>
+      {description && <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">{description}</p>}
     </div>
   );
 }
 
-function EmptyState({ message }: { message: string }) {
+function Empty({ message }: { message: string }) {
   return (
     <Card className="border-border-strong">
-      <CardContent className="px-6 py-12 text-center text-sm text-text-muted">{message}</CardContent>
+      <CardContent className="px-6 py-16 text-center text-sm text-text-muted">{message}</CardContent>
     </Card>
   );
 }
 
-function ReviewHubTab({
-  data,
-  currentCampaign,
-  comparisonCampaign,
+// ─── Score table shared component ────────────────────────────────────────────
+
+type ScoreTableRow = {
+  label: string; n?: number;
+  score: number; delta: number | null;
+  dims?: DimMetric[];
+};
+
+function CrossTabTable({
+  title, description, rows, dims, orgRow,
 }: {
-  data: EmployeeExperienceDashboardData;
-  currentCampaign: string;
-  comparisonCampaign: string;
+  title: string; description?: string;
+  rows: ScoreTableRow[]; dims: DimMetric[];
+  orgRow?: ScoreTableRow;
 }) {
-  const minimumSegmentSize = data.settings.minimumSegmentSize;
-  const [primaryAngle, setPrimaryAngle] = useState<InvestigationFieldId>("department");
-  const [filters, setFilters] = useState<FilterRowState[]>([
-    { id: "filter-1", fieldId: "", value: "" },
-    { id: "filter-2", fieldId: "", value: "" },
-    { id: "filter-3", fieldId: "", value: "" },
-  ]);
-
-  const currentCampaignRespondents = useMemo(
-    () => data.respondents.filter((respondent) => respondent.campaignLabel === currentCampaign),
-    [data.respondents, currentCampaign]
+  return (
+    <Card className="border-border-strong">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description && <CardDescription>{description}</CardDescription>}
+      </CardHeader>
+      <CardContent className="overflow-x-auto pt-0">
+        <table className="w-full min-w-[580px] text-sm">
+          <thead>
+            <tr className="border-b border-border-strong">
+              <th className="py-3 pr-4 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Group</th>
+              <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">n</th>
+              {dims.map((d) => (
+                <th key={d.id} className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">{d.label}</th>
+              ))}
+              <th className="pl-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Total</th>
+              <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={row.label} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                <td className="py-3 pr-4 font-semibold text-text-primary">{row.label}</td>
+                <td className="px-2 py-3 text-center text-text-muted">{row.n ?? "—"}</td>
+                {dims.map((d) => {
+                  const rd = row.dims?.find((x) => x.label === d.label);
+                  return (
+                    <td key={d.id} className="px-2 py-3 text-center">
+                      {rd ? <ScoreChip score={rd.score} size="sm" /> : <span className="text-text-muted">—</span>}
+                    </td>
+                  );
+                })}
+                <td className="pl-3 py-3 text-center"><ScoreChip score={row.score} size="sm" /></td>
+                <td className="px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
+              </tr>
+            ))}
+            {orgRow && (
+              <tr className="border-t-2 border-border-strong bg-nsp-blue-50/60 font-bold">
+                <td className="py-3 pr-4 font-bold text-text-primary">{orgRow.label}</td>
+                <td className="px-2 py-3 text-center text-text-muted">{orgRow.n ?? "—"}</td>
+                {dims.map((d) => {
+                  const rd = orgRow.dims?.find((x) => x.label === d.label);
+                  return (
+                    <td key={d.id} className="px-2 py-3 text-center">
+                      {rd ? <ScoreChip score={rd.score} size="sm" /> : <span className="text-text-muted">—</span>}
+                    </td>
+                  );
+                })}
+                <td className="pl-3 py-3 text-center"><ScoreChip score={orgRow.score} size="sm" /></td>
+                <td className="px-2 py-3 text-center"><DeltaChip delta={orgRow.delta} /></td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
   );
-  const comparisonCampaignRespondents = useMemo(
-    () =>
-      comparisonCampaign
-        ? data.respondents.filter((respondent) => respondent.campaignLabel === comparisonCampaign)
-        : [],
-    [data.respondents, comparisonCampaign]
+}
+
+// ─── Left Rail components ─────────────────────────────────────────────────────
+
+function LRail({ children }: { children: React.ReactNode }) {
+  return <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">{children}</div>;
+}
+
+function CampaignRail({
+  campaigns, current, prior, onCurrent, onPrior, orgName,
+}: {
+  campaigns: string[]; current: string; prior: string;
+  onCurrent: (v: string) => void; onPrior: (v: string) => void; orgName: string;
+}) {
+  return (
+    <Card className="border-border-strong">
+      <CardContent className="space-y-4 p-5">
+        <div className="rounded-xl bg-surface-2 px-4 py-3">
+          <SLabel>Organization</SLabel>
+          <p className="mt-1 text-sm font-semibold text-text-primary">{orgName}</p>
+        </div>
+        <div>
+          <SLabel>Current Campaign</SLabel>
+          <select value={current} onChange={(e) => onCurrent(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+            {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <SLabel>Compare To</SLabel>
+          <select value={prior} onChange={(e) => onPrior(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+            <option value="">No comparison</option>
+            {campaigns.filter((c) => c !== current).map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      </CardContent>
+    </Card>
   );
+}
 
-  const currentFilteredRespondents = useMemo(
-    () => applyFilters(currentCampaignRespondents, filters),
-    [currentCampaignRespondents, filters]
+function PerspRail({
+  perspectives, activeId, onSelect,
+}: {
+  perspectives: { id: string; label: string }[]; activeId: string; onSelect: (id: string) => void;
+}) {
+  return (
+    <Card className="overflow-hidden border-border-strong">
+      <CardContent className="p-0">
+        {perspectives.map((p) => (
+          <button
+            key={p.id} type="button" onClick={() => onSelect(p.id)}
+            className={`flex w-full items-center justify-between border-b border-border-subtle px-4 py-3 text-left text-sm last:border-b-0 transition
+              ${activeId === p.id ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "bg-white font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
+          >
+            {p.label}
+            {activeId === p.id && <ChevronRight className="h-4 w-4 text-nsp-blue-400" />}
+          </button>
+        ))}
+      </CardContent>
+    </Card>
   );
-  const comparisonFilteredRespondents = useMemo(
-    () => applyFilters(comparisonCampaignRespondents, filters),
-    [comparisonCampaignRespondents, filters]
+}
+
+function FilterRail({
+  filters, onChange, onReset,
+}: {
+  filters: { id: string; label: string; value: string; options: string[] }[];
+  onChange: (id: string, v: string) => void; onReset: () => void;
+}) {
+  const hasActive = filters.some((f) => f.value);
+  return (
+    <Card className="border-border-strong">
+      <CardContent className="space-y-3 p-5">
+        <SLabel>Filters</SLabel>
+        {filters.map((f) => (
+          <div key={f.id}>
+            <span className="text-xs font-medium text-text-secondary">{f.label}</span>
+            <select
+              value={f.value} onChange={(e) => onChange(f.id, e.target.value)}
+              className="mt-1 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+            >
+              <option value="">All</option>
+              {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        ))}
+        {hasActive && (
+          <button type="button" onClick={onReset} className="w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-2">
+            Reset filters
+          </button>
+        )}
+      </CardContent>
+    </Card>
   );
+}
 
-  const currentOverviewScore = useMemo(
-    () => overallScore(currentFilteredRespondents, data.questions.map((question) => question.itemId)),
-    [currentFilteredRespondents, data.questions]
+function SelectorRail({
+  label, items, active, onSelect, scoreByItem,
+}: {
+  label: string; items: string[]; active: string;
+  onSelect: (v: string) => void; scoreByItem?: Record<string, number>;
+}) {
+  return (
+    <Card className="border-border-strong">
+      <CardContent className="p-5">
+        <SLabel>{label}</SLabel>
+        <div className="mt-2 max-h-[380px] space-y-0.5 overflow-y-auto">
+          {items.map((item) => {
+            const score = scoreByItem?.[item];
+            const isActive = item === active;
+            return (
+              <button
+                key={item} type="button" onClick={() => onSelect(item)}
+                className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition
+                  ${isActive ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
+              >
+                <span className="min-w-0 flex-1 truncate">{item}</span>
+                {score !== undefined && <ScoreChip score={score} size="sm" />}
+              </button>
+            );
+          })}
+          {items.length === 0 && <p className="py-3 text-center text-xs text-text-muted">No groups meet the minimum threshold.</p>}
+        </div>
+      </CardContent>
+    </Card>
   );
-  const comparisonOverviewScore = useMemo(
-    () =>
-      comparisonFilteredRespondents.length > 0
-        ? overallScore(comparisonFilteredRespondents, data.questions.map((question) => question.itemId))
-        : null,
-    [comparisonFilteredRespondents, data.questions]
-  );
+}
 
-  const dimensionMetrics = useMemo(
-    () => buildDimensionMetrics(data.questions, currentFilteredRespondents, comparisonFilteredRespondents),
-    [data.questions, currentFilteredRespondents, comparisonFilteredRespondents]
-  );
-  const questionMetrics = useMemo(
-    () => buildQuestionMetrics(data.questions, currentFilteredRespondents, comparisonFilteredRespondents),
-    [data.questions, currentFilteredRespondents, comparisonFilteredRespondents]
-  );
-  const primaryAngleRows = useMemo(
-    () =>
-      buildGroupComparisonRows(
-        primaryAngle,
-        currentFilteredRespondents,
-        comparisonFilteredRespondents,
-        data.questions,
-        minimumSegmentSize
-      ),
-    [
-      primaryAngle,
-      currentFilteredRespondents,
-      comparisonFilteredRespondents,
-      data.questions,
-      minimumSegmentSize,
-    ]
-  );
+// ─── Executive: Campaign Overview ─────────────────────────────────────────────
 
-  const otherAngleRows = useMemo(
-    () =>
-      INVESTIGATION_FIELDS.filter((field) => field.id !== primaryAngle)
-        .map((field) => ({
-          field,
-          rows: buildGroupComparisonRows(
-            field.id,
-            currentFilteredRespondents,
-            comparisonFilteredRespondents,
-            data.questions,
-            minimumSegmentSize
-          ),
-        }))
-        .filter((entry) => entry.rows.length > 0)
-        .slice(0, 3),
-    [
-      primaryAngle,
-      currentFilteredRespondents,
-      comparisonFilteredRespondents,
-      data.questions,
-      minimumSegmentSize,
-    ]
-  );
+function ExecOverview({
+  data, current, prior,
+}: { data: EmployeeExperienceDashboardData; current: string; prior: string }) {
+  const min = data.settings.minimumSegmentSize;
+  const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+  const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
+  const priR = useMemo(() => prior ? data.respondents.filter((r) => r.campaignLabel === prior) : [], [data.respondents, prior]);
 
-  const filterValueOptions = useMemo(() => {
-    return filters.map((filter, index) => {
-      if (!filter.fieldId) return [];
+  const orgScore = useMemo(() => groupScore(curR, allIds), [curR, allIds]);
+  const orgPrior = useMemo(() => priR.length > 0 ? groupScore(priR, allIds) : null, [priR, allIds]);
+  const orgDelta = orgPrior !== null ? r1(orgScore - orgPrior) : null;
 
-      const otherFilters = filters.filter((candidate, candidateIndex) => candidateIndex !== index);
-      const eligibleRespondents = applyFilters(currentCampaignRespondents, otherFilters);
-      const counts = new Map<string, number>();
+  const dims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
+  const sorted = useMemo(() => [...dims].sort((a, b) => b.score - a.score), [dims]);
+  const best = sorted[0];
+  const focus = sorted[sorted.length - 1];
+  const mostImproved = [...dims].filter((d) => d.delta !== null).sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0))[0];
 
-      eligibleRespondents.forEach((respondent) => {
-        const value = getFieldValue(respondent, filter.fieldId as InvestigationFieldId);
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-      });
-
-      return Array.from(counts.entries())
-        .filter(([, count]) => count >= minimumSegmentSize)
-        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-        .map(([value, count]) => ({ value, count }));
-    });
-  }, [filters, currentCampaignRespondents, minimumSegmentSize]);
-
-  const comparisonRowsForTable = primaryAngleRows
-    .slice()
-    .sort(
-      (left, right) =>
-        right.score - left.score ||
-        right.respondentCount - left.respondentCount ||
-        left.label.localeCompare(right.label)
-    )
-    .slice(0, 12);
-
-  const comparisonColumns = [
-    { key: "label", header: getFieldLabel(primaryAngle) },
-    {
-      key: "score",
-      header: currentCampaign,
-      render: (row: GroupComparisonRow) => (
-        <span className="font-semibold text-text-primary">{formatScoreForDisplay(row.score)}</span>
-      ),
-    },
-    {
-      key: "previousScore",
-      header: comparisonCampaign || "Comparison",
-      render: (row: GroupComparisonRow) => (
-        <span className="font-semibold text-text-primary">
-          {row.previousScore === null ? "—" : formatScoreForDisplay(row.previousScore)}
-        </span>
-      ),
-    },
-    {
-      key: "delta",
-      header: "Delta",
-      render: (row: GroupComparisonRow) => <DeltaIndicator delta={row.delta} />,
-    },
-    {
-      key: "respondentCount",
-      header: "Responses",
-      render: (row: GroupComparisonRow) => (
-        <span className="text-text-secondary">{row.respondentCount}</span>
-      ),
-    },
-  ];
-
-  if (currentFilteredRespondents.length < minimumSegmentSize) {
-    return (
-      <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <FilterPane
-          currentCampaign={currentCampaign}
-          minimumSegmentSize={minimumSegmentSize}
-          primaryAngle={primaryAngle}
-          setPrimaryAngle={setPrimaryAngle}
-          filters={filters}
-          setFilters={setFilters}
-          filterValueOptions={filterValueOptions}
-        />
-        <EmptyState message="The active filter combination falls below the Rule of 3. Broaden the filters or choose a different angle to continue." />
-      </div>
-    );
-  }
+  if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <FilterPane
-        currentCampaign={currentCampaign}
-        minimumSegmentSize={minimumSegmentSize}
-        primaryAngle={primaryAngle}
-        setPrimaryAngle={setPrimaryAngle}
-        filters={filters}
-        setFilters={setFilters}
-        filterValueOptions={filterValueOptions}
-      />
-
-      <div className="space-y-6">
-        <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/40">
-          <CardContent className="grid gap-6 p-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
-            <div>
-              <HeaderTitle>Investigation Hub</HeaderTitle>
-              <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-text-primary">
-                {getFieldLabel(primaryAngle)} is the primary lens for this cut.
-              </h2>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-text-secondary">
-                This page is designed to be the one-page executive and analyst workbench. Choose a
-                campaign, set a comparison campaign, lock in a primary angle, and then layer filters to
-                interrogate the data without breaking the Rule of 3.
+    <div className="space-y-6">
+      {/* Hero */}
+      <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1">
+              <SLabel>Campaign Overview · {data.meta.organizationName}</SLabel>
+              <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">{current}</h2>
+              <p className="mt-2 text-sm text-text-secondary">
+                {curR.length} total {curR.length === 1 ? "response" : "responses"} across all dimensions.
+                {prior && orgDelta !== null && ` ${orgDelta > 0 ? "Up" : orgDelta < 0 ? "Down" : "Flat"} ${fmtDelta(orgDelta)} vs ${prior}.`}
               </p>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <MetricCard
-                label="Experience Index"
-                value={formatScoreForDisplay(currentOverviewScore)}
-                subtext={`Filtered current campaign: ${currentCampaign}`}
-                score={currentOverviewScore}
-              />
-              <MetricCard
-                label="Filtered Responses"
-                value={currentFilteredRespondents.length}
-                subtext="Current-campaign respondents in this view"
-              />
-              <MetricCard
-                label="Comparative Index"
-                value={
-                  comparisonOverviewScore === null
-                    ? "—"
-                    : formatScoreForDisplay(comparisonOverviewScore)
-                }
-                subtext={comparisonCampaign ? `Comparison campaign: ${comparisonCampaign}` : "No comparison campaign selected"}
-                score={comparisonOverviewScore ?? undefined}
-              />
-              <MetricCard
-                label="Visible Segments"
-                value={primaryAngleRows.length}
-                subtext={`Primary-angle groups meeting the Rule of ${minimumSegmentSize}`}
-              />
+            <div className="flex flex-col items-center gap-2">
+              <ScoreChip score={orgScore} size="lg" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-muted">Overall</span>
+                <DeltaChip delta={orgDelta} />
+              </div>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Index tiles */}
+      <div>
+        <SLabel>Index Scores</SLabel>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {dims.map((dim) => (
+            <div key={dim.id} className="flex items-center justify-between rounded-2xl border border-border-strong bg-white px-4 py-4 shadow-sm">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{dim.label}</p>
+                <p className="mt-0.5 text-2xl font-extrabold text-text-primary">{formatScoreForDisplay(dim.score)}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1.5">
+                <div className="h-9 w-9 rounded-xl" style={{ backgroundColor: sColor(dim.score) }} />
+                <DeltaChip delta={dim.delta} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Insight tiles */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {best && (
+          <div className="rounded-2xl px-5 py-4 shadow-sm" style={{ backgroundColor: sColor(best.score), color: sTColor(best.score) }}>
+            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Strongest Index</p>
+            <p className="mt-1 text-xl font-extrabold">{best.label}</p>
+            <p className="text-2xl font-extrabold">{formatScoreForDisplay(best.score)}</p>
+          </div>
+        )}
+        {focus && (
+          <div className="rounded-2xl px-5 py-4 shadow-sm" style={{ backgroundColor: sColor(focus.score), color: sTColor(focus.score) }}>
+            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Area of Focus</p>
+            <p className="mt-1 text-xl font-extrabold">{focus.label}</p>
+            <p className="text-2xl font-extrabold">{formatScoreForDisplay(focus.score)}</p>
+          </div>
+        )}
+        {mostImproved ? (
+          <div className="rounded-2xl border border-border-strong bg-nsp-green-50 px-5 py-4 text-nsp-green-900 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Most Improved</p>
+            <p className="mt-1 text-xl font-extrabold">{mostImproved.label}</p>
+            <p className="text-2xl font-extrabold">{fmtDelta(mostImproved.delta)}</p>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border-strong bg-surface-2 px-5 py-4 text-text-muted shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wider">Prior Campaign</p>
+            <p className="mt-1 text-sm">{prior ? "No delta available." : "Select a comparison campaign."}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Bar chart + radar */}
+      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>Index Rankings</CardTitle>
+            <CardDescription>All dimensions ranked by current campaign average.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <GradientBarChart
+              data={sorted.map((d) => ({ name: d.label, value: d.score }))}
+              average={orgScore}
+              minValue={EE.min} midpoint={EE.mid} maxValue={EE.max}
+              height={260}
+            />
           </CardContent>
         </Card>
-
-        <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
-          <Card className="border-border-strong">
-            <CardHeader>
-              <CardTitle>{getFieldLabel(primaryAngle)} Comparison</CardTitle>
-              <CardDescription>
-                Current-campaign ranking for the selected angle, restricted to groups that pass the Rule
-                of {minimumSegmentSize}.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <GradientBarChart
-                data={comparisonRowsForTable.map((row) => ({
-                  name: row.label,
-                  value: row.score,
-                }))}
-                average={currentOverviewScore}
-                minValue={EMPLOYEE_EXPERIENCE_SCALE.minValue}
-                midpoint={EMPLOYEE_EXPERIENCE_SCALE.midpoint}
-                maxValue={EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-                height={Math.max(360, comparisonRowsForTable.length * 34)}
-              />
-            </CardContent>
-          </Card>
-
-          <Card className="border-border-strong">
-            <CardHeader>
-              <CardTitle>One-to-One Comparison</CardTitle>
-              <CardDescription>
-                Current and comparative campaign average scores side by side for the selected angle.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                columns={comparisonColumns}
-                data={comparisonRowsForTable}
-                emptyMessage="No primary-angle groups meet the rule of 3 under the current filters."
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-          <Card className="border-border-strong">
-            <CardHeader>
-              <CardTitle>Dimension Profile</CardTitle>
-              <CardDescription>
-                Current filtered cut against the selected comparative campaign.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <NspRadarChart
-                data={dimensionMetrics.map((dimension) => ({
-                  dimension: dimension.label,
-                  value: dimension.score,
-                  benchmark: dimension.previousScore ?? dimension.score,
-                }))}
-                maxValue={100}
-                showBenchmark
-                height={320}
-              />
-            </CardContent>
-          </Card>
-
-          <div className="space-y-6">
-            <ScoreTable
-              title="Dimension Averages"
-              headers={["Dimension", "Avg"]}
-              rows={dimensionMetrics.map((dimension) => ({
-                label: dimension.label,
-                score: dimension.score,
-              }))}
-              minValue={EMPLOYEE_EXPERIENCE_SCALE.minValue}
-              midpoint={EMPLOYEE_EXPERIENCE_SCALE.midpoint}
-              maxValue={EMPLOYEE_EXPERIENCE_SCALE.maxValue}
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>Dimension Profile</CardTitle>
+            <CardDescription>{prior ? `Current (solid) vs ${prior} (outline).` : "Current campaign shape across all dimensions."}</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <NspRadarChart
+              data={dims.map((d) => ({ dimension: d.label, value: d.score, benchmark: d.prevScore ?? d.score }))}
+              maxValue={100} showBenchmark={!!prior} height={280}
             />
-
-            <Card className="border-border-strong">
-              <CardHeader>
-                <CardTitle>Statement Pressure Points</CardTitle>
-                <CardDescription>The strongest and weakest statements in the current filtered cut.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <MiniInsightCard
-                  label="Strongest"
-                  title={questionMetrics.at(-1)?.dimension ?? "No signal"}
-                  body={questionMetrics.at(-1)?.statement ?? "No signal available."}
-                  score={questionMetrics.at(-1)?.score ?? EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-                />
-                <MiniInsightCard
-                  label="Weakest"
-                  title={questionMetrics[0]?.dimension ?? "No signal"}
-                  body={questionMetrics[0]?.statement ?? "No signal available."}
-                  score={questionMetrics[0]?.score ?? EMPLOYEE_EXPERIENCE_SCALE.minValue}
-                />
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <HeaderTitle>Other Angles</HeaderTitle>
-          <div className="grid gap-6 xl:grid-cols-3">
-            {otherAngleRows.map((entry) => (
-              <ScoreTable
-                key={entry.field.id}
-                title={`${entry.field.label} Snapshot`}
-                headers={[entry.field.label, "Avg"]}
-                rows={entry.rows.slice(0, 8).map((row) => ({
-                  label: `${row.label} (${row.respondentCount})`,
-                  score: row.score,
-                }))}
-                minValue={EMPLOYEE_EXPERIENCE_SCALE.minValue}
-                midpoint={EMPLOYEE_EXPERIENCE_SCALE.midpoint}
-                maxValue={EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-              />
-            ))}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 }
 
-function FilterPane({
-  currentCampaign,
-  minimumSegmentSize,
-  primaryAngle,
-  setPrimaryAngle,
-  filters,
-  setFilters,
-  filterValueOptions,
-}: {
-  currentCampaign: string;
-  minimumSegmentSize: number;
-  primaryAngle: InvestigationFieldId;
-  setPrimaryAngle: (value: InvestigationFieldId) => void;
-  filters: FilterRowState[];
-  setFilters: React.Dispatch<React.SetStateAction<FilterRowState[]>>;
-  filterValueOptions: Array<Array<{ value: string; count: number }>>;
-}) {
+// ─── Executive: Location Breakdown ───────────────────────────────────────────
+
+function ExecLocation({
+  data, current, prior,
+}: { data: EmployeeExperienceDashboardData; current: string; prior: string }) {
+  const min = data.settings.minimumSegmentSize;
+  const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+  const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
+  const priR = useMemo(() => prior ? data.respondents.filter((r) => r.campaignLabel === prior) : [], [data.respondents, prior]);
+
+  const orgDims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
+  const orgScore = useMemo(() => groupScore(curR, allIds), [curR, allIds]);
+  const orgPrior = useMemo(() => priR.length > 0 ? groupScore(priR, allIds) : null, [priR, allIds]);
+
+  function buildRows(field: keyof EmployeeExperienceRespondent): ScoreTableRow[] {
+    return uniq(curR, field, min).map((val) => {
+      const dc = curR.filter((r) => r[field] === val);
+      const dp = priR.filter((r) => r[field] === val);
+      const score = groupScore(dc, allIds);
+      const prevScore = dp.length >= min ? groupScore(dp, allIds) : null;
+      return {
+        label: val, n: dc.length, score,
+        delta: prevScore !== null ? r1(score - prevScore) : null,
+        dims: buildDims(data.questions, dc, dp.length >= min ? dp : []),
+      };
+    }).sort((a, b) => b.score - a.score);
+  }
+
+  const locationRows = useMemo(() => buildRows("location"), [curR, priR, data.questions, min]);
+  const workTypeRows = useMemo(() => buildRows("fieldCategory"), [curR, priR, data.questions, min]);
+
+  const orgRow: ScoreTableRow = {
+    label: "Overall", n: curR.length, score: orgScore,
+    delta: orgPrior !== null ? r1(orgScore - orgPrior) : null,
+    dims: orgDims,
+  };
+
+  if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
+
   return (
-    <div className="xl:sticky xl:top-4 xl:self-start">
+    <div className="space-y-6">
+      <PgHeader
+        label="Executive · Location Breakdown"
+        title="Scores by Region and Work Type"
+        description="Index scores broken down by geography and field category. Color reflects score strength against the campaign average."
+      />
+      {locationRows.length > 0
+        ? <CrossTabTable title="By Location" description="Score per index grouped by region." rows={locationRows} dims={orgDims} orgRow={orgRow} />
+        : <Empty message="No locations meet the minimum response threshold." />}
+      {workTypeRows.length > 0 && (
+        <CrossTabTable title="By Work Type" description="Score per index grouped by field category (Field, Office, Shop, etc.)." rows={workTypeRows} dims={orgDims} orgRow={orgRow} />
+      )}
+    </div>
+  );
+}
+
+// ─── HR: Department Rankings ──────────────────────────────────────────────────
+
+function HrRankings({
+  data, current, prior, filters, onFilterChange, onFilterReset, locationOpts, workTypeOpts,
+}: {
+  data: EmployeeExperienceDashboardData; current: string; prior: string;
+  filters: Record<string, string>;
+  onFilterChange: (id: string, v: string) => void; onFilterReset: () => void;
+  locationOpts: string[]; workTypeOpts: string[];
+}) {
+  const min = data.settings.minimumSegmentSize;
+  const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+  const curR = useMemo(() => filterR(data.respondents.filter((r) => r.campaignLabel === current), filters), [data.respondents, current, filters]);
+  const priR = useMemo(() => prior ? filterR(data.respondents.filter((r) => r.campaignLabel === prior), filters) : [], [data.respondents, prior, filters]);
+
+  const orgDims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
+  const depts = useMemo(() => uniq(curR, "department", min), [curR, min]);
+
+  const rows: ScoreTableRow[] = useMemo(() =>
+    depts.map((dept) => {
+      const dc = curR.filter((r) => r.department === dept);
+      const dp = priR.filter((r) => r.department === dept);
+      const score = groupScore(dc, allIds);
+      const prevScore = dp.length >= min ? groupScore(dp, allIds) : null;
+      return {
+        label: dept, n: dc.length, score,
+        delta: prevScore !== null ? r1(score - prevScore) : null,
+        dims: buildDims(data.questions, dc, dp.length >= min ? dp : []),
+      };
+    }).sort((a, b) => b.score - a.score),
+    [depts, curR, priR, allIds, min, data.questions]
+  );
+
+  if (rows.length === 0) return <Empty message="No departments meet the minimum response threshold under the current filters." />;
+
+  return (
+    <div className="space-y-6">
+      <PgHeader
+        label="HR · Department Rankings"
+        title={`${rows.length} Department${rows.length !== 1 ? "s" : ""} · ${current}`}
+        description="All departments ranked by overall experience index. Use filters in the left rail to narrow by location or work type."
+      />
       <Card className="border-border-strong">
-        <CardHeader>
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EEF3F6] text-[#18384E]">
-            <SlidersHorizontal className="h-5 w-5" />
-          </div>
-          <CardTitle className="pt-4">Investigation Controls</CardTitle>
-          <CardDescription>
-            This pane stays locked to the left so filtering stays simple while the analysis canvas stays
-            readable.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="rounded-2xl bg-surface-2 px-4 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-              Current campaign
-            </p>
-            <p className="mt-2 text-sm font-semibold text-text-primary">{currentCampaign}</p>
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-              Primary angle
-            </label>
-            <select
-              value={primaryAngle}
-              onChange={(event) => setPrimaryAngle(event.target.value as InvestigationFieldId)}
-              className="mt-2 w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:outline-none"
-            >
-              {INVESTIGATION_FIELDS.map((field) => (
-                <option key={field.id} value={field.id}>
-                  {field.label}
-                </option>
+        <CardContent className="overflow-x-auto pt-0">
+          <table className="w-full min-w-[580px] text-sm">
+            <thead>
+              <tr className="border-b border-border-strong">
+                <th className="py-3.5 pr-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">#</th>
+                <th className="py-3.5 pr-4 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Department</th>
+                <th className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">n</th>
+                {orgDims.map((d) => (
+                  <th key={d.id} className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">{d.label}</th>
+                ))}
+                <th className="pl-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Total</th>
+                <th className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={row.label} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                  <td className="py-3 pr-2 text-text-muted">{i + 1}</td>
+                  <td className="py-3 pr-4 font-semibold text-text-primary">{row.label}</td>
+                  <td className="px-2 py-3 text-center text-text-muted">{row.n}</td>
+                  {orgDims.map((d) => {
+                    const rd = row.dims?.find((x) => x.label === d.label);
+                    return (
+                      <td key={d.id} className="px-2 py-3 text-center">
+                        {rd ? <ScoreChip score={rd.score} size="sm" /> : <span className="text-text-muted">—</span>}
+                      </td>
+                    );
+                  })}
+                  <td className="pl-3 py-3 text-center"><ScoreChip score={row.score} size="sm" /></td>
+                  <td className="px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
+                </tr>
               ))}
-            </select>
-          </div>
-
-          {filters.map((filter, index) => (
-            <div key={filter.id} className="space-y-2 rounded-2xl border border-border-strong bg-white px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-                Filter {index + 1}
-              </p>
-              <select
-                value={filter.fieldId}
-                onChange={(event) => {
-                  const nextField = event.target.value as InvestigationFieldId | "";
-                  setFilters((current) =>
-                    current.map((entry, entryIndex) =>
-                      entryIndex === index ? { ...entry, fieldId: nextField, value: "" } : entry
-                    )
-                  );
-                }}
-                className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none"
-              >
-                <option value="">No filter</option>
-                {INVESTIGATION_FIELDS.map((field) => (
-                  <option key={field.id} value={field.id}>
-                    {field.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={filter.value}
-                disabled={!filter.fieldId}
-                onChange={(event) =>
-                  setFilters((current) =>
-                    current.map((entry, entryIndex) =>
-                      entryIndex === index ? { ...entry, value: event.target.value } : entry
-                    )
-                  )
-                }
-                className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none disabled:bg-surface-2 disabled:text-text-muted"
-              >
-                <option value="">Any value</option>
-                {filterValueOptions[index]?.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.value} ({option.count})
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
-
-          <button
-            type="button"
-            onClick={() =>
-              setFilters((current) =>
-                current.map((filter) => ({
-                  ...filter,
-                  fieldId: "",
-                  value: "",
-                }))
-              )
-            }
-            className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm font-semibold text-text-primary transition hover:bg-surface-2"
-          >
-            Reset filters
-          </button>
-
-          <div className="rounded-2xl bg-[#EEF3F6] px-4 py-4 text-sm text-[#60727D]">
-            Rule of {minimumSegmentSize}: any slice that does not meet at least {minimumSegmentSize} responses
-            is hidden from view.
-          </div>
+            </tbody>
+          </table>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function MiniInsightCard({
-  label,
-  title,
-  body,
-  score,
+// ─── HR: Index Deep Dive ──────────────────────────────────────────────────────
+
+function HrIndexDive({
+  data, current, prior, selectedDim, filters,
 }: {
-  label: string;
-  title: string;
-  body: string;
-  score: number;
+  data: EmployeeExperienceDashboardData; current: string; prior: string;
+  selectedDim: string; filters: Record<string, string>;
 }) {
+  const min = data.settings.minimumSegmentSize;
+  const curR = useMemo(() => filterR(data.respondents.filter((r) => r.campaignLabel === current), filters), [data.respondents, current, filters]);
+  const priR = useMemo(() => prior ? filterR(data.respondents.filter((r) => r.campaignLabel === prior), filters) : [], [data.respondents, prior, filters]);
+
+  const dimQs = useMemo(() => data.questions.filter((q) => q.dimension === selectedDim), [data.questions, selectedDim]);
+  const dimIds = useMemo(() => dimQs.map((q) => q.itemId), [dimQs]);
+  const dimAvg = useMemo(() => groupScore(curR, dimIds), [curR, dimIds]);
+
+  const stmts = useMemo(() =>
+    dimQs.map((q) => {
+      const score = itemScore(curR, q.itemId);
+      const prev = priR.length >= min ? itemScore(priR, q.itemId) : null;
+      return { ...q, score, prev, delta: prev !== null ? r1(score - prev) : null };
+    }).sort((a, b) => b.score - a.score),
+    [dimQs, curR, priR, min]
+  );
+
+  const depts = useMemo(() => uniq(curR, "department", min), [curR, min]);
+  const deptBars = useMemo(() =>
+    depts.map((dept) => {
+      const dc = curR.filter((r) => r.department === dept);
+      return { name: dept, value: groupScore(dc, dimIds) };
+    }).sort((a, b) => b.value - a.value),
+    [depts, curR, dimIds]
+  );
+
+  if (!selectedDim || dimQs.length === 0) return <Empty message="Select a dimension from the left rail." />;
+
   return (
-    <div className="rounded-2xl px-4 py-4" style={getScoreCardStyle(score)}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">{label}</p>
-      <p className="mt-2 font-semibold text-text-primary">{title}</p>
-      <p className="mt-2 text-sm leading-relaxed text-text-secondary">{body}</p>
+    <div className="space-y-6">
+      <PgHeader
+        label={`HR · Index Deep Dive · ${selectedDim}`}
+        title={`${selectedDim} — Statement Detail`}
+        description="All survey items in this dimension ranked by score. Delta compares to the selected prior campaign."
+      />
+
+      <Card className="border-border-strong">
+        <CardHeader>
+          <CardTitle>Statement Ranking</CardTitle>
+          <CardDescription>Highest to lowest for the current campaign. Delta reflects change vs prior.</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border-strong">
+                <th className="py-3 pr-4 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Statement</th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">{current}</th>
+                {prior && <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {stmts.map((q, i) => (
+                <tr key={q.itemId} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                  <td className="py-3 pr-4 text-[13px] leading-relaxed text-text-primary">{q.statement}</td>
+                  <td className="px-3 py-3 text-center"><ScoreChip score={q.score} size="sm" /></td>
+                  {prior && <td className="px-3 py-3 text-center"><DeltaChip delta={q.delta} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {deptBars.length > 0 && (
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>{selectedDim} by Department</CardTitle>
+            <CardDescription>Which departments score highest and lowest on this index.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <GradientBarChart
+              data={deptBars}
+              average={dimAvg}
+              minValue={EE.min} midpoint={EE.mid} maxValue={EE.max}
+              height={Math.max(280, deptBars.length * 34)}
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-function ReportsTab({
-  data,
-  currentCampaign,
-  comparisonCampaign,
-  fieldId,
-  title,
-  description,
-  listLabel,
-  reportFilterFields,
+// ─── HR: Supervisor Reports ───────────────────────────────────────────────────
+
+function SupervisorBenchmark({ rows }: { rows: { id: number; statement: string; score: number; orgScore: number }[] }) {
+  const range = EE.max - EE.min;
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-end gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+        <span>Org avg</span>
+        <span className="inline-block h-3 w-3 rounded-full border-2 border-[#6B4A2D] bg-[#F0A06C]" />
+      </div>
+      <div className="space-y-3">
+        {rows.map((row) => {
+          const curPct = Math.min(100, Math.max(0, ((row.score - EE.min) / range) * 100));
+          const orgPct = Math.min(100, Math.max(0, ((row.orgScore - EE.min) / range) * 100));
+          return (
+            <div key={row.id} className="border-b border-border-subtle pb-3 last:border-0 last:pb-0">
+              <p className="mb-1.5 text-xs leading-snug text-text-secondary">{row.statement}</p>
+              <div className="relative h-8 rounded border border-[#B5BCC6] bg-white">
+                <div className="absolute left-0 top-0 flex h-full items-center rounded px-2 text-xs font-bold" style={{ width: `${Math.max(curPct, 10)}%`, backgroundColor: sColor(row.score), color: sTColor(row.score) }}>
+                  {formatScoreForDisplay(row.score)}
+                </div>
+                <div className="absolute bottom-[-4px] top-[-4px] w-px bg-[#2E3E4F]" style={{ left: `${orgPct}%` }} />
+                <div className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border border-[#6B4A2D] bg-[#F0A06C]" style={{ left: `calc(${orgPct}% - 6px)` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex justify-between px-1 text-xs text-text-muted">
+        <span>{EE.minLabel}</span><span>{formatScoreForDisplay(EE.mid)}</span><span>{EE.maxLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function HrSupervisor({
+  data, current, prior, filters, selectedSup, onSelectSup,
 }: {
-  data: EmployeeExperienceDashboardData;
-  currentCampaign: string;
-  comparisonCampaign: string;
-  fieldId: InvestigationFieldId;
-  title: string;
-  description: string;
-  listLabel: string;
-  reportFilterFields: InvestigationFieldId[];
+  data: EmployeeExperienceDashboardData; current: string; prior: string;
+  filters: Record<string, string>; selectedSup: string; onSelectSup: (v: string) => void;
 }) {
-  const minimumSegmentSize = data.settings.minimumSegmentSize;
-  const [selectedValue, setSelectedValue] = useState("");
-  const [reportFilters, setReportFilters] = useState<FilterRowState[]>(
-    reportFilterFields.map((filterField, index) => ({
-      id: `${fieldId}-report-filter-${index}`,
-      fieldId: filterField,
-      value: "",
-    }))
+  const min = data.settings.minimumSegmentSize;
+  const curAll = useMemo(() => filterR(data.respondents.filter((r) => r.campaignLabel === current), filters), [data.respondents, current, filters]);
+  const priAll = useMemo(() => prior ? filterR(data.respondents.filter((r) => r.campaignLabel === prior), filters) : [], [data.respondents, prior, filters]);
+  const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+
+  const sups = useMemo(() => uniq(curAll, "supervisor", min), [curAll, min]);
+  const activeSup = selectedSup || sups[0] || "";
+
+  const supQ = useMemo(() => data.questions.filter((q) => q.dimension === "Supervisor"), [data.questions]);
+  const supIds = useMemo(() => supQ.map((q) => q.itemId), [supQ]);
+
+  const supCur = useMemo(() => curAll.filter((r) => r.supervisor === activeSup), [curAll, activeSup]);
+  const supPri = useMemo(() => priAll.filter((r) => r.supervisor === activeSup), [priAll, activeSup]);
+
+  const supScore = useMemo(() => groupScore(supCur, supIds), [supCur, supIds]);
+  const supPrevScore = useMemo(() => supPri.length >= min ? groupScore(supPri, supIds) : null, [supPri, supIds, min]);
+  const supDelta = supPrevScore !== null ? r1(supScore - supPrevScore) : null;
+  const orgSupScore = useMemo(() => groupScore(curAll, supIds), [curAll, supIds]);
+  const benchGap = r1(supScore - orgSupScore);
+
+  const supScores = useMemo(() => {
+    const m: Record<string, number> = {};
+    sups.forEach((s) => { m[s] = groupScore(curAll.filter((r) => r.supervisor === s), allIds); });
+    return m;
+  }, [sups, curAll, allIds]);
+
+  const rank = [...sups].sort((a, b) => (supScores[b] ?? 0) - (supScores[a] ?? 0)).indexOf(activeSup) + 1;
+
+  const qRows = useMemo(() =>
+    supQ.map((q) => {
+      const score = itemScore(supCur, q.itemId);
+      const prev = supPri.length >= min ? itemScore(supPri, q.itemId) : null;
+      const orgScore = itemScore(curAll, q.itemId);
+      return { id: q.itemId, statement: q.statement, score, prev, delta: prev !== null ? r1(score - prev) : null, orgScore };
+    }).sort((a, b) => b.score - a.score),
+    [supQ, supCur, supPri, curAll, min]
   );
 
-  const currentCampaignRespondents = useMemo(
-    () => data.respondents.filter((respondent) => respondent.campaignLabel === currentCampaign),
-    [data.respondents, currentCampaign]
+  if (sups.length === 0) return <Empty message="No supervisors meet the minimum response threshold under the current filters." />;
+
+  const deltaStyle = (d: number | null) =>
+    d === null ? "bg-surface-2 text-text-primary" : d > 0.005 ? "bg-nsp-green-50 text-nsp-green-900" : d < -0.005 ? "bg-nsp-red-50 text-nsp-red-900" : "bg-surface-2 text-text-primary";
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <SLabel>HR · Supervisor Reports</SLabel>
+        <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-text-primary">{activeSup || "No supervisor selected"}</h2>
+        <p className="mt-1 text-sm text-text-secondary">{supCur.length} responses · {current}</p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-4">
+        <div className="rounded-2xl border border-border-strong bg-white px-4 py-4 shadow-sm">
+          <SLabel>Responses</SLabel>
+          <p className="mt-2 text-4xl font-extrabold text-text-primary">{supCur.length}</p>
+          <p className="mt-1 text-xs text-text-muted">{current}</p>
+        </div>
+        <div className="rounded-2xl border border-border-strong px-4 py-4 shadow-sm" style={{ backgroundColor: sColor(supScore), color: sTColor(supScore) }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em]">Current Avg</p>
+          <p className="mt-2 text-4xl font-extrabold">{formatScoreForDisplay(supScore)}</p>
+          <p className="mt-1 text-xs opacity-80">{current}</p>
+        </div>
+        <div className={`rounded-2xl border border-border-strong px-4 py-4 shadow-sm ${deltaStyle(supDelta)}`}>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em]">Campaign Delta</p>
+          <p className="mt-2 text-4xl font-extrabold">{fmtDelta(supDelta)}</p>
+          <p className="mt-1 text-xs opacity-80">{prior || "No comparison"}</p>
+        </div>
+        <div className={`rounded-2xl border border-border-strong px-4 py-4 shadow-sm ${deltaStyle(benchGap)}`}>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em]">Rank / Org Gap</p>
+          <p className="mt-2 text-3xl font-extrabold">{rank}/{sups.length}</p>
+          <p className="mt-1 text-xs opacity-80">vs org avg: {fmtDelta(benchGap)}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>Supervisor Item Table</CardTitle>
+            <CardDescription>Team score vs. org average per item. Delta vs prior campaign.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border-strong">
+                  <th className="py-3 pr-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Statement</th>
+                  <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Score</th>
+                  <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Org Avg</th>
+                  <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {qRows.map((row, i) => (
+                  <tr key={row.id} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                    <td className="py-3 pr-3 text-[12px] leading-relaxed text-text-primary">{row.statement}</td>
+                    <td className="px-2 py-3 text-center"><ScoreChip score={row.score} size="sm" /></td>
+                    <td className="px-2 py-3 text-center font-semibold text-text-secondary">{formatScoreForDisplay(row.orgScore)}</td>
+                    <td className="px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>Benchmark Comparison</CardTitle>
+            <CardDescription>Bar = supervisor score. Orange dot = organization supervisor average.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <SupervisorBenchmark rows={qRows} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="border-border-strong">
+          <CardHeader><CardTitle>Strengths to Protect</CardTitle><CardDescription>Highest-scoring supervisor items.</CardDescription></CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {qRows.slice(0, 3).map((row) => (
+              <div key={row.id} className="rounded-xl px-4 py-3" style={{ backgroundColor: sColor(row.score), color: sTColor(row.score) }}>
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Strength · {formatScoreForDisplay(row.score)}</p>
+                <p className="mt-1 text-sm leading-relaxed">{row.statement}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card className="border-border-strong">
+          <CardHeader><CardTitle>Manager Priorities</CardTitle><CardDescription>Lowest-scoring items to address.</CardDescription></CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            {[...qRows].sort((a, b) => a.score - b.score).slice(0, 3).map((row) => (
+              <div key={row.id} className="rounded-xl px-4 py-3" style={{ backgroundColor: sColor(row.score), color: sTColor(row.score) }}>
+                <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Priority · {formatScoreForDisplay(row.score)}</p>
+                <p className="mt-1 text-sm leading-relaxed">{row.statement}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
-  const comparisonCampaignRespondents = useMemo(
-    () =>
-      comparisonCampaign
-        ? data.respondents.filter((respondent) => respondent.campaignLabel === comparisonCampaign)
-        : [],
-    [data.respondents, comparisonCampaign]
+}
+
+// ─── HR: Open Text ────────────────────────────────────────────────────────────
+
+function HrOpenText({
+  data, current, deptFilter, fieldType,
+}: {
+  data: EmployeeExperienceDashboardData; current: string;
+  deptFilter: string; fieldType: OpenTextField;
+}) {
+  const fieldLabel = OPEN_TEXT_FIELDS.find((f) => f.id === fieldType)?.label ?? fieldType;
+
+  const entries = useMemo(() =>
+    data.voice[fieldType].filter((e) => {
+      if (e.campaign !== current) return false;
+      if (deptFilter && e.department !== deptFilter) return false;
+      return e.text && e.text.trim().length > 0;
+    }),
+    [data.voice, fieldType, current, deptFilter]
   );
 
-  const currentFilteredRespondents = useMemo(
-    () => applyFilters(currentCampaignRespondents, reportFilters),
-    [currentCampaignRespondents, reportFilters]
+  return (
+    <div className="space-y-6">
+      <PgHeader
+        label="HR · Open Text"
+        title={fieldLabel}
+        description={`${entries.length} response${entries.length !== 1 ? "s" : ""}${deptFilter ? ` from ${deptFilter}` : " across all departments"} · ${current}`}
+      />
+      {entries.length === 0 ? (
+        <Empty message="No responses match the current selection." />
+      ) : (
+        <div className="space-y-3">
+          {entries.map((entry, i) => (
+            <div key={entry.id} className="rounded-2xl border border-border-strong bg-white px-5 py-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-text-muted">{i + 1}</div>
+                <div className="flex-1">
+                  <p className="text-sm leading-relaxed text-text-primary">{entry.text}</p>
+                  {entry.department && <p className="mt-1.5 text-xs text-text-muted">{entry.department}{entry.location ? ` · ${entry.location}` : ""}</p>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
-  const comparisonFilteredRespondents = useMemo(
-    () => applyFilters(comparisonCampaignRespondents, reportFilters),
-    [comparisonCampaignRespondents, reportFilters]
+}
+
+// ─── Department: Scorecard ────────────────────────────────────────────────────
+
+function DeptScorecard({
+  data, current, prior, selectedDept,
+}: {
+  data: EmployeeExperienceDashboardData; current: string; prior: string; selectedDept: string;
+}) {
+  const min = data.settings.minimumSegmentSize;
+  const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+
+  const curAll = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
+  const priAll = useMemo(() => prior ? data.respondents.filter((r) => r.campaignLabel === prior) : [], [data.respondents, prior]);
+
+  const dc = useMemo(() => curAll.filter((r) => r.department === selectedDept), [curAll, selectedDept]);
+  const dp = useMemo(() => priAll.filter((r) => r.department === selectedDept), [priAll, selectedDept]);
+
+  const deptScore = useMemo(() => groupScore(dc, allIds), [dc, allIds]);
+  const deptPrev = useMemo(() => dp.length >= min ? groupScore(dp, allIds) : null, [dp, allIds, min]);
+  const deptDelta = deptPrev !== null ? r1(deptScore - deptPrev) : null;
+
+  const dims = useMemo(() => buildDims(data.questions, dc, dp.length >= min ? dp : []), [data.questions, dc, dp, min]);
+
+  const allStmts = useMemo(() =>
+    data.questions.map((q) => {
+      const score = itemScore(dc, q.itemId);
+      const prev = dp.length >= min ? itemScore(dp, q.itemId) : null;
+      return { ...q, score, prev, delta: prev !== null ? r1(score - prev) : null };
+    }).sort((a, b) => b.score - a.score),
+    [data.questions, dc, dp, min]
   );
 
-  const rows = useMemo(
-    () =>
-      buildGroupComparisonRows(
-        fieldId,
-        currentFilteredRespondents,
-        comparisonFilteredRespondents,
-        data.questions,
-        minimumSegmentSize
-      ).sort((left, right) => right.score - left.score || right.respondentCount - left.respondentCount),
-    [
-      fieldId,
-      currentFilteredRespondents,
-      comparisonFilteredRespondents,
-      data.questions,
-      minimumSegmentSize,
-    ]
-  );
+  const topStmts = allStmts.slice(0, 8);
+  const focusStmts = [...allStmts].reverse().slice(0, 8);
 
-  const selectedGroup = selectedValue ? rows.find((row) => row.label === selectedValue) ?? rows[0] : rows[0];
-  const selectedCurrentRespondents = useMemo(
-    () =>
-      selectedGroup
-        ? currentFilteredRespondents.filter((respondent) => getFieldValue(respondent, fieldId) === selectedGroup.label)
-        : [],
-    [selectedGroup, currentFilteredRespondents, fieldId]
-  );
-  const selectedComparisonRespondents = useMemo(
-    () =>
-      selectedGroup
-        ? comparisonFilteredRespondents.filter((respondent) => getFieldValue(respondent, fieldId) === selectedGroup.label)
-        : [],
-    [selectedGroup, comparisonFilteredRespondents, fieldId]
-  );
+  const demoCuts = useMemo(() => {
+    const fields: { id: keyof EmployeeExperienceRespondent; label: string }[] = [
+      { id: "location", label: "Location" },
+      { id: "fieldCategory", label: "Work Type" },
+      { id: "tenure", label: "Tenure" },
+      { id: "generation", label: "Generation" },
+      { id: "leadership", label: "Leadership" },
+    ];
+    return fields.map(({ id, label }) => {
+      const groups = uniq(dc, id, min);
+      const rows = groups.map((g) => {
+        const gc = dc.filter((r) => r[id] === g);
+        const gp = dp.filter((r) => r[id] === g);
+        const score = groupScore(gc, allIds);
+        const prev = gp.length >= min ? groupScore(gp, allIds) : null;
+        return { label: g, n: gc.length, score, delta: prev !== null ? r1(score - prev) : null };
+      }).sort((a, b) => b.score - a.score);
+      return { id: id as string, label, rows };
+    }).filter((c) => c.rows.length > 0);
+  }, [dc, dp, allIds, min]);
 
-  const questionMetrics = useMemo(
-    () => buildQuestionMetrics(data.questions, selectedCurrentRespondents, selectedComparisonRespondents),
-    [data.questions, selectedCurrentRespondents, selectedComparisonRespondents]
-  );
-  const dimensionMetrics = useMemo(
-    () => buildDimensionMetrics(data.questions, selectedCurrentRespondents, selectedComparisonRespondents),
-    [data.questions, selectedCurrentRespondents, selectedComparisonRespondents]
-  );
+  if (!selectedDept) return <Empty message="Select a department from the left rail." />;
+  if (dc.length < min) return <Empty message={`${selectedDept} does not meet the minimum response threshold (${min}).`} />;
 
-  const reportFilterOptions = useMemo(() => {
-    return reportFilters.map((filter) => {
-      const counts = new Map<string, number>();
-      currentCampaignRespondents.forEach((respondent) => {
-        const value = getFieldValue(respondent, filter.fieldId as InvestigationFieldId);
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-      });
-
-      return Array.from(counts.entries())
-        .filter(([, count]) => count >= minimumSegmentSize)
-        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-        .map(([value, count]) => ({ value, count }));
-    });
-  }, [reportFilters, currentCampaignRespondents, minimumSegmentSize]);
-
-  if (rows.length === 0) {
+  function StmtTable({ title, desc, stmts }: { title: string; desc: string; stmts: typeof allStmts }) {
     return (
-      <EmptyState message={`No ${listLabel.toLowerCase()} groups meet the Rule of ${minimumSegmentSize} under the current campaign and filter selection.`} />
+      <Card className="border-border-strong">
+        <CardHeader><CardTitle>{title}</CardTitle><CardDescription>{desc}</CardDescription></CardHeader>
+        <CardContent className="pt-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border-strong">
+                <th className="py-2.5 pr-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Statement</th>
+                <th className="px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Score</th>
+                <th className="px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stmts.map((q, i) => (
+                <tr key={q.itemId} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                  <td className="py-2.5 pr-3 text-[12px] leading-relaxed text-text-primary">{q.statement}</td>
+                  <td className="px-2 py-2.5 text-center"><ScoreChip score={q.score} size="sm" /></td>
+                  <td className="px-2 py-2.5 text-center"><DeltaChip delta={q.delta} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Card className="border-border-strong">
-        <CardContent className="flex flex-wrap items-end justify-between gap-4 p-6">
-          <div>
-            <HeaderTitle>{title}</HeaderTitle>
-            <h2 className="mt-2 text-3xl font-extrabold text-text-primary">{description}</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {reportFilters.map((filter, index) => (
-              <div key={filter.id}>
-                <label className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-                  {getFieldLabel(filter.fieldId as InvestigationFieldId)}
-                </label>
-                <select
-                  value={filter.value}
-                  onChange={(event) =>
-                    setReportFilters((current) =>
-                      current.map((entry, entryIndex) =>
-                        entryIndex === index ? { ...entry, value: event.target.value } : entry
-                      )
-                    )
-                  }
-                  className="mt-2 min-w-[180px] rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm text-text-primary shadow-sm focus:border-nsp-blue-300 focus:outline-none"
-                >
-                  <option value="">All {getFieldLabel(filter.fieldId as InvestigationFieldId)}</option>
-                  {reportFilterOptions[index]?.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.value} ({option.count})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
+      <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <SLabel>Department Scorecard · {current}</SLabel>
+              <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-text-primary">{selectedDept}</h2>
+              <p className="mt-1.5 text-sm text-text-secondary">{dc.length} {dc.length === 1 ? "response" : "responses"}</p>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <ScoreChip score={deptScore} size="lg" />
+              <DeltaChip delta={deptDelta} />
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>{listLabel}</CardTitle>
-            <CardDescription>
-              Select a {listLabel.toLowerCase().slice(0, -1)} to open the report view.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <select
-              value={selectedGroup?.label ?? ""}
-              onChange={(event) => setSelectedValue(event.target.value)}
-              className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:outline-none"
-            >
-              {rows.map((row) => (
-                <option key={row.id} value={row.label}>
-                  {row.label}
-                </option>
-              ))}
-            </select>
-
-            <ScoreTable
-              title={`${title} Ranking`}
-              headers={[listLabel.slice(0, -1), "Avg"]}
-              rows={rows.slice(0, 18).map((row) => ({
-                label: `${row.label} (${row.respondentCount})`,
-                score: row.score,
-              }))}
-              minValue={EMPLOYEE_EXPERIENCE_SCALE.minValue}
-              midpoint={EMPLOYEE_EXPERIENCE_SCALE.midpoint}
-              maxValue={EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-            />
-          </CardContent>
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="border-border-strong">
-            <CardContent className="grid gap-4 p-6 lg:grid-cols-[1fr_220px_220px]">
-              <div>
-                <HeaderTitle>{title}</HeaderTitle>
-                <h3 className="mt-2 text-3xl font-extrabold text-text-primary">
-                  {selectedGroup?.label ?? "No selection"}
-                </h3>
-                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
-                  Campaign-first reporting keeps each survey wave separate while still allowing a direct
-                  one-to-one comparison when the same cut exists in the selected comparative campaign.
-                </p>
-              </div>
-              <MetricCard
-                label="Current Average"
-                value={selectedGroup ? formatScoreForDisplay(selectedGroup.score) : "—"}
-                subtext={`Current campaign: ${currentCampaign}`}
-                score={selectedGroup?.score}
-              />
-              <MetricCard
-                label="Comparative Average"
-                value={
-                  selectedGroup?.previousScore === null || selectedGroup?.previousScore === undefined
-                    ? "—"
-                    : formatScoreForDisplay(selectedGroup.previousScore)
-                }
-                subtext={
-                  comparisonCampaign ? `Comparison campaign: ${comparisonCampaign}` : "No comparison selected"
-                }
-                score={selectedGroup?.previousScore ?? undefined}
-              />
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-6 xl:grid-cols-[1.04fr_0.96fr]">
-            <Card className="border-border-strong">
-              <CardHeader>
-                <CardTitle>{title} Statement Breakdown</CardTitle>
-                <CardDescription>Higher is stronger within the selected cut.</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <GradientBarChart
-                  data={questionMetrics
-                    .slice()
-                    .sort((left, right) => right.score - left.score)
-                    .map((question) => ({
-                      name: question.statement,
-                      value: question.score,
-                    }))}
-                  average={selectedGroup?.score}
-                  minValue={EMPLOYEE_EXPERIENCE_SCALE.minValue}
-                  midpoint={EMPLOYEE_EXPERIENCE_SCALE.midpoint}
-                  maxValue={EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-                />
-              </CardContent>
-            </Card>
-
-            <div className="space-y-6">
-              <Card className="border-border-strong">
-                <CardHeader>
-                  <CardTitle>Dimension Profile</CardTitle>
-                  <CardDescription>Current campaign against the comparative campaign.</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <NspRadarChart
-                    data={dimensionMetrics.map((dimension) => ({
-                      dimension: dimension.label,
-                      value: dimension.score,
-                      benchmark: dimension.previousScore ?? dimension.score,
-                    }))}
-                    maxValue={100}
-                    showBenchmark
-                    height={300}
-                  />
-                </CardContent>
-              </Card>
-
-              <ScoreTable
-                title="Dimension Averages"
-                headers={["Dimension", "Avg"]}
-                rows={dimensionMetrics.map((dimension) => ({
-                  label: dimension.label,
-                  score: dimension.score,
-                }))}
-                minValue={EMPLOYEE_EXPERIENCE_SCALE.minValue}
-                midpoint={EMPLOYEE_EXPERIENCE_SCALE.midpoint}
-                maxValue={EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-              />
+      {/* Index tiles */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {dims.map((dim) => (
+          <div key={dim.id} className="flex items-center justify-between rounded-2xl border border-border-strong bg-white px-4 py-4 shadow-sm">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{dim.label}</p>
+              <p className="mt-0.5 text-2xl font-extrabold text-text-primary">{formatScoreForDisplay(dim.score)}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="h-8 w-8 rounded-xl" style={{ backgroundColor: sColor(dim.score) }} />
+              <DeltaChip delta={dim.delta} />
             </div>
           </div>
+        ))}
+      </div>
 
-          <div className="grid gap-6 xl:grid-cols-2">
-            <MiniInsightCard
-              label="Strongest statement"
-              title={questionMetrics.at(-1)?.dimension ?? "No signal"}
-              body={questionMetrics.at(-1)?.statement ?? "No statement available."}
-              score={questionMetrics.at(-1)?.score ?? EMPLOYEE_EXPERIENCE_SCALE.maxValue}
-            />
-            <MiniInsightCard
-              label="Weakest statement"
-              title={questionMetrics[0]?.dimension ?? "No signal"}
-              body={questionMetrics[0]?.statement ?? "No statement available."}
-              score={questionMetrics[0]?.score ?? EMPLOYEE_EXPERIENCE_SCALE.minValue}
-            />
+      {/* Statement tables */}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <StmtTable title="Top Statements" desc="Highest-scoring items for this department." stmts={topStmts} />
+        <StmtTable title="Focus Areas" desc="Lowest-scoring items for this department." stmts={focusStmts} />
+      </div>
+
+      {/* Demographic cuts */}
+      {demoCuts.length > 0 && (
+        <div>
+          <SLabel>Demographic Cuts</SLabel>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {demoCuts.map((cut) => (
+              <Card key={cut.id} className="border-border-strong">
+                <CardHeader><CardTitle className="text-base">{cut.label}</CardTitle></CardHeader>
+                <CardContent className="space-y-2 pt-0">
+                  {cut.rows.map((row) => (
+                    <div key={row.label} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm text-text-secondary">{row.label} ({row.n})</span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <ScoreChip score={row.score} size="sm" />
+                        <DeltaChip delta={row.delta} />
+                      </div>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-export function DwsEmployeeExperienceDashboardClient({ data }: DashboardProps) {
-  const [activeMode, setActiveMode] = useState<(typeof MODE_SECTIONS)[number]["id"]>("review");
-  const [activeTab, setActiveTab] = useState("investigation-hub");
-  const [currentCampaign, setCurrentCampaign] = useState(data.meta.currentCampaignLabel);
-  const [comparisonCampaign, setComparisonCampaign] = useState(data.meta.priorCampaignLabel ?? "");
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-  const activeModeSection = MODE_SECTIONS.find((section) => section.id === activeMode) ?? MODE_SECTIONS[0];
+export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeExperienceDashboardData }) {
+  const [activeGroup, setActiveGroup] = useState<GroupId>("executive");
+  const [activePersp, setActivePersp] = useState<PerspectiveId>("exec-overview");
+  const [current, setCurrent] = useState(data.meta.currentCampaignLabel);
+  const [prior, setPrior] = useState(data.meta.priorCampaignLabel ?? "");
 
-  const tabs: DashboardTab[] = [
-    {
-      id: "investigation-hub",
-      label: "Investigation Hub",
-      content: (
-        <ReviewHubTab
-          data={data}
-          currentCampaign={currentCampaign}
-          comparisonCampaign={comparisonCampaign}
-        />
-      ),
-    },
-    {
-      id: "department-report",
-      label: "Department Report",
-      content: (
-        <ReportsTab
-          data={data}
-          currentCampaign={currentCampaign}
-          comparisonCampaign={comparisonCampaign}
-          fieldId="department"
-          title="Department Report"
-          description="Sortable and filterable department-level reporting for leaders."
-          listLabel="Departments"
-          reportFilterFields={["location", "division"]}
-        />
-      ),
-    },
-    {
-      id: "supervisor-report",
-      label: "Supervisor Report",
-      content: (
-        <ReportsTab
-          data={data}
-          currentCampaign={currentCampaign}
-          comparisonCampaign={comparisonCampaign}
-          fieldId="supervisor"
-          title="Supervisor Report"
-          description="Sortable and filterable supervisor-level reporting for leadership review."
-          listLabel="Supervisors"
-          reportFilterFields={["location", "division", "department"]}
-        />
-      ),
-    },
-  ];
+  const [hrRankFilters, setHrRankFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
+  const [selectedDim, setSelectedDim] = useState(DIM_ORDER.find((d) => data.questions.some((q) => q.dimension === d)) ?? "");
+  const [idxFilters, setIdxFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
+  const [supFilters, setSupFilters] = useState<Record<string, string>>({ location: "", department: "" });
+  const [selectedSup, setSelectedSup] = useState("");
+  const [openTextDept, setOpenTextDept] = useState("");
+  const [openTextField, setOpenTextField] = useState<OpenTextField>("strengths");
+  const [selectedDept, setSelectedDept] = useState("");
 
-  const visibleTabs = activeModeSection.tabIds
-    .map((id) => tabs.find((tab) => tab.id === id))
-    .filter((tab): tab is DashboardTab => Boolean(tab));
-  const resolvedActiveTabId =
-    visibleTabs.find((tab) => tab.id === activeTab)?.id ?? visibleTabs[0]?.id ?? "";
-  const activeTabContent =
-    visibleTabs.find((tab) => tab.id === resolvedActiveTabId)?.content ?? visibleTabs[0]?.content ?? null;
+  const min = data.settings.minimumSegmentSize;
+  const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
+  const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+
+  const locationOpts = useMemo(() => uniq(curR, "location", min), [curR, min]);
+  const workTypeOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const deptOpts = useMemo(() => uniq(curR, "department", min), [curR, min]);
+
+  const supCurFiltered = useMemo(() => filterR(curR, supFilters), [curR, supFilters]);
+  const supOpts = useMemo(() => uniq(supCurFiltered, "supervisor", min), [supCurFiltered, min]);
+  const deptScores = useMemo(() => {
+    const m: Record<string, number> = {};
+    deptOpts.forEach((d) => { m[d] = groupScore(curR.filter((r) => r.department === d), allIds); });
+    return m;
+  }, [deptOpts, curR, allIds]);
+  const supScores = useMemo(() => {
+    const m: Record<string, number> = {};
+    supOpts.forEach((s) => { m[s] = groupScore(supCurFiltered.filter((r) => r.supervisor === s), allIds); });
+    return m;
+  }, [supOpts, supCurFiltered, allIds]);
+
+  const groupDef = GROUPS.find((g) => g.id === activeGroup) ?? GROUPS[0];
+
+  function onGroupChange(gid: string) {
+    const g = GROUPS.find((x) => x.id === gid) ?? GROUPS[0];
+    setActiveGroup(g.id);
+    setActivePersp(g.perspectives[0].id as PerspectiveId);
+  }
+
+  const leftRail = (
+    <LRail>
+      <CampaignRail campaigns={data.meta.campaigns} current={current} prior={prior} onCurrent={setCurrent} onPrior={setPrior} orgName={data.meta.organizationName} />
+      <PerspRail perspectives={groupDef.perspectives.map((p) => ({ id: p.id, label: p.label }))} activeId={activePersp} onSelect={(id) => setActivePersp(id as PerspectiveId)} />
+
+      {activePersp === "hr-rankings" && (
+        <FilterRail
+          filters={[
+            { id: "location", label: "Location", value: hrRankFilters.location, options: locationOpts },
+            { id: "fieldCategory", label: "Work Type", value: hrRankFilters.fieldCategory, options: workTypeOpts },
+          ]}
+          onChange={(id, v) => setHrRankFilters((f) => ({ ...f, [id]: v }))}
+          onReset={() => setHrRankFilters({ location: "", fieldCategory: "" })}
+        />
+      )}
+
+      {activePersp === "hr-index-dive" && (
+        <>
+          <Card className="border-border-strong">
+            <CardContent className="p-4">
+              <SLabel>Dimension</SLabel>
+              <div className="mt-2 space-y-0.5">
+                {DIM_ORDER.filter((d) => data.questions.some((q) => q.dimension === d)).map((d) => (
+                  <button
+                    key={d} type="button" onClick={() => setSelectedDim(d)}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition
+                      ${selectedDim === d ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2"}`}
+                  >
+                    {d}
+                    {selectedDim === d && <ChevronRight className="h-4 w-4 text-nsp-blue-400" />}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <FilterRail
+            filters={[
+              { id: "location", label: "Location", value: idxFilters.location, options: locationOpts },
+              { id: "fieldCategory", label: "Work Type", value: idxFilters.fieldCategory, options: workTypeOpts },
+            ]}
+            onChange={(id, v) => setIdxFilters((f) => ({ ...f, [id]: v }))}
+            onReset={() => setIdxFilters({ location: "", fieldCategory: "" })}
+          />
+        </>
+      )}
+
+      {activePersp === "hr-supervisor" && (
+        <>
+          <FilterRail
+            filters={[
+              { id: "location", label: "Location", value: supFilters.location, options: locationOpts },
+              { id: "department", label: "Department", value: supFilters.department, options: deptOpts },
+            ]}
+            onChange={(id, v) => setSupFilters((f) => ({ ...f, [id]: v }))}
+            onReset={() => setSupFilters({ location: "", department: "" })}
+          />
+          <SelectorRail label="Supervisors" items={supOpts} active={selectedSup || supOpts[0] || ""} onSelect={setSelectedSup} scoreByItem={supScores} />
+        </>
+      )}
+
+      {activePersp === "hr-open-text" && (
+        <Card className="border-border-strong">
+          <CardContent className="space-y-4 p-5">
+            <div>
+              <SLabel>Department</SLabel>
+              <select value={openTextDept} onChange={(e) => setOpenTextDept(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+                <option value="">All Departments</option>
+                {deptOpts.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <SLabel>Question Type</SLabel>
+              <div className="mt-2 space-y-0.5">
+                {OPEN_TEXT_FIELDS.map((f) => (
+                  <button
+                    key={f.id} type="button" onClick={() => setOpenTextField(f.id)}
+                    className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition
+                      ${openTextField === f.id ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2"}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {activePersp === "dept-scorecard" && (
+        <SelectorRail label="Departments" items={deptOpts} active={selectedDept || deptOpts[0] || ""} onSelect={setSelectedDept} scoreByItem={deptScores} />
+      )}
+    </LRail>
+  );
+
+  const content = useMemo(() => {
+    switch (activePersp) {
+      case "exec-overview": return <ExecOverview data={data} current={current} prior={prior} />;
+      case "exec-location": return <ExecLocation data={data} current={current} prior={prior} />;
+      case "hr-rankings":
+        return (
+          <HrRankings
+            data={data} current={current} prior={prior}
+            filters={hrRankFilters}
+            onFilterChange={(id, v) => setHrRankFilters((f) => ({ ...f, [id]: v }))}
+            onFilterReset={() => setHrRankFilters({ location: "", fieldCategory: "" })}
+            locationOpts={locationOpts} workTypeOpts={workTypeOpts}
+          />
+        );
+      case "hr-index-dive":
+        return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
+      case "hr-supervisor":
+        return <HrSupervisor data={data} current={current} prior={prior} filters={supFilters} selectedSup={selectedSup || supOpts[0] || ""} onSelectSup={setSelectedSup} />;
+      case "hr-open-text":
+        return <HrOpenText data={data} current={current} deptFilter={openTextDept} fieldType={openTextField} />;
+      case "dept-scorecard":
+        return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
+      default: return null;
+    }
+  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts, locationOpts, workTypeOpts]);
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 py-6">
-      <section className="mb-6 overflow-hidden rounded-2xl border border-border-strong bg-white shadow-sm">
-        <header className="relative flex flex-wrap items-start justify-between gap-6 px-5 py-5 pr-5 xl:pr-[380px]">
-          <div className="flex items-center gap-5">
-            <div className="flex h-28 w-44 shrink-0 items-center justify-center rounded-2xl border border-border-strong bg-[#102F4A] shadow-sm">
-              <div className="text-center text-white">
-                <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#E8CC70]">Client</p>
-                <p className="mt-2 text-4xl font-extrabold tracking-[0.12em]">DWS</p>
-              </div>
-            </div>
-            <div className="max-w-4xl">
-              <h1 className="font-serif text-3xl font-bold text-text-primary">
-                Employee Experience Dashboard - Deep Well Services
-              </h1>
-              <p className="mt-1 text-sm font-semibold uppercase tracking-[0.16em] text-text-muted">
-                Campaign-first employee experience analytics
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                Each campaign stands on its own. This dashboard keeps survey waves separate by default,
-                then lets leaders compare them longitudinally through an explicit current-versus-comparative
-                lens.
-              </p>
-            </div>
+    <>
+      <DashboardRibbon
+        title="Employee Experience"
+        categories={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+        activeCategoryId={activeGroup}
+        onCategoryChange={onGroupChange}
+        perspectives={groupDef.perspectives.map((p) => ({ id: p.id, label: p.label }))}
+        activePerspectiveId={activePersp}
+        onPerspectiveChange={(id) => setActivePersp(id as PerspectiveId)}
+        legend={<ColorLegend minLabel={EE.minLabel} maxLabel={EE.maxLabel} />}
+        toolbar={
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">{data.meta.organizationName}</p>
+            <p className="mt-1.5 max-w-4xl text-sm leading-relaxed text-text-secondary">
+              Employee experience analytics organized by audience — Executive, HR, and Department — each offering a focused, actionable lens on the data.
+            </p>
           </div>
-
-          <div className="w-full xl:absolute xl:right-5 xl:top-5 xl:w-[340px]">
-            <div className="rounded-[26px] border border-border-strong bg-[#F7FAFC]/96 p-4 shadow-sm backdrop-blur">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <div>
-                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-                    Current campaign
-                  </label>
-                  <select
-                    value={currentCampaign}
-                    onChange={(event) => setCurrentCampaign(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:outline-none"
-                  >
-                    {data.meta.campaigns.map((campaign) => (
-                      <option key={campaign} value={campaign}>
-                        {campaign}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">
-                    Comparative campaign
-                  </label>
-                  <select
-                    value={comparisonCampaign}
-                    onChange={(event) => setComparisonCampaign(event.target.value)}
-                    className="mt-2 w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-sm font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:outline-none"
-                  >
-                    <option value="">No comparison</option>
-                    {data.meta.campaigns
-                      .filter((campaign) => campaign !== currentCampaign)
-                      .map((campaign) => (
-                        <option key={campaign} value={campaign}>
-                          {campaign}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="mt-4 border-t border-border-strong pt-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">
-                  Score guide
-                </p>
-                <ColorLegend
-                  className="mt-2"
-                  minLabel={EMPLOYEE_EXPERIENCE_SCALE.minLabel}
-                  maxLabel={EMPLOYEE_EXPERIENCE_SCALE.maxLabel}
-                />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="flex flex-wrap items-center gap-3 border-t border-border-strong bg-surface-3/90 px-3 py-2.5">
-          <div className="flex shrink-0 items-center gap-2">
-            {MODE_SECTIONS.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => {
-                  setActiveMode(section.id);
-                  setActiveTab(section.tabIds[0] ?? "");
-                }}
-                className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${
-                  activeModeSection.id === section.id
-                    ? "bg-nsp-blue-500 text-white shadow-sm"
-                    : "border border-border-strong bg-white text-text-secondary hover:border-nsp-blue-200 hover:text-text-primary"
-                }`}
-              >
-                {section.label}
-              </button>
-            ))}
-          </div>
-          <div className="h-8 w-px shrink-0 bg-border-strong" />
-          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {visibleTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${
-                  resolvedActiveTabId === tab.id
-                    ? "bg-nsp-blue-500 text-white shadow-sm"
-                    : "text-text-secondary hover:bg-white hover:text-text-primary"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </section>
-
-      <div className="min-h-[700px]">{activeTabContent}</div>
-    </div>
+        }
+      />
+      <DashboardCanvas leftRail={leftRail}>{content}</DashboardCanvas>
+    </>
   );
 }
