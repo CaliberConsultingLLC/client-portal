@@ -189,7 +189,7 @@ function LRail({ children }: { children: React.ReactNode }) {
 
 function RailSection({
   title,
-  defaultOpen = true,
+  defaultOpen = false,
   children,
 }: {
   title: string;
@@ -1159,21 +1159,15 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {/* Focus: Supervisor selector */}
       {activePersp === "hr-supervisor" && supOpts.length > 0 && (
         <RailSection title="Focus">
-          <div className="space-y-0.5">
-            {supOpts.map((sup) => {
-              const score = supScores[sup];
-              const isActive = (selectedSup || supOpts[0]) === sup;
-              return (
-                <button
-                  key={sup} type="button" onClick={() => setSelectedSup(sup)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition
-                    ${isActive ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
-                >
-                  <span className="min-w-0 flex-1 truncate">{sup}</span>
-                  {score !== undefined && <ScoreChip score={score} size="sm" />}
-                </button>
-              );
-            })}
+          <div>
+            <span className="text-xs font-medium text-text-secondary">Supervisor</span>
+            <select
+              value={selectedSup || supOpts[0] || ""}
+              onChange={(e) => setSelectedSup(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+            >
+              {supOpts.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         </RailSection>
       )}
@@ -1181,20 +1175,16 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {/* Focus: Open Text field + department */}
       {activePersp === "hr-open-text" && (
         <RailSection title="Focus">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
               <span className="text-xs font-medium text-text-secondary">Question Type</span>
-              <div className="mt-2 space-y-0.5">
-                {OPEN_TEXT_FIELDS.map((f) => (
-                  <button
-                    key={f.id} type="button" onClick={() => setOpenTextField(f.id)}
-                    className={`flex w-full items-center rounded-xl px-3 py-2 text-left text-sm transition
-                      ${openTextField === f.id ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2"}`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+              <select
+                value={openTextField}
+                onChange={(e) => setOpenTextField(e.target.value as OpenTextField)}
+                className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+              >
+                {OPEN_TEXT_FIELDS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+              </select>
             </div>
             <div>
               <span className="text-xs font-medium text-text-secondary">Department</span>
@@ -1210,21 +1200,15 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {/* Focus: Department scorecard selector */}
       {activePersp === "dept-scorecard" && deptOpts.length > 0 && (
         <RailSection title="Focus">
-          <div className="space-y-0.5">
-            {deptOpts.map((dept) => {
-              const score = deptScores[dept];
-              const isActive = (selectedDept || deptOpts[0]) === dept;
-              return (
-                <button
-                  key={dept} type="button" onClick={() => setSelectedDept(dept)}
-                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition
-                    ${isActive ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
-                >
-                  <span className="min-w-0 flex-1 truncate">{dept}</span>
-                  {score !== undefined && <ScoreChip score={score} size="sm" />}
-                </button>
-              );
-            })}
+          <div>
+            <span className="text-xs font-medium text-text-secondary">Department</span>
+            <select
+              value={selectedDept || deptOpts[0] || ""}
+              onChange={(e) => setSelectedDept(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+            >
+              {deptOpts.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
           </div>
         </RailSection>
       )}
