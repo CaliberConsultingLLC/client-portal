@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
+import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { NspRadarChart } from "@/components/charts/nsp-radar-chart";
 import { ColorLegend } from "@/components/collaboration/color-legend";
 import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
@@ -172,16 +173,6 @@ function SLabel({ children }: { children: React.ReactNode }) {
   return <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">{children}</p>;
 }
 
-function PgHeader({ label, title, description }: { label: string; title: string; description?: string }) {
-  return (
-    <div className="mb-6">
-      <SLabel>{label}</SLabel>
-      <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-text-primary">{title}</h2>
-      {description && <p className="mt-2 max-w-3xl text-sm leading-relaxed text-text-secondary">{description}</p>}
-    </div>
-  );
-}
-
 function Empty({ message }: { message: string }) {
   return (
     <Card className="border-border-strong">
@@ -190,137 +181,65 @@ function Empty({ message }: { message: string }) {
   );
 }
 
-// ─── Score table shared component ────────────────────────────────────────────
+// ─── Left Rail ────────────────────────────────────────────────────────────────
 
-type ScoreTableRow = {
-  label: string; n?: number;
-  score: number; delta: number | null;
-  dims?: DimMetric[];
-};
+function LRail({ children }: { children: React.ReactNode }) {
+  return <div className="space-y-3 xl:sticky xl:top-6 xl:self-start">{children}</div>;
+}
 
-function CrossTabTable({
-  title, description, rows, dims, orgRow,
+function RailSection({
+  title,
+  defaultOpen = true,
+  children,
 }: {
-  title: string; description?: string;
-  rows: ScoreTableRow[]; dims: DimMetric[];
-  orgRow?: ScoreTableRow;
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <Card className="border-border-strong">
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent className="overflow-x-auto pt-0">
-        <table className="w-full min-w-[580px] text-sm">
-          <thead>
-            <tr className="border-b border-border-strong">
-              <th className="py-3 pr-4 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Group</th>
-              <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">n</th>
-              {dims.map((d) => (
-                <th key={d.id} className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">{d.label}</th>
-              ))}
-              <th className="pl-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Total</th>
-              <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={row.label} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
-                <td className="py-3 pr-4 font-semibold text-text-primary">{row.label}</td>
-                <td className="px-2 py-3 text-center text-text-muted">{row.n ?? "—"}</td>
-                {dims.map((d) => {
-                  const rd = row.dims?.find((x) => x.label === d.label);
-                  return (
-                    <td key={d.id} className="px-2 py-3 text-center">
-                      {rd ? <ScoreChip score={rd.score} size="sm" /> : <span className="text-text-muted">—</span>}
-                    </td>
-                  );
-                })}
-                <td className="pl-3 py-3 text-center"><ScoreChip score={row.score} size="sm" /></td>
-                <td className="px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
-              </tr>
-            ))}
-            {orgRow && (
-              <tr className="border-t-2 border-border-strong bg-nsp-blue-50/60 font-bold">
-                <td className="py-3 pr-4 font-bold text-text-primary">{orgRow.label}</td>
-                <td className="px-2 py-3 text-center text-text-muted">{orgRow.n ?? "—"}</td>
-                {dims.map((d) => {
-                  const rd = orgRow.dims?.find((x) => x.label === d.label);
-                  return (
-                    <td key={d.id} className="px-2 py-3 text-center">
-                      {rd ? <ScoreChip score={rd.score} size="sm" /> : <span className="text-text-muted">—</span>}
-                    </td>
-                  );
-                })}
-                <td className="pl-3 py-3 text-center"><ScoreChip score={orgRow.score} size="sm" /></td>
-                <td className="px-2 py-3 text-center"><DeltaChip delta={orgRow.delta} /></td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
+    <div className="overflow-hidden rounded-2xl border border-border-strong bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">{title}</span>
+        <ChevronRight className={`h-4 w-4 text-text-muted transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border-subtle px-4 pb-4 pt-3">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ─── Left Rail components ─────────────────────────────────────────────────────
-
-function LRail({ children }: { children: React.ReactNode }) {
-  return <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">{children}</div>;
-}
-
 function CampaignRail({
-  campaigns, current, prior, onCurrent, onPrior, orgName,
+  campaigns, current, prior, onCurrent, onPrior,
 }: {
   campaigns: string[]; current: string; prior: string;
-  onCurrent: (v: string) => void; onPrior: (v: string) => void; orgName: string;
+  onCurrent: (v: string) => void; onPrior: (v: string) => void;
 }) {
   return (
-    <Card className="border-border-strong">
-      <CardContent className="space-y-4 p-5">
-        <div className="rounded-xl bg-surface-2 px-4 py-3">
-          <SLabel>Organization</SLabel>
-          <p className="mt-1 text-sm font-semibold text-text-primary">{orgName}</p>
-        </div>
+    <RailSection title="Campaign Selection">
+      <div className="space-y-3">
         <div>
-          <SLabel>Current Campaign</SLabel>
+          <span className="text-xs font-medium text-text-secondary">Current</span>
           <select value={current} onChange={(e) => onCurrent(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none">
             {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
-          <SLabel>Compare To</SLabel>
+          <span className="text-xs font-medium text-text-secondary">Compare To</span>
           <select value={prior} onChange={(e) => onPrior(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
             <option value="">No comparison</option>
             {campaigns.filter((c) => c !== current).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PerspRail({
-  perspectives, activeId, onSelect,
-}: {
-  perspectives: { id: string; label: string }[]; activeId: string; onSelect: (id: string) => void;
-}) {
-  return (
-    <Card className="overflow-hidden border-border-strong">
-      <CardContent className="p-0">
-        {perspectives.map((p) => (
-          <button
-            key={p.id} type="button" onClick={() => onSelect(p.id)}
-            className={`flex w-full items-center justify-between border-b border-border-subtle px-4 py-3 text-left text-sm last:border-b-0 transition
-              ${activeId === p.id ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "bg-white font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
-          >
-            {p.label}
-            {activeId === p.id && <ChevronRight className="h-4 w-4 text-nsp-blue-400" />}
-          </button>
-        ))}
-      </CardContent>
-    </Card>
+      </div>
+    </RailSection>
   );
 }
 
@@ -332,9 +251,8 @@ function FilterRail({
 }) {
   const hasActive = filters.some((f) => f.value);
   return (
-    <Card className="border-border-strong">
-      <CardContent className="space-y-3 p-5">
-        <SLabel>Filters</SLabel>
+    <RailSection title="Filters">
+      <div className="space-y-3">
         {filters.map((f) => (
           <div key={f.id}>
             <span className="text-xs font-medium text-text-secondary">{f.label}</span>
@@ -352,40 +270,8 @@ function FilterRail({
             Reset filters
           </button>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function SelectorRail({
-  label, items, active, onSelect, scoreByItem,
-}: {
-  label: string; items: string[]; active: string;
-  onSelect: (v: string) => void; scoreByItem?: Record<string, number>;
-}) {
-  return (
-    <Card className="border-border-strong">
-      <CardContent className="p-5">
-        <SLabel>{label}</SLabel>
-        <div className="mt-2 max-h-[380px] space-y-0.5 overflow-y-auto">
-          {items.map((item) => {
-            const score = scoreByItem?.[item];
-            const isActive = item === active;
-            return (
-              <button
-                key={item} type="button" onClick={() => onSelect(item)}
-                className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition
-                  ${isActive ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
-              >
-                <span className="min-w-0 flex-1 truncate">{item}</span>
-                {score !== undefined && <ScoreChip score={score} size="sm" />}
-              </button>
-            );
-          })}
-          {items.length === 0 && <p className="py-3 text-center text-xs text-text-muted">No groups meet the minimum threshold.</p>}
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </RailSection>
   );
 }
 
@@ -418,7 +304,7 @@ function ExecOverview({
         <CardContent className="p-6">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex-1">
-              <SLabel>Campaign Overview · {data.meta.organizationName}</SLabel>
+              <SLabel>Campaign Overview</SLabel>
               <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">{current}</h2>
               <p className="mt-2 text-sm text-text-secondary">
                 {curR.length} total {curR.length === 1 ? "response" : "responses"} across all dimensions.
@@ -528,47 +414,98 @@ function ExecLocation({
   const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
   const priR = useMemo(() => prior ? data.respondents.filter((r) => r.campaignLabel === prior) : [], [data.respondents, prior]);
 
-  const orgDims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
-  const orgScore = useMemo(() => groupScore(curR, allIds), [curR, allIds]);
-  const orgPrior = useMemo(() => priR.length > 0 ? groupScore(priR, allIds) : null, [priR, allIds]);
+  const dims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
+  const dimNames = useMemo(() => dims.map((d) => d.label), [dims]);
+  const dimColTotals = useMemo(() => {
+    const m: Record<string, number> = {};
+    dims.forEach((d) => { m[d.label] = d.score; });
+    return m;
+  }, [dims]);
 
-  function buildRows(field: keyof EmployeeExperienceRespondent): ScoreTableRow[] {
-    return uniq(curR, field, min).map((val) => {
-      const dc = curR.filter((r) => r[field] === val);
-      const dp = priR.filter((r) => r[field] === val);
-      const score = groupScore(dc, allIds);
-      const prevScore = dp.length >= min ? groupScore(dp, allIds) : null;
-      return {
-        label: val, n: dc.length, score,
-        delta: prevScore !== null ? r1(score - prevScore) : null,
-        dims: buildDims(data.questions, dc, dp.length >= min ? dp : []),
-      };
-    }).sort((a, b) => b.score - a.score);
-  }
+  const locations = useMemo(() => uniq(curR, "location", min), [curR, min]);
+  const locRowTotals = useMemo(() => {
+    const m: Record<string, number> = {};
+    locations.forEach((loc) => { m[loc] = groupScore(curR.filter((r) => r.location === loc), allIds); });
+    return m;
+  }, [locations, curR, allIds]);
+  const sortedLocs = useMemo(() => [...locations].sort((a, b) => (locRowTotals[b] ?? 0) - (locRowTotals[a] ?? 0)), [locations, locRowTotals]);
+  const locHeatData = useMemo(() =>
+    locations.map((loc) => {
+      const lr = curR.filter((r) => r.location === loc);
+      const locDims = buildDims(data.questions, lr, []);
+      const scores: Record<string, number | null> = {};
+      locDims.forEach((d) => { scores[d.label] = d.score || null; });
+      return { department: loc, scores };
+    }),
+    [locations, curR, data.questions]
+  );
 
-  const locationRows = useMemo(() => buildRows("location"), [curR, priR, data.questions, min]);
-  const workTypeRows = useMemo(() => buildRows("fieldCategory"), [curR, priR, data.questions, min]);
-
-  const orgRow: ScoreTableRow = {
-    label: "Overall", n: curR.length, score: orgScore,
-    delta: orgPrior !== null ? r1(orgScore - orgPrior) : null,
-    dims: orgDims,
-  };
+  const workTypes = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const wtRowTotals = useMemo(() => {
+    const m: Record<string, number> = {};
+    workTypes.forEach((wt) => { m[wt] = groupScore(curR.filter((r) => r.fieldCategory === wt), allIds); });
+    return m;
+  }, [workTypes, curR, allIds]);
+  const sortedWts = useMemo(() => [...workTypes].sort((a, b) => (wtRowTotals[b] ?? 0) - (wtRowTotals[a] ?? 0)), [workTypes, wtRowTotals]);
+  const wtHeatData = useMemo(() =>
+    workTypes.map((wt) => {
+      const wr = curR.filter((r) => r.fieldCategory === wt);
+      const wtDims = buildDims(data.questions, wr, []);
+      const scores: Record<string, number | null> = {};
+      wtDims.forEach((d) => { scores[d.label] = d.score || null; });
+      return { department: wt, scores };
+    }),
+    [workTypes, curR, data.questions]
+  );
 
   if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
 
   return (
     <div className="space-y-6">
-      <PgHeader
-        label="Executive · Location Breakdown"
-        title="Scores by Region and Work Type"
-        description="Index scores broken down by geography and field category. Color reflects score strength against the campaign average."
-      />
-      {locationRows.length > 0
-        ? <CrossTabTable title="By Location" description="Score per index grouped by region." rows={locationRows} dims={orgDims} orgRow={orgRow} />
-        : <Empty message="No locations meet the minimum response threshold." />}
-      {workTypeRows.length > 0 && (
-        <CrossTabTable title="By Work Type" description="Score per index grouped by field category (Field, Office, Shop, etc.)." rows={workTypeRows} dims={orgDims} orgRow={orgRow} />
+      {sortedLocs.length > 0 ? (
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>By Location</CardTitle>
+            <CardDescription>Score per dimension grouped by region. Overall score in the rightmost column.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <HeatmapChart
+              rows={sortedLocs}
+              columns={dimNames}
+              data={locHeatData}
+              rowTotals={locRowTotals}
+              columnTotals={dimColTotals}
+              rowLabelHeader="Location"
+              minValue={EE.min}
+              midpoint={EE.mid}
+              maxValue={EE.max}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <Empty message="No locations meet the minimum response threshold." />
+      )}
+
+      {sortedWts.length > 0 && (
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>By Work Type</CardTitle>
+            <CardDescription>Score per dimension grouped by field category (Field, Office, Shop, etc.).</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <HeatmapChart
+              rows={sortedWts}
+              columns={dimNames}
+              data={wtHeatData}
+              rowTotals={wtRowTotals}
+              columnTotals={dimColTotals}
+              rowLabelHeader="Work Type"
+              minValue={EE.min}
+              midpoint={EE.mid}
+              maxValue={EE.max}
+            />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -577,12 +514,10 @@ function ExecLocation({
 // ─── HR: Department Rankings ──────────────────────────────────────────────────
 
 function HrRankings({
-  data, current, prior, filters, onFilterChange, onFilterReset, locationOpts, workTypeOpts,
+  data, current, prior, filters,
 }: {
   data: EmployeeExperienceDashboardData; current: string; prior: string;
   filters: Record<string, string>;
-  onFilterChange: (id: string, v: string) => void; onFilterReset: () => void;
-  locationOpts: string[]; workTypeOpts: string[];
 }) {
   const min = data.settings.minimumSegmentSize;
   const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
@@ -590,70 +525,55 @@ function HrRankings({
   const priR = useMemo(() => prior ? filterR(data.respondents.filter((r) => r.campaignLabel === prior), filters) : [], [data.respondents, prior, filters]);
 
   const orgDims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
-  const depts = useMemo(() => uniq(curR, "department", min), [curR, min]);
+  const dimNames = useMemo(() => orgDims.map((d) => d.label), [orgDims]);
+  const dimColTotals = useMemo(() => {
+    const m: Record<string, number> = {};
+    orgDims.forEach((d) => { m[d.label] = d.score; });
+    return m;
+  }, [orgDims]);
 
-  const rows: ScoreTableRow[] = useMemo(() =>
+  const depts = useMemo(() => uniq(curR, "department", min), [curR, min]);
+  const deptRowTotals = useMemo(() => {
+    const m: Record<string, number> = {};
+    depts.forEach((dept) => { m[dept] = groupScore(curR.filter((r) => r.department === dept), allIds); });
+    return m;
+  }, [depts, curR, allIds]);
+  const sortedDepts = useMemo(() => [...depts].sort((a, b) => (deptRowTotals[b] ?? 0) - (deptRowTotals[a] ?? 0)), [depts, deptRowTotals]);
+  const deptHeatData = useMemo(() =>
     depts.map((dept) => {
       const dc = curR.filter((r) => r.department === dept);
-      const dp = priR.filter((r) => r.department === dept);
-      const score = groupScore(dc, allIds);
-      const prevScore = dp.length >= min ? groupScore(dp, allIds) : null;
-      return {
-        label: dept, n: dc.length, score,
-        delta: prevScore !== null ? r1(score - prevScore) : null,
-        dims: buildDims(data.questions, dc, dp.length >= min ? dp : []),
-      };
-    }).sort((a, b) => b.score - a.score),
-    [depts, curR, priR, allIds, min, data.questions]
+      const deptDims = buildDims(data.questions, dc, []);
+      const scores: Record<string, number | null> = {};
+      deptDims.forEach((d) => { scores[d.label] = d.score || null; });
+      return { department: dept, scores };
+    }),
+    [depts, curR, data.questions]
   );
 
-  if (rows.length === 0) return <Empty message="No departments meet the minimum response threshold under the current filters." />;
+  if (sortedDepts.length === 0) return <Empty message="No departments meet the minimum response threshold under the current filters." />;
 
   return (
-    <div className="space-y-6">
-      <PgHeader
-        label="HR · Department Rankings"
-        title={`${rows.length} Department${rows.length !== 1 ? "s" : ""} · ${current}`}
-        description="All departments ranked by overall experience index. Use filters in the left rail to narrow by location or work type."
-      />
-      <Card className="border-border-strong">
-        <CardContent className="overflow-x-auto pt-0">
-          <table className="w-full min-w-[580px] text-sm">
-            <thead>
-              <tr className="border-b border-border-strong">
-                <th className="py-3.5 pr-2 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">#</th>
-                <th className="py-3.5 pr-4 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Department</th>
-                <th className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">n</th>
-                {orgDims.map((d) => (
-                  <th key={d.id} className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">{d.label}</th>
-                ))}
-                <th className="pl-3 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Total</th>
-                <th className="px-2 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={row.label} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
-                  <td className="py-3 pr-2 text-text-muted">{i + 1}</td>
-                  <td className="py-3 pr-4 font-semibold text-text-primary">{row.label}</td>
-                  <td className="px-2 py-3 text-center text-text-muted">{row.n}</td>
-                  {orgDims.map((d) => {
-                    const rd = row.dims?.find((x) => x.label === d.label);
-                    return (
-                      <td key={d.id} className="px-2 py-3 text-center">
-                        {rd ? <ScoreChip score={rd.score} size="sm" /> : <span className="text-text-muted">—</span>}
-                      </td>
-                    );
-                  })}
-                  <td className="pl-3 py-3 text-center"><ScoreChip score={row.score} size="sm" /></td>
-                  <td className="px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-    </div>
+    <Card className="border-border-strong">
+      <CardHeader>
+        <CardTitle>Department Rankings</CardTitle>
+        <CardDescription>
+          {sortedDepts.length} department{sortedDepts.length !== 1 ? "s" : ""} · {current} · sorted by overall score.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <HeatmapChart
+          rows={sortedDepts}
+          columns={dimNames}
+          data={deptHeatData}
+          rowTotals={deptRowTotals}
+          columnTotals={dimColTotals}
+          rowLabelHeader="Department"
+          minValue={EE.min}
+          midpoint={EE.mid}
+          maxValue={EE.max}
+        />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -695,16 +615,10 @@ function HrIndexDive({
 
   return (
     <div className="space-y-6">
-      <PgHeader
-        label={`HR · Index Deep Dive · ${selectedDim}`}
-        title={`${selectedDim} — Statement Detail`}
-        description="All survey items in this dimension ranked by score. Delta compares to the selected prior campaign."
-      />
-
       <Card className="border-border-strong">
         <CardHeader>
-          <CardTitle>Statement Ranking</CardTitle>
-          <CardDescription>Highest to lowest for the current campaign. Delta reflects change vs prior.</CardDescription>
+          <CardTitle>{selectedDim} — Statement Detail</CardTitle>
+          <CardDescription>All items ranked highest to lowest. Delta reflects change vs prior campaign.</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <table className="w-full text-sm">
@@ -835,7 +749,7 @@ function HrSupervisor({
   return (
     <div className="space-y-6">
       <div>
-        <SLabel>HR · Supervisor Reports</SLabel>
+        <SLabel>Supervisor Report</SLabel>
         <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-text-primary">{activeSup || "No supervisor selected"}</h2>
         <p className="mt-1 text-sm text-text-secondary">{supCur.length} responses · {current}</p>
       </div>
@@ -953,11 +867,12 @@ function HrOpenText({
 
   return (
     <div className="space-y-6">
-      <PgHeader
-        label="HR · Open Text"
-        title={fieldLabel}
-        description={`${entries.length} response${entries.length !== 1 ? "s" : ""}${deptFilter ? ` from ${deptFilter}` : " across all departments"} · ${current}`}
-      />
+      <div>
+        <SLabel>Open Text · {fieldLabel}</SLabel>
+        <p className="mt-2 text-sm text-text-secondary">
+          {entries.length} response{entries.length !== 1 ? "s" : ""}{deptFilter ? ` from ${deptFilter}` : " across all departments"} · {current}
+        </p>
+      </div>
       {entries.length === 0 ? (
         <Empty message="No responses match the current selection." />
       ) : (
@@ -1179,12 +1094,20 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
     setActivePersp(g.perspectives[0].id as PerspectiveId);
   }
 
+  // ── Left Rail ──────────────────────────────────────────────────────────────
+
   const leftRail = (
     <LRail>
-      <CampaignRail campaigns={data.meta.campaigns} current={current} prior={prior} onCurrent={setCurrent} onPrior={setPrior} orgName={data.meta.organizationName} />
-      <PerspRail perspectives={groupDef.perspectives.map((p) => ({ id: p.id, label: p.label }))} activeId={activePersp} onSelect={(id) => setActivePersp(id as PerspectiveId)} />
+      <CampaignRail
+        campaigns={data.meta.campaigns}
+        current={current}
+        prior={prior}
+        onCurrent={setCurrent}
+        onPrior={setPrior}
+      />
 
-      {activePersp === "hr-rankings" && (
+      {/* Filters */}
+      {(activePersp === "hr-rankings") && (
         <FilterRail
           filters={[
             { id: "location", label: "Location", value: hrRankFilters.location, options: locationOpts },
@@ -1194,63 +1117,73 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
           onReset={() => setHrRankFilters({ location: "", fieldCategory: "" })}
         />
       )}
+      {(activePersp === "hr-index-dive") && (
+        <FilterRail
+          filters={[
+            { id: "location", label: "Location", value: idxFilters.location, options: locationOpts },
+            { id: "fieldCategory", label: "Work Type", value: idxFilters.fieldCategory, options: workTypeOpts },
+          ]}
+          onChange={(id, v) => setIdxFilters((f) => ({ ...f, [id]: v }))}
+          onReset={() => setIdxFilters({ location: "", fieldCategory: "" })}
+        />
+      )}
+      {(activePersp === "hr-supervisor") && (
+        <FilterRail
+          filters={[
+            { id: "location", label: "Location", value: supFilters.location, options: locationOpts },
+            { id: "department", label: "Department", value: supFilters.department, options: deptOpts },
+          ]}
+          onChange={(id, v) => setSupFilters((f) => ({ ...f, [id]: v }))}
+          onReset={() => setSupFilters({ location: "", department: "" })}
+        />
+      )}
 
+      {/* Dimension selector (Index Deep Dive) */}
       {activePersp === "hr-index-dive" && (
-        <>
-          <Card className="border-border-strong">
-            <CardContent className="p-4">
-              <SLabel>Dimension</SLabel>
-              <div className="mt-2 space-y-0.5">
-                {DIM_ORDER.filter((d) => data.questions.some((q) => q.dimension === d)).map((d) => (
-                  <button
-                    key={d} type="button" onClick={() => setSelectedDim(d)}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition
-                      ${selectedDim === d ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2"}`}
-                  >
-                    {d}
-                    {selectedDim === d && <ChevronRight className="h-4 w-4 text-nsp-blue-400" />}
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-          <FilterRail
-            filters={[
-              { id: "location", label: "Location", value: idxFilters.location, options: locationOpts },
-              { id: "fieldCategory", label: "Work Type", value: idxFilters.fieldCategory, options: workTypeOpts },
-            ]}
-            onChange={(id, v) => setIdxFilters((f) => ({ ...f, [id]: v }))}
-            onReset={() => setIdxFilters({ location: "", fieldCategory: "" })}
-          />
-        </>
+        <RailSection title="Dimension">
+          <div className="space-y-0.5">
+            {DIM_ORDER.filter((d) => data.questions.some((q) => q.dimension === d)).map((d) => (
+              <button
+                key={d} type="button" onClick={() => setSelectedDim(d)}
+                className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition
+                  ${selectedDim === d ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2"}`}
+              >
+                {d}
+                {selectedDim === d && <ChevronRight className="h-4 w-4 text-nsp-blue-400" />}
+              </button>
+            ))}
+          </div>
+        </RailSection>
       )}
 
-      {activePersp === "hr-supervisor" && (
-        <>
-          <FilterRail
-            filters={[
-              { id: "location", label: "Location", value: supFilters.location, options: locationOpts },
-              { id: "department", label: "Department", value: supFilters.department, options: deptOpts },
-            ]}
-            onChange={(id, v) => setSupFilters((f) => ({ ...f, [id]: v }))}
-            onReset={() => setSupFilters({ location: "", department: "" })}
-          />
-          <SelectorRail label="Supervisors" items={supOpts} active={selectedSup || supOpts[0] || ""} onSelect={setSelectedSup} scoreByItem={supScores} />
-        </>
+      {/* Focus: Supervisor selector */}
+      {activePersp === "hr-supervisor" && supOpts.length > 0 && (
+        <RailSection title="Focus">
+          <div className="space-y-0.5">
+            {supOpts.map((sup) => {
+              const score = supScores[sup];
+              const isActive = (selectedSup || supOpts[0]) === sup;
+              return (
+                <button
+                  key={sup} type="button" onClick={() => setSelectedSup(sup)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition
+                    ${isActive ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{sup}</span>
+                  {score !== undefined && <ScoreChip score={score} size="sm" />}
+                </button>
+              );
+            })}
+          </div>
+        </RailSection>
       )}
 
+      {/* Focus: Open Text field + department */}
       {activePersp === "hr-open-text" && (
-        <Card className="border-border-strong">
-          <CardContent className="space-y-4 p-5">
+        <RailSection title="Focus">
+          <div className="space-y-4">
             <div>
-              <SLabel>Department</SLabel>
-              <select value={openTextDept} onChange={(e) => setOpenTextDept(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
-                <option value="">All Departments</option>
-                {deptOpts.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </div>
-            <div>
-              <SLabel>Question Type</SLabel>
+              <span className="text-xs font-medium text-text-secondary">Question Type</span>
               <div className="mt-2 space-y-0.5">
                 {OPEN_TEXT_FIELDS.map((f) => (
                   <button
@@ -1263,12 +1196,37 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
                 ))}
               </div>
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <span className="text-xs font-medium text-text-secondary">Department</span>
+              <select value={openTextDept} onChange={(e) => setOpenTextDept(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+                <option value="">All Departments</option>
+                {deptOpts.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          </div>
+        </RailSection>
       )}
 
-      {activePersp === "dept-scorecard" && (
-        <SelectorRail label="Departments" items={deptOpts} active={selectedDept || deptOpts[0] || ""} onSelect={setSelectedDept} scoreByItem={deptScores} />
+      {/* Focus: Department scorecard selector */}
+      {activePersp === "dept-scorecard" && deptOpts.length > 0 && (
+        <RailSection title="Focus">
+          <div className="space-y-0.5">
+            {deptOpts.map((dept) => {
+              const score = deptScores[dept];
+              const isActive = (selectedDept || deptOpts[0]) === dept;
+              return (
+                <button
+                  key={dept} type="button" onClick={() => setSelectedDept(dept)}
+                  className={`flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition
+                    ${isActive ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2 hover:text-text-primary"}`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{dept}</span>
+                  {score !== undefined && <ScoreChip score={score} size="sm" />}
+                </button>
+              );
+            })}
+          </div>
+        </RailSection>
       )}
     </LRail>
   );
@@ -1278,15 +1236,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       case "exec-overview": return <ExecOverview data={data} current={current} prior={prior} />;
       case "exec-location": return <ExecLocation data={data} current={current} prior={prior} />;
       case "hr-rankings":
-        return (
-          <HrRankings
-            data={data} current={current} prior={prior}
-            filters={hrRankFilters}
-            onFilterChange={(id, v) => setHrRankFilters((f) => ({ ...f, [id]: v }))}
-            onFilterReset={() => setHrRankFilters({ location: "", fieldCategory: "" })}
-            locationOpts={locationOpts} workTypeOpts={workTypeOpts}
-          />
-        );
+        return <HrRankings data={data} current={current} prior={prior} filters={hrRankFilters} />;
       case "hr-index-dive":
         return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
       case "hr-supervisor":
@@ -1297,7 +1247,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
         return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
       default: return null;
     }
-  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts, locationOpts, workTypeOpts]);
+  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts]);
 
   return (
     <>
@@ -1310,14 +1260,6 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
         activePerspectiveId={activePersp}
         onPerspectiveChange={(id) => setActivePersp(id as PerspectiveId)}
         legend={<ColorLegend minLabel={EE.minLabel} maxLabel={EE.maxLabel} />}
-        toolbar={
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">{data.meta.organizationName}</p>
-            <p className="mt-1.5 max-w-4xl text-sm leading-relaxed text-text-secondary">
-              Employee experience analytics organized by audience — Executive, HR, and Department — each offering a focused, actionable lens on the data.
-            </p>
-          </div>
-        }
       />
       <DashboardCanvas leftRail={leftRail}>{content}</DashboardCanvas>
     </>
