@@ -1,4 +1,5 @@
-import type { StorybookConfig } from "@storybook/nextjs";
+import type { StorybookConfig } from "@storybook/react-vite";
+import path from "path";
 
 const config: StorybookConfig = {
   // Pick up stories anywhere under src/ — keeps them co-located with components
@@ -11,9 +12,10 @@ const config: StorybookConfig = {
   ],
 
   framework: {
-    // @storybook/nextjs handles: webpack, Next.js module stubs (next/image,
-    // next/navigation, next/font), and tsconfig path aliases automatically.
-    name: "@storybook/nextjs",
+    // @storybook/react-vite — Vite-based React stories, no Next.js webpack conflicts.
+    // Tailwind v4 is picked up automatically via postcss.config.mjs.
+    // "use client" directives in portal components are harmless in this context.
+    name: "@storybook/react-vite",
     options: {},
   },
 
@@ -23,6 +25,18 @@ const config: StorybookConfig = {
   docs: {
     // Auto-generate a Docs page for every story tagged with autodocs
     autodocs: "tag",
+  },
+
+  // Wire up the @/* → src/* path alias that tsconfig.json defines
+  async viteFinal(config) {
+    const { mergeConfig } = await import("vite");
+    return mergeConfig(config, {
+      resolve: {
+        alias: {
+          "@": path.resolve(__dirname, "../src"),
+        },
+      },
+    });
   },
 };
 

@@ -51,11 +51,6 @@ const preview: Preview = {
     // Most dashboard stories want full-page layout, not centered
     layout: "fullscreen",
 
-    // Tell @storybook/nextjs we're using the App Router
-    nextjs: {
-      appDirectory: true,
-    },
-
     // Controls panel — sort alphabetically for readability
     controls: {
       matchers: {
