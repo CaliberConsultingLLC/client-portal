@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
@@ -275,132 +275,198 @@ function FilterRail({
   );
 }
 
-// ─── Executive: Constellation visual ─────────────────────────────────────────
+// ─── Executive: Dimension Wheel ───────────────────────────────────────────────
 
-function ExecutiveConstellation({
+function DimensionWheel({
   dims,
   orgScore,
-  orgDelta,
-  prior,
 }: {
   dims: DimMetric[];
   orgScore: number;
-  orgDelta: number | null;
-  prior: string;
 }) {
-  const W = 520, H = 520;
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [rotation, setRotation] = useState(0);
+  const rotRef = useRef(0);
+
+  const n = dims.length;
+  const sliceAngle = 360 / n;
+
+  function handleNodeClick(i: number) {
+    const target = -sliceAngle * i;
+    const delta = ((target - rotRef.current) % 360 + 540) % 360 - 180;
+    const newRot = rotRef.current + delta;
+    rotRef.current = newRot;
+    setRotation(newRot);
+    setActiveIdx(i);
+  }
+
+  const W = 480, H = 480;
   const cx = W / 2, cy = H / 2;
-  const orbitR = 188;
-  const nodeR = 48;
-  const coreR = 78;
-
-  const nodes = dims.map((dim, i) => {
-    const deg = -90 + (360 / dims.length) * i;
-    const rad = (deg * Math.PI) / 180;
-    return { dim, x: cx + orbitR * Math.cos(rad), y: cy + orbitR * Math.sin(rad) };
-  });
-
-  // 8-point compass star — 4 cardinal (longer) + 4 diagonal (shorter)
-  const petals = Array.from({ length: 8 }, (_, i) => {
-    const a = (i * 45 * Math.PI) / 180;
-    const isCardinal = i % 2 === 0;
-    const L = isCardinal ? 150 : 106;
-    const w = isCardinal ? 15 : 10;
-    const ca = Math.cos(a), sa = Math.sin(a);
-    const cp = Math.cos(a + Math.PI / 2), sp = Math.sin(a + Math.PI / 2);
-    return [
-      [cx, cy],
-      [cx + (L / 2) * ca + w * cp, cy + (L / 2) * sa + w * sp],
-      [cx + L * ca, cy + L * sa],
-      [cx + (L / 2) * ca - w * cp, cy + (L / 2) * sa - w * sp],
-    ].map(([x, y]) => `${x},${y}`).join(" ");
-  });
-
+  const orbitR = 162;
+  const nodeR = 40;
+  const activeR = Math.round(nodeR * 1.3); // 52 — 30% larger
+  const coreR = 70;
   const font = "Montserrat, ui-sans-serif, sans-serif";
 
   return (
     <div className="w-full">
       <div className="mb-2 px-1">
-        <SLabel>Executive Constellation</SLabel>
-        <p className="mt-0.5 text-xs text-text-secondary">Seven dimensions in balance.</p>
+        <SLabel>Dimension Wheel</SLabel>
+        <p className="mt-0.5 text-xs text-text-muted">
+          Click any dimension to bring it to focus
+        </p>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[520px] mx-auto">
-        {/* Compass petals */}
-        {petals.map((pts, i) => (
-          <polygon key={i} points={pts} fill="#D5E0E9" opacity="0.6" />
-        ))}
 
-        {/* Orbit ring */}
-        <circle cx={cx} cy={cy} r={orbitR} fill="none" stroke="#C0D0DC" strokeWidth="0.8" strokeDasharray="3 5" />
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="mx-auto w-full max-w-[480px] select-none"
+        style={{ overflow: "visible" }}
+      >
+        <defs>
+          {/* Per-node 3D sphere gradients */}
+          {dims.map((dim, i) => (
+            <radialGradient
+              key={`ng-${i}`}
+              id={`dw-ng-${i}`}
+              cx="36%"
+              cy="27%"
+              r="74%"
+            >
+              <stop offset="0%"   stopColor="white"             stopOpacity={0.56} />
+              <stop offset="44%"  stopColor={sColor(dim.score)} stopOpacity={0.02} />
+              <stop offset="100%" stopColor="black"             stopOpacity={0.40} />
+            </radialGradient>
+          ))}
 
-        {/* Spokes */}
-        {nodes.map(({ dim, x, y }) => (
-          <line key={dim.id} x1={cx} y1={cy} x2={x} y2={y} stroke="#BBC9D5" strokeWidth="1.2" />
-        ))}
+          {/* Core sphere gradient */}
+          <radialGradient id="dw-core-ng" cx="36%" cy="27%" r="74%">
+            <stop offset="0%"   stopColor="white"              stopOpacity={0.52} />
+            <stop offset="44%"  stopColor={sColor(orgScore)}   stopOpacity={0.02} />
+            <stop offset="100%" stopColor="black"              stopOpacity={0.44} />
+          </radialGradient>
 
-        {/* Core */}
-        <circle cx={cx} cy={cy} r={coreR} fill="white" stroke="#C0D0DC" strokeWidth="1.5" />
-        <text x={cx} y={cy - 22} textAnchor="middle" fontSize="8" fontWeight="700"
-          fill="#7A8FA0" letterSpacing="2" fontFamily={font}>OVERALL INDEX</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize="30" fontWeight="800"
-          fill="#1C252A" fontFamily={font}>{formatScoreForDisplay(orgScore)}</text>
-        {prior && (
-          <text x={cx} y={cy + 32} textAnchor="middle" fontSize="8.5" fill="#7A8FA0" fontFamily={font}>
-            vs {prior}
-          </text>
-        )}
-        {orgDelta !== null && (
-          <text x={cx} y={cy + 48} textAnchor="middle" fontSize="10" fontWeight="700" fontFamily={font}
-            fill={orgDelta > 0.005 ? "#2E7D32" : orgDelta < -0.005 ? "#C62828" : "#7A8FA0"}>
-            {orgDelta > 0.005 ? "↑" : orgDelta < -0.005 ? "↓" : "±"} {Math.abs(orgDelta * 10).toFixed(1)}
-          </text>
-        )}
+          {/* Drop shadows */}
+          <filter id="dw-node-shadow" x="-60%" y="-60%" width="220%" height="220%">
+            <feDropShadow dx="1.5" dy="3.5" stdDeviation="5"
+              floodColor="rgba(0,0,0,0.38)" />
+          </filter>
+          <filter id="dw-core-shadow" x="-60%" y="-60%" width="220%" height="220%">
+            <feDropShadow dx="3" dy="5" stdDeviation="9"
+              floodColor="rgba(0,0,0,0.44)" />
+          </filter>
+        </defs>
 
-        {/* Dimension nodes */}
-        {nodes.map(({ dim, x, y }) => {
-          const bg = sColor(dim.score);
-          const fg = sTColor(dim.score);
-          const words = dim.label.split(" ");
-          const twoLine = words.length > 1;
-          const dv = dim.delta;
-          const arrow = dv === null ? null : dv > 0.005 ? "↑" : dv < -0.005 ? "↓" : "±";
-          const dColor = dv === null ? fg : dv > 0.005 ? "#1B5E20" : dv < -0.005 ? "#B71C1C" : fg;
+        {/* ── Rotating group: spokes + nodes ── */}
+        <g
+          style={{
+            transformOrigin: `${cx}px ${cy}px`,
+            transform: `rotate(${rotation}deg)`,
+            transition: "transform 0.65s cubic-bezier(0.34, 1.26, 0.64, 1)",
+          }}
+        >
+          {dims.map((dim, i) => {
+            const deg = -90 + sliceAngle * i;
+            const rad = (deg * Math.PI) / 180;
+            const x = cx + orbitR * Math.cos(rad);
+            const y = cy + orbitR * Math.sin(rad);
+            const isActive = i === activeIdx;
+            const r = isActive ? activeR : nodeR;
+            const labelFs = isActive ? 8.5 : 7;
+            const scoreFs = isActive ? 19 : 15;
+            const bg = sColor(dim.score);
+            const fg = sTColor(dim.score);
 
-          return (
-            <g key={dim.id}>
-              <circle cx={x} cy={y} r={nodeR} fill={bg} />
-              {twoLine ? (
-                <>
-                  <text x={x} y={y - 17} textAnchor="middle" fontSize="7.5" fontWeight="700"
-                    fill={fg} letterSpacing="1" fontFamily={font}>{words[0].toUpperCase()}</text>
-                  <text x={x} y={y - 8} textAnchor="middle" fontSize="7.5" fontWeight="700"
-                    fill={fg} letterSpacing="1" fontFamily={font}>{words[1].toUpperCase()}</text>
-                  <text x={x} y={y + 8} textAnchor="middle" fontSize="17" fontWeight="800"
-                    fill={fg} fontFamily={font}>{formatScoreForDisplay(dim.score)}</text>
-                  {arrow && dv !== null && (
-                    <text x={x} y={y + 23} textAnchor="middle" fontSize="9" fontWeight="600"
-                      fill={dColor} fontFamily={font}>
-                      {arrow} {Math.abs(dv * 10).toFixed(1)}
-                    </text>
-                  )}
-                </>
-              ) : (
-                <>
-                  <text x={x} y={y - 11} textAnchor="middle" fontSize="7.5" fontWeight="700"
-                    fill={fg} letterSpacing="1" fontFamily={font}>{dim.label.toUpperCase()}</text>
-                  <text x={x} y={y + 6} textAnchor="middle" fontSize="17" fontWeight="800"
-                    fill={fg} fontFamily={font}>{formatScoreForDisplay(dim.score)}</text>
-                  {arrow && dv !== null && (
-                    <text x={x} y={y + 21} textAnchor="middle" fontSize="9" fontWeight="600"
-                      fill={dColor} fontFamily={font}>
-                      {arrow} {Math.abs(dv * 10).toFixed(1)}
-                    </text>
-                  )}
-                </>
-              )}
-            </g>
-          );
-        })}
+            return (
+              <g
+                key={dim.id}
+                onClick={() => handleNodeClick(i)}
+                style={{ cursor: "pointer" }}
+              >
+                {/* Spoke — drawn before node so it sits under */}
+                <line
+                  x1={cx} y1={cy} x2={x} y2={y}
+                  stroke={isActive ? "#89AACA" : "#C0D0DC"}
+                  strokeWidth={isActive ? 1.5 : 0.8}
+                />
+
+                {/* 3D sphere: shadowed base + gradient sheen overlay */}
+                <circle cx={x} cy={y} r={r} fill={bg} filter="url(#dw-node-shadow)" />
+                <circle
+                  cx={x} cy={y} r={r}
+                  fill={`url(#dw-ng-${i})`}
+                  style={{ pointerEvents: "none" }}
+                />
+
+                {/* Counter-rotating label group — stays upright as wheel spins */}
+                <g
+                  style={{
+                    transformOrigin: `${x}px ${y}px`,
+                    transform: `rotate(${-rotation}deg)`,
+                    transition: "transform 0.65s cubic-bezier(0.34, 1.26, 0.64, 1)",
+                  }}
+                >
+                  <text
+                    x={x}
+                    y={y - (isActive ? 6 : 5)}
+                    textAnchor="middle"
+                    fontSize={labelFs}
+                    fontWeight={700}
+                    fill={fg}
+                    letterSpacing={0.9}
+                    fontFamily={font}
+                  >
+                    {dim.label.toUpperCase()}
+                  </text>
+                  <text
+                    x={x}
+                    y={y + (isActive ? 14 : 11)}
+                    textAnchor="middle"
+                    fontSize={scoreFs}
+                    fontWeight={800}
+                    fill={fg}
+                    fontFamily={font}
+                  >
+                    {formatScoreForDisplay(dim.score, 1)}
+                  </text>
+                </g>
+              </g>
+            );
+          })}
+        </g>
+
+        {/* ── Fixed center core — 3D sphere ── */}
+        <circle
+          cx={cx} cy={cy} r={coreR}
+          fill={sColor(orgScore)}
+          filter="url(#dw-core-shadow)"
+        />
+        <circle
+          cx={cx} cy={cy} r={coreR}
+          fill="url(#dw-core-ng)"
+          style={{ pointerEvents: "none" }}
+        />
+        <text
+          x={cx} y={cy - 16}
+          textAnchor="middle"
+          fontSize={7.5}
+          fontWeight={700}
+          fill={sTColor(orgScore)}
+          letterSpacing={2}
+          fontFamily={font}
+          opacity={0.8}
+        >
+          OVERALL INDEX
+        </text>
+        <text
+          x={cx} y={cy + 14}
+          textAnchor="middle"
+          fontSize={26}
+          fontWeight={800}
+          fill={sTColor(orgScore)}
+          fontFamily={font}
+        >
+          {formatScoreForDisplay(orgScore, 1)}
+        </text>
       </svg>
     </div>
   );
@@ -456,7 +522,7 @@ function ExecOverview({
       {/* Constellation */}
       <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white to-[#EBF1F6]/60">
         <CardContent className="flex justify-center p-6">
-          <ExecutiveConstellation dims={dims} orgScore={orgScore} orgDelta={orgDelta} prior={prior} />
+          <DimensionWheel dims={dims} orgScore={orgScore} />
         </CardContent>
       </Card>
 
