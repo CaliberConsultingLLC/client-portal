@@ -1,24 +1,33 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
+  Users,
   BarChart3,
+  PanelsTopLeft,
   FileText,
   FolderOpen,
   LifeBuoy,
+  ClipboardList,
+  Megaphone,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { CaliberLogo } from "@/components/shared/caliber-logo";
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { AppTopBanner } from "@/components/shared/app-top-banner";
 import { FirebaseSignOutButton } from "@/components/auth/firebase-sign-out-button";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Home", href: "/portal", icon: LayoutDashboard },
+  { label: "Home", href: "/portal", icon: LayoutDashboard, exact: true },
   { label: "Clients", href: "/portal/clients", icon: Building2 },
+  { label: "Users", href: "/portal/users", icon: Users },
   { label: "Dashboards", href: "/portal/dashboards", icon: BarChart3 },
+  { label: "Perspectives", href: "/portal/perspectives", icon: PanelsTopLeft },
   { label: "Reports", href: "/portal/reports", icon: FileText },
+  { label: "Census", href: "/portal/census", icon: ClipboardList },
+  { label: "Campaigns", href: "/portal/campaigns", icon: Megaphone },
   { label: "Documents", href: "/portal/documents", icon: FolderOpen },
   { label: "Resources", href: "/portal/resources", icon: LifeBuoy },
 ];
@@ -26,62 +35,105 @@ const navItems = [
 interface PortalShellProps {
   children: React.ReactNode;
   userName?: string | null;
-  roleLabel?: string | null;
+  isInternalUser?: boolean;
+  demoDashboardAssetIds?: string[];
+  hasDemoWorkspaceAccess?: boolean;
+  canManageCensus?: boolean;
+  defaultDemoLabHref?: string;
 }
 
-export function PortalShell({ children, userName, roleLabel }: PortalShellProps) {
+function normalizeDashboardAssetId(assetId: string) {
+  return assetId.split("--")[0] ?? assetId;
+}
+
+export function PortalShell({
+  children,
+  userName,
+  isInternalUser = false,
+  demoDashboardAssetIds = [],
+  hasDemoWorkspaceAccess = false,
+  canManageCensus = false,
+  defaultDemoLabHref = "/portal/dashboards/collaboration-dashboard?demoLab=open",
+}: PortalShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const visibleNavItems = navItems.filter((item) => {
+    if (
+      item.href === "/portal/clients" ||
+      item.href === "/portal/users" ||
+      item.href === "/portal/perspectives"
+    ) {
+      return isInternalUser;
+    }
+
+    if (item.href === "/portal/census") {
+      return canManageCensus;
+    }
+
+    return true;
+  });
+  const dashboardPathParts = pathname.split("/").filter(Boolean);
+  const isDashboardRoute =
+    dashboardPathParts.length === 3 &&
+    dashboardPathParts[0] === "portal" &&
+    dashboardPathParts[1] === "dashboards";
+  const currentDashboardAssetId = isDashboardRoute ? dashboardPathParts[2] ?? "" : "";
+  const isCollaborationDashboardRoute =
+    isDashboardRoute && normalizeDashboardAssetId(currentDashboardAssetId) === "collaboration-dashboard";
+  const isDemoDashboardRoute = demoDashboardAssetIds.includes(currentDashboardAssetId);
+  const isDemoLabOpen = searchParams.get("demoLab") === "open";
+  const collaborationDashboardHref =
+    isCollaborationDashboardRoute && isDemoLabOpen
+      ? pathname
+      : isCollaborationDashboardRoute
+        ? `${pathname}?${new URLSearchParams({ demoLab: "open" }).toString()}`
+        : defaultDemoLabHref;
+  const showDemoLabButton =
+    isDashboardRoute && (isInternalUser || isDemoDashboardRoute || hasDemoWorkspaceAccess);
 
   return (
-    <div className="min-h-screen bg-[#EEF2F4]">
-      <header className="sticky top-0 z-50 border-b border-[#D6DEE3] bg-white/92 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-6">
-            <Link href="/portal">
-              <CaliberLogo size="sm" />
-            </Link>
-            <nav className="flex flex-wrap items-center gap-2">
-              {navItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/portal" && pathname.startsWith(item.href));
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-[#102F4A] text-white"
-                        : "text-[#516873] hover:bg-[#E9EEF1] hover:text-[#102533]"
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 lg:justify-end">
-            <div className="text-right">
-              <p className="text-sm font-semibold text-[#102533]">{userName || "Portal User"}</p>
-              <p className="text-xs uppercase tracking-[0.18em] text-[#6C818C]">
-                {roleLabel || "Client Access"}
-              </p>
-            </div>
-            <FirebaseSignOutButton
-              redirectTo="/portal-login"
-              variant="outline"
-              className="rounded-full border-[#C9D2D8] bg-white px-4 text-[#102533] hover:bg-[#F5F8FA]"
-            />
-          </div>
+    <div className="min-h-screen bg-[#EEF2EE]">
+      <AppTopBanner
+        brand="caliber"
+        homeHref="/portal"
+        tone="dark"
+        items={visibleNavItems.map((item) => ({
+          label: item.label,
+          href: item.href,
+          exact: item.exact,
+        }))}
+      >
+        <div className="text-right">
+          <p className="text-sm font-semibold text-white">{userName || "Portal User"}</p>
         </div>
-      </header>
+        {showDemoLabButton ? (
+          <Button
+            asChild
+            variant="outline"
+            className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
+          >
+            <Link href={collaborationDashboardHref}>
+              {isDemoLabOpen ? "Hide Demo Lab" : "Open Demo Lab"}
+            </Link>
+          </Button>
+        ) : null}
+        <FirebaseSignOutButton
+          redirectTo="/login"
+          variant="outline"
+          className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
+        />
+      </AppTopBanner>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
+      <main
+        className={cn(
+          "mx-auto w-full",
+          isDashboardRoute
+            ? "px-0 pb-8"
+            : "min-h-[calc(100vh-var(--app-top-banner-height))] bg-[#E8ECE9]"
+        )}
+      >
+        {children}
+      </main>
     </div>
   );
 }
