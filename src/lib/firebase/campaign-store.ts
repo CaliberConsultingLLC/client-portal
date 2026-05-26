@@ -8,6 +8,7 @@ import type {
   CampaignStatus,
   CampaignSummary,
 } from "@/types/campaign";
+import { getCensusPreviewById } from "./census-store";
 import { getFirebaseAdminFirestore } from "./admin";
 
 const CAMPAIGNS_COLLECTION = "campaigns";
@@ -37,6 +38,12 @@ interface CreateCampaignInput {
   config: CampaignConfigInput;
   createdBy: string;
 }
+
+interface CampaignActionActor {
+  email: string;
+}
+
+type CampaignActionPayload = Record<string, unknown>;
 
 function chunkArray<T>(items: T[], size: number) {
   const chunks: T[][] = [];
@@ -212,6 +219,100 @@ function mapActivityLog(id: string, data: FirebaseFirestore.DocumentData): Campa
   };
 }
 
+async function surveyMonkeyRequest(method: string, path: string, body?: unknown) {
+  const token = process.env.SURVEYMONKEY_TOKEN;
+
+  if (!token) {
+    throw new Error("Missing SURVEYMONKEY_TOKEN.");
+  }
+
+  const response = await fetch(`https://api.surveymonkey.com/v3${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const result = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(`SurveyMonkey API error: ${JSON.stringify(result)}`);
+  }
+
+  return result;
+}
+
+async function executeCampaignAction({
+  campaignId,
+  action,
+  triggeredBy,
+  dryRun,
+  payload,
+  recipientsAffected = [],
+  liveRequest,
+}: {
+  campaignId: string;
+  action: string;
+  triggeredBy: string;
+  dryRun: boolean;
+  payload: CampaignActionPayload;
+  recipientsAffected?: string[];
+  liveRequest?: {
+    method: string;
+    path: string;
+    body?: unknown;
+  };
+}) {
+  const campaignRef = getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId);
+
+  if (dryRun) {
+    await campaignRef.collection(ACTIVITY_LOG_COLLECTION).add({
+      timestamp: new Date(),
+      action,
+      triggeredBy,
+      dryRun: true,
+      payload,
+      result: "SIMULATED_SUCCESS",
+      recipientsAffected,
+      metadata: {},
+    });
+
+    return { success: true, simulated: true, id: "DRY_RUN_ID" };
+  }
+
+  if (!liveRequest) {
+    await campaignRef.collection(ACTIVITY_LOG_COLLECTION).add({
+      timestamp: new Date(),
+      action,
+      triggeredBy,
+      dryRun: false,
+      payload,
+      result: "SUCCESS",
+      recipientsAffected,
+      metadata: {},
+    });
+
+    return { success: true };
+  }
+
+  const result = await surveyMonkeyRequest(liveRequest.method, liveRequest.path, liveRequest.body);
+
+  await campaignRef.collection(ACTIVITY_LOG_COLLECTION).add({
+    timestamp: new Date(),
+    action,
+    triggeredBy,
+    dryRun: false,
+    payload,
+    result,
+    recipientsAffected,
+    metadata: {},
+  });
+
+  return result;
+}
+
 export async function listCampaignsForClientIds(clientIds: string[]) {
   if (clientIds.length === 0) {
     return [];
@@ -376,4 +477,400 @@ export async function updateCampaignConfig(
   });
 
   return getCampaignById(campaignId);
+}
+
+function findFirstValue(row: Record<string, string>, aliases: string[]) {
+  const normalizedAliases = new Set(aliases.map((alias) => alias.toLowerCase().replace(/[^a-z0-9]/g, "")));
+  const match = Object.entries(row).find(([key]) =>
+    normalizedAliases.has(key.toLowerCase().replace(/[^a-z0-9]/g, ""))
+  );
+
+  return match?.[1]?.trim() || null;
+}
+
+function buildRecipientMap(
+  rows: Record<string, string>[],
+  channels: CampaignChannel[]
+): Record<string, CampaignRecipient> {
+  return Object.fromEntries(
+    rows.flatMap((row, index) => {
+      const eid = findFirstValue(row, ["eid", "id", "employee id", "employeeid"]) ?? `ROW_${index + 1}`;
+      const firstName = findFirstValue(row, ["first name", "firstname", "given name"]);
+      const lastName = findFirstValue(row, ["last name", "lastname", "surname"]);
+      const email = findFirstValue(row, ["email", "email address", "work email"]);
+      const phone = findFirstValue(row, ["phone", "phone number", "mobile", "mobile phone", "cell phone"]);
+
+      return [
+        [
+          eid,
+          {
+            eid,
+            firstName,
+            lastName,
+            email,
+            phone,
+            smRecipientId: null,
+            responded: false,
+            respondedAt: null,
+            respondedVia: null,
+            remindersReceived: 0,
+            lastReminderDate: null,
+            channels,
+          },
+        ],
+      ];
+    })
+  );
+}
+
+export async function launchCampaign(campaignId: string, actor: CampaignActionActor) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  if (campaign.status !== "configured") {
+    throw new Error(`Campaign must be configured before launch. Current status: ${campaign.status}`);
+  }
+
+  const dryRun = campaign.config.dryRun;
+  const preview = await getCensusPreviewById(campaign.censusId);
+
+  if (!preview.upload || preview.rows.length === 0) {
+    throw new Error("Campaign census is missing or has no processed rows.");
+  }
+
+  const recipients = preview.rows;
+  const recipientMap = buildRecipientMap(recipients, campaign.config.channels);
+  const contactPayload = Object.values(recipientMap).map((recipient) => ({
+    email: recipient.email,
+    first_name: recipient.firstName,
+    last_name: recipient.lastName,
+    custom_fields: { 1: recipient.eid },
+  }));
+
+  const collectorResult = await executeCampaignAction({
+    campaignId,
+    action: "EMAIL_COLLECTOR_CREATED",
+    triggeredBy: actor.email,
+    dryRun,
+    payload: {
+      endpoint: `POST /v3/surveys/${campaign.smSurveyId}/collectors`,
+      body: { type: "email", name: `${campaign.surveyLabel} - Email` },
+    },
+    liveRequest: {
+      method: "POST",
+      path: `/surveys/${campaign.smSurveyId}/collectors`,
+      body: { type: "email", name: `${campaign.surveyLabel} - Email` },
+    },
+  });
+  const collectorId = typeof collectorResult.id === "string" ? collectorResult.id : "DRY_RUN_ID";
+
+  await executeCampaignAction({
+    campaignId,
+    action: "CONTACTS_UPLOADED",
+    triggeredBy: actor.email,
+    dryRun,
+    payload: {
+      endpoint: `POST /v3/collectors/${collectorId}/messages`,
+      body: { recipients: contactPayload },
+    },
+    recipientsAffected: Object.keys(recipientMap),
+    liveRequest: {
+      method: "POST",
+      path: `/collectors/${collectorId}/messages`,
+      body: { recipients: contactPayload },
+    },
+  });
+
+  await executeCampaignAction({
+    campaignId,
+    action: "INITIAL_INVITE_SENT",
+    triggeredBy: actor.email,
+    dryRun,
+    payload: {
+      endpoint: `POST /v3/collectors/${collectorId}/messages`,
+      body: { type: "invite_email", subject: `Survey: ${campaign.surveyLabel}` },
+    },
+    recipientsAffected: Object.keys(recipientMap),
+    liveRequest: {
+      method: "POST",
+      path: `/collectors/${collectorId}/messages`,
+      body: { type: "invite_email", subject: `Survey: ${campaign.surveyLabel}` },
+    },
+  });
+
+  await getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId).update({
+    status: "active",
+    recipientMap,
+    totalRecipients: Object.keys(recipientMap).length,
+    launchedAt: new Date(),
+    updatedAt: new Date(),
+    "collectors.email": {
+      smCollectorId: collectorId,
+      type: "email",
+      createdAt: new Date(),
+      status: "active",
+    },
+  });
+
+  return { success: true, dryRun, recipientCount: Object.keys(recipientMap).length };
+}
+
+export async function syncCampaignResponses(campaignId: string, actor: CampaignActionActor) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  if (campaign.config.dryRun) {
+    await executeCampaignAction({
+      campaignId,
+      action: "RESPONSES_SYNCED",
+      triggeredBy: actor.email,
+      dryRun: true,
+      payload: {
+        endpoint: `GET /v3/surveys/${campaign.smSurveyId}/responses/bulk?status=completed`,
+        note: "Dry run - no real responses fetched.",
+      },
+    });
+
+    return { success: true, dryRun: true, newResponses: 0 };
+  }
+
+  const responsePayload = await surveyMonkeyRequest(
+    "GET",
+    `/surveys/${campaign.smSurveyId}/responses/bulk?status=completed`
+  );
+  const recipientMap = { ...campaign.recipientMap };
+  let newResponses = 0;
+
+  for (const response of Array.isArray(responsePayload.data) ? responsePayload.data : []) {
+    const respondentEmail = response?.metadata?.contact?.email?.value;
+    const eid = Object.keys(recipientMap).find((key) => recipientMap[key]?.email === respondentEmail);
+
+    if (eid && !recipientMap[eid].responded) {
+      recipientMap[eid] = {
+        ...recipientMap[eid],
+        responded: true,
+        respondedAt: typeof response.date_modified === "string" ? response.date_modified : new Date().toISOString(),
+        respondedVia: "email",
+      };
+      newResponses += 1;
+    }
+  }
+
+  const respondedCount = Object.values(recipientMap).filter((recipient) => recipient.responded).length;
+  const responseRate = campaign.totalRecipients > 0
+    ? Math.round((respondedCount / campaign.totalRecipients) * 100)
+    : 0;
+
+  await getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId).update({
+    recipientMap,
+    respondedCount,
+    responseRate,
+    updatedAt: new Date(),
+  });
+
+  await executeCampaignAction({
+    campaignId,
+    action: "RESPONSES_SYNCED",
+    triggeredBy: actor.email,
+    dryRun: false,
+    payload: {
+      endpoint: `GET /v3/surveys/${campaign.smSurveyId}/responses/bulk?status=completed`,
+    },
+    recipientsAffected: Object.values(recipientMap).filter((recipient) => recipient.responded).map((recipient) => recipient.eid),
+  });
+
+  return { success: true, dryRun: false, newResponses, respondedCount, responseRate };
+}
+
+export async function sendCampaignReminder(
+  campaignId: string,
+  channel: "email" | "text" | "all",
+  actor: CampaignActionActor
+) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  if (campaign.status !== "active") {
+    throw new Error(`Campaign must be active to send reminders. Current status: ${campaign.status}`);
+  }
+
+  if (campaign.config.reminderSchedule.remindersSent >= campaign.config.reminderSchedule.maxReminders) {
+    throw new Error(`Maximum reminders (${campaign.config.reminderSchedule.maxReminders}) already sent.`);
+  }
+
+  await syncCampaignResponses(campaignId, actor);
+
+  const refreshedCampaign = await getCampaignById(campaignId);
+
+  if (!refreshedCampaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  const recipientMap = { ...refreshedCampaign.recipientMap };
+  const nonRespondents = Object.values(recipientMap).filter((recipient) => !recipient.responded);
+  const nonRespondentEids = nonRespondents.map((recipient) => recipient.eid);
+  const dryRun = refreshedCampaign.config.dryRun;
+
+  if ((channel === "email" || channel === "all") && refreshedCampaign.config.channels.includes("email")) {
+    await executeCampaignAction({
+      campaignId,
+      action: "EMAIL_REMINDER_SENT",
+      triggeredBy: actor.email,
+      dryRun,
+      payload: {
+        endpoint: `POST /v3/collectors/${refreshedCampaign.collectors.email?.smCollectorId ?? "DRY_RUN_ID"}/messages`,
+        body: { type: "reminder", subject: `Reminder: ${refreshedCampaign.surveyLabel}` },
+        nonRespondentCount: nonRespondents.length,
+      },
+      recipientsAffected: nonRespondentEids,
+      liveRequest: {
+        method: "POST",
+        path: `/collectors/${refreshedCampaign.collectors.email?.smCollectorId}/messages`,
+        body: { type: "reminder", subject: `Reminder: ${refreshedCampaign.surveyLabel}` },
+      },
+    });
+  }
+
+  if ((channel === "text" || channel === "all") && refreshedCampaign.config.channels.includes("text")) {
+    const textRecipients = nonRespondents.filter((recipient) => recipient.phone);
+
+    await executeCampaignAction({
+      campaignId,
+      action: "TEXT_REMINDER_SENT",
+      triggeredBy: actor.email,
+      dryRun: true,
+      payload: {
+        note: "TEXT COLLECTOR REQUIRES CHROME AUTOMATION - NOT API-SUPPORTED",
+        recipientPhones: textRecipients.map((recipient) => ({ eid: recipient.eid, phone: recipient.phone })),
+        nonRespondentCount: textRecipients.length,
+      },
+      recipientsAffected: textRecipients.map((recipient) => recipient.eid),
+    });
+  }
+
+  for (const recipient of nonRespondents) {
+    recipientMap[recipient.eid] = {
+      ...recipientMap[recipient.eid],
+      remindersReceived: recipientMap[recipient.eid].remindersReceived + 1,
+      lastReminderDate: new Date().toISOString(),
+    };
+  }
+
+  await getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId).update({
+    recipientMap,
+    "config.reminderSchedule.remindersSent": refreshedCampaign.config.reminderSchedule.remindersSent + 1,
+    "config.reminderSchedule.lastReminderDate": new Date(),
+    updatedAt: new Date(),
+  });
+
+  return { success: true, dryRun, nonRespondentCount: nonRespondents.length };
+}
+
+export async function closeCampaign(campaignId: string, actor: CampaignActionActor) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  if (campaign.collectors.email?.smCollectorId) {
+    await executeCampaignAction({
+      campaignId,
+      action: "COLLECTOR_CLOSED",
+      triggeredBy: actor.email,
+      dryRun: campaign.config.dryRun,
+      payload: {
+        endpoint: `PATCH /v3/collectors/${campaign.collectors.email.smCollectorId}`,
+        body: { status: "closed" },
+      },
+      liveRequest: {
+        method: "PATCH",
+        path: `/collectors/${campaign.collectors.email.smCollectorId}`,
+        body: { status: "closed" },
+      },
+    });
+  }
+
+  await getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId).update({
+    status: "closed",
+    closedAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  return { success: true, dryRun: campaign.config.dryRun, finalResponseRate: campaign.responseRate };
+}
+
+export async function pauseCampaign(campaignId: string, actor: CampaignActionActor) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  if (campaign.status !== "active") {
+    throw new Error("Can only pause active campaigns.");
+  }
+
+  await getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId).update({
+    status: "paused",
+    updatedAt: new Date(),
+  });
+
+  await executeCampaignAction({
+    campaignId,
+    action: "CAMPAIGN_PAUSED",
+    triggeredBy: actor.email,
+    dryRun: campaign.config.dryRun,
+    payload: { campaignId },
+  });
+
+  return { success: true };
+}
+
+export async function resumeCampaign(campaignId: string, actor: CampaignActionActor) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  if (campaign.status !== "paused") {
+    throw new Error("Can only resume paused campaigns.");
+  }
+
+  await getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId).update({
+    status: "active",
+    updatedAt: new Date(),
+  });
+
+  await executeCampaignAction({
+    campaignId,
+    action: "CAMPAIGN_RESUMED",
+    triggeredBy: actor.email,
+    dryRun: campaign.config.dryRun,
+    payload: { campaignId },
+  });
+
+  return { success: true };
 }

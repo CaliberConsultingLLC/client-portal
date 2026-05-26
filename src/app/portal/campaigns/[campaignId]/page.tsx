@@ -56,7 +56,7 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
             </p>
           </div>
           <div className="space-y-3">
-            <CampaignActionButtons status={campaign.status} />
+            <CampaignActionButtons campaignId={campaign.id} status={campaign.status} />
             <Button asChild variant="outline" className="rounded-full border-[#C9D2D8]">
               <Link href="/portal/campaigns">
                 <ArrowLeft className="h-4 w-4" />
