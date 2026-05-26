@@ -1,15 +1,21 @@
 import { Megaphone } from "lucide-react";
 import { AdminDirectoryShell } from "@/components/portal/admin-directory-shell";
+import { CampaignCreateModal } from "@/components/portal/campaign-create-modal";
 import { CampaignList } from "@/components/portal/campaign-readonly-sections";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireFirebasePortalUser } from "@/lib/firebase/auth";
 import { listCampaignsForClientIds } from "@/lib/firebase/campaign-store";
+import { listCensusUploads } from "@/lib/firebase/census-store";
 import { getAccessiblePortalClients } from "@/lib/firebase/portal-access";
 
 export default async function PortalCampaignsPage() {
   const user = await requireFirebasePortalUser();
   const clients = await getAccessiblePortalClients(user);
-  const campaigns = await listCampaignsForClientIds(clients.map((client) => client.id));
+  const clientIds = clients.map((client) => client.id);
+  const [campaigns, censusUploads] = await Promise.all([
+    listCampaignsForClientIds(clientIds),
+    listCensusUploads(["demo"]),
+  ]);
   const clientNamesById = Object.fromEntries(clients.map((client) => [client.id, client.name]));
   const activeCampaigns = campaigns.filter((campaign) =>
     ["configured", "launched", "active", "paused"].includes(campaign.status)
@@ -64,6 +70,10 @@ export default async function PortalCampaignsPage() {
               tracking workflows.
             </p>
           </div>
+          <CampaignCreateModal
+            clients={clients.map((client) => ({ id: client.id, name: client.name }))}
+            censusUploads={censusUploads}
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">

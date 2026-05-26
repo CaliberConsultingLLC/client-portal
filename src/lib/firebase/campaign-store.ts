@@ -12,6 +12,31 @@ import { getFirebaseAdminFirestore } from "./admin";
 
 const CAMPAIGNS_COLLECTION = "campaigns";
 const ACTIVITY_LOG_COLLECTION = "activityLog";
+export const ALLOWED_AUTOMATION_CLIENTS = ["demo"];
+
+interface CampaignConfigInput {
+  channels: CampaignChannel[];
+  surveyWindowStart: Date;
+  surveyWindowEnd: Date;
+  reminderSchedule: {
+    frequency: "daily" | "weekly" | "biweekly" | "custom";
+    dayOfWeek?: string | null;
+    maxReminders: number;
+  };
+  targetResponseRate: number;
+  autoCloseOnTarget: boolean;
+  dryRun: boolean;
+}
+
+interface CreateCampaignInput {
+  clientId: string;
+  censusId: string;
+  surveyLabel: string;
+  smSurveyId: string;
+  totalRecipients: number;
+  config: CampaignConfigInput;
+  createdBy: string;
+}
 
 function chunkArray<T>(items: T[], size: number) {
   const chunks: T[][] = [];
@@ -227,4 +252,128 @@ export async function listCampaignActivityLog(campaignId: string, limit = 50) {
     .get();
 
   return snapshot.docs.map((doc) => mapActivityLog(doc.id, doc.data()));
+}
+
+function assertAutomationClientAllowed(clientId: string) {
+  if (!ALLOWED_AUTOMATION_CLIENTS.includes(clientId)) {
+    throw new Error("CLIENT_NOT_ENABLED_FOR_AUTOMATION");
+  }
+}
+
+function buildConfig(input: CampaignConfigInput) {
+  return {
+    channels: input.channels,
+    surveyWindowStart: input.surveyWindowStart,
+    surveyWindowEnd: input.surveyWindowEnd,
+    reminderSchedule: {
+      frequency: input.reminderSchedule.frequency,
+      dayOfWeek: input.reminderSchedule.dayOfWeek ?? null,
+      maxReminders: input.reminderSchedule.maxReminders,
+      remindersSent: 0,
+      lastReminderDate: null,
+      nextReminderDate: null,
+    },
+    targetResponseRate: input.targetResponseRate,
+    autoCloseOnTarget: input.autoCloseOnTarget,
+    dryRun: input.dryRun !== false,
+  };
+}
+
+export async function createCampaign(input: CreateCampaignInput) {
+  assertAutomationClientAllowed(input.clientId);
+
+  const firestore = getFirebaseAdminFirestore();
+  const campaignId = `camp_${input.clientId}_${input.smSurveyId}_${Date.now()}`;
+  const campaignRef = firestore.collection(CAMPAIGNS_COLLECTION).doc(campaignId);
+  const now = new Date();
+
+  await campaignRef.set({
+    campaignId,
+    clientId: input.clientId,
+    censusId: input.censusId,
+    surveyLabel: input.surveyLabel,
+    smSurveyId: input.smSurveyId,
+    collectors: {},
+    config: buildConfig(input.config),
+    status: "configured",
+    responseRate: 0,
+    respondedCount: 0,
+    totalRecipients: input.totalRecipients,
+    recipientMap: {},
+    createdAt: now,
+    createdBy: input.createdBy,
+    updatedAt: now,
+    launchedAt: null,
+    closedAt: null,
+  });
+
+  await campaignRef.collection(ACTIVITY_LOG_COLLECTION).add({
+    timestamp: now,
+    action: "CAMPAIGN_CREATED",
+    triggeredBy: input.createdBy,
+    dryRun: input.config.dryRun !== false,
+    payload: {
+      clientId: input.clientId,
+      censusId: input.censusId,
+      smSurveyId: input.smSurveyId,
+      surveyLabel: input.surveyLabel,
+    },
+    result: "CREATED_FROM_PORTAL",
+    recipientsAffected: [],
+    metadata: {
+      phase: 3,
+    },
+  });
+
+  return getCampaignById(campaignId);
+}
+
+export async function updateCampaignConfig(
+  campaignId: string,
+  config: CampaignConfigInput,
+  triggeredBy: string
+) {
+  const campaign = await getCampaignById(campaignId);
+
+  if (!campaign) {
+    throw new Error("CAMPAIGN_NOT_FOUND");
+  }
+
+  assertAutomationClientAllowed(campaign.clientId);
+
+  const campaignRef = getFirebaseAdminFirestore().collection(CAMPAIGNS_COLLECTION).doc(campaignId);
+  const nextConfig = {
+    ...buildConfig(config),
+    reminderSchedule: {
+      ...buildConfig(config).reminderSchedule,
+      remindersSent: campaign.config.reminderSchedule.remindersSent,
+      lastReminderDate: campaign.config.reminderSchedule.lastReminderDate
+        ? new Date(campaign.config.reminderSchedule.lastReminderDate)
+        : null,
+      nextReminderDate: campaign.config.reminderSchedule.nextReminderDate
+        ? new Date(campaign.config.reminderSchedule.nextReminderDate)
+        : null,
+    },
+  };
+
+  await campaignRef.update({
+    config: nextConfig,
+    status: campaign.status === "draft" ? "configured" : campaign.status,
+    updatedAt: new Date(),
+  });
+
+  await campaignRef.collection(ACTIVITY_LOG_COLLECTION).add({
+    timestamp: new Date(),
+    action: "CAMPAIGN_CONFIGURED",
+    triggeredBy,
+    dryRun: nextConfig.dryRun,
+    payload: nextConfig,
+    result: "CONFIG_UPDATED_FROM_PORTAL",
+    recipientsAffected: [],
+    metadata: {
+      phase: 3,
+    },
+  });
+
+  return getCampaignById(campaignId);
 }

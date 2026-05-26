@@ -3,10 +3,11 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import {
   ActivityLog,
-  CampaignConfigurationSummary,
   CampaignOverview,
   RecipientTable,
 } from "@/components/portal/campaign-readonly-sections";
+import { CampaignActionButtons } from "@/components/portal/campaign-action-buttons";
+import { CampaignConfigurationPanel } from "@/components/portal/campaign-configuration-panel";
 import { CampaignStatusBadge } from "@/components/portal/campaign-status-badge";
 import { PortalContentFrame } from "@/components/portal/portal-content-frame";
 import { Button } from "@/components/ui/button";
@@ -54,16 +55,19 @@ export default async function CampaignDetailPage({ params }: CampaignDetailPageP
               {client?.name ?? campaign.clientId} · SM Survey {campaign.smSurveyId} · Census {campaign.censusId}
             </p>
           </div>
-          <Button asChild variant="outline" className="rounded-full border-[#C9D2D8]">
-            <Link href="/portal/campaigns">
-              <ArrowLeft className="h-4 w-4" />
-              Back to campaigns
-            </Link>
-          </Button>
+          <div className="space-y-3">
+            <CampaignActionButtons status={campaign.status} />
+            <Button asChild variant="outline" className="rounded-full border-[#C9D2D8]">
+              <Link href="/portal/campaigns">
+                <ArrowLeft className="h-4 w-4" />
+                Back to campaigns
+              </Link>
+            </Button>
+          </div>
         </div>
 
         <CampaignOverview campaign={campaign} />
-        <CampaignConfigurationSummary campaign={campaign} />
+        <CampaignConfigurationPanel campaign={campaign} />
         <RecipientTable recipients={recipients} />
         <ActivityLog entries={activityLog} />
       </div>
