@@ -46,6 +46,8 @@ function SegmentCard({ segment, deptId, minN, companyAvg, scoreColor }) {
     .filter(Boolean)
     .sort((left, right) => right.current - left.current);
 
+  if (rows.length === 0) return null;
+
   return (
     <div className="card">
       <div className="card-head"><h3 className="card-title">{segment.label}</h3></div>
@@ -121,6 +123,16 @@ export function EEDepartmentReport({
   const previous = timeline.find((item) => item.id === priorCampaignId) ?? comparisons[comparisons.length - 1] ?? null;
   const campaigns = previous ? [previous, curCamp] : [curCamp];
   const minN = data.segmentMinResponses ?? 5;
+  const visibleSegments = useMemo(
+    () =>
+      segments.filter((segment) =>
+        segment.groups.some((group) => {
+          const cell = group.byDept[deptId];
+          return Boolean(cell && cell.responses >= minN);
+        })
+      ),
+    [deptId, minN, segments]
+  );
 
   const deptIndex = (index, campaign) => round1(mean(index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign))));
   const deptTotal = (campaign) => round1(mean(indexes.flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign)))));
@@ -215,9 +227,13 @@ export function EEDepartmentReport({
             </table>
           </div>
 
-          <p className="slabel" style={{ marginBottom: 6 }}>Results by Segment · {current.label} favorability</p>
-          <div className="coavg-note" style={{ marginBottom: 10 }}><span className="dash" /> Dotted line marks the company-wide average.</div>
-          <div className="seg-grid">{segments.map((segment) => <SegmentCard key={segment.id} segment={segment} deptId={deptId} minN={minN} companyAvg={companyOverall(curCamp)} scoreColor={scoreColor} />)}</div>
+          {visibleSegments.length > 0 ? (
+            <>
+              <p className="slabel" style={{ marginBottom: 6 }}>Results by Segment · {current.label} favorability</p>
+              <div className="coavg-note" style={{ marginBottom: 10 }}><span className="dash" /> Dotted line marks the company-wide average.</div>
+              <div className="seg-grid">{visibleSegments.map((segment) => <SegmentCard key={segment.id} segment={segment} deptId={deptId} minN={minN} companyAvg={companyOverall(curCamp)} scoreColor={scoreColor} />)}</div>
+            </>
+          ) : null}
         </div>
       </main>
 
