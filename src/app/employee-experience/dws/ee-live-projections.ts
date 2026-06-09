@@ -3,9 +3,13 @@ import type {
   EmployeeExperienceQuestionDefinition,
   EmployeeExperienceRespondent,
 } from "@/types/employee-experience";
-import { isKnownBrandSegment } from "@/lib/employee-experience/dws-dashboard";
 
 export const REPORT_SCORE_SCALE = { min: 60, mid: 72.5, max: 85 } as const;
+const UNKNOWN_BRAND_LABEL = "Unknown Brand";
+
+function isKnownBrandSegment(value: string) {
+  return Boolean(value?.trim()) && value !== UNKNOWN_BRAND_LABEL;
+}
 
 type ProjectionOptions = {
   logoUrl?: string;
