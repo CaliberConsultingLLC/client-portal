@@ -22,8 +22,8 @@ const EE_REPORT_CSS = `
 .seg-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}.seg-rows{display:flex;flex-direction:column;gap:6px}.seg-row{display:grid;grid-template-columns:minmax(120px,32%) 1fr;align-items:center;column-gap:12px;min-height:34px}.seg-name{font-size:12.5px;font-weight:600;color:var(--text-primary);text-align:right;line-height:1.18}.seg-track{position:relative;height:24px;background:var(--surface-2);border-radius:7px;overflow:hidden}.seg-bar{position:absolute;left:0;top:0;bottom:0;border-radius:7px}.seg-val{position:absolute;top:50%;left:10px;transform:translateY(-50%);font-size:12px;font-weight:800;z-index:2}.seg-n{font-size:10px;font-weight:600;color:var(--text-muted);margin-left:6px}.seg-coline{position:absolute;top:-3px;bottom:-3px;width:0;border-left:2px dotted rgba(21,34,56,.55);z-index:2}.coavg-note{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-muted);margin:2px 2px 0}.coavg-note .dash{width:18px;border-top:2px dotted rgba(21,34,56,.6)}
 .chart{position:relative}.plot{position:relative;padding-top:18px}.grid-overlay{position:absolute;top:18px;bottom:0;left:min(calc(var(--label-col) + 16px),calc(50% + 16px));right:0;pointer-events:none}.bar-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}.bar-label{text-align:right;font-size:12.5px;line-height:1.18;color:var(--text-primary);font-weight:500}.track{position:relative;height:24px}.bar{position:absolute;top:50%;transform:translateY(-50%);height:22px;border-radius:0 6px 6px 0;min-width:2px}.val-chip{position:absolute;top:50%;transform:translateY(-50%);z-index:4;font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;color:#fff}.gridline{position:absolute;top:0;bottom:0;width:0;border-left:1px dashed var(--border-strong)}.axis{position:relative;height:20px;margin-top:4px}.axis .tick{position:absolute;transform:translateX(-50%);font-size:11px;font-weight:600;color:var(--text-muted);top:2px}
 .canvas.embedded{background:#fff;min-height:auto}
-.canvas.embedded .center{margin-left:0;margin-right:0;padding:0;min-height:auto}
-.canvas.embedded .center-inner{max-width:none}
+.canvas.embedded .center{margin-left:0;margin-right:0;min-height:auto;padding:30px 30px 56px}
+.canvas.embedded .center-inner{max-width:1320px;margin:0 auto}
 @media(max-width:1180px){.canvas{background:linear-gradient(90deg,#E8ECE9 0 248px,#fff 248px 100%)}.rail{width:248px}.rail.right{display:none}.center{margin-left:248px;margin-right:0}}@media(max-width:860px){.canvas{background:#fff}.rail{position:relative;top:auto;bottom:auto;width:auto}.rail.left{left:auto;border-right:0;border-bottom:1px solid var(--rail-line)}.center{margin-left:0;margin-right:0}}@media(max-width:1080px){.seg-grid{grid-template-columns:1fr}}
 `;
 
@@ -45,13 +45,13 @@ export function isLightBand(color) {
 }
 
 export function deltaStyle(d) {
-  if (d >= 6) return { bg: "#5B8D6A", text: "#FFFFFF" };
-  if (d >= 4) return { bg: "#6E9B7B", text: "#FFFFFF" };
-  if (d >= 2) return { bg: "#88AE93", text: "#FFFFFF" };
-  if (d >= 0.05) return { bg: "#CEDFD3", text: "#244130" };
-  if (d <= -3) return { bg: "#B5746B", text: "#FFFFFF" };
-  if (d <= -1) return { bg: "#C88F87", text: "#FFFFFF" };
-  if (d <= -0.05) return { bg: "#E6C5C0", text: "#5A2D28" };
+  if (d >= 6) return { bg: "#8BA399", text: "#FFFFFF" };
+  if (d >= 4) return { bg: "#9CB2A8", text: "#FFFFFF" };
+  if (d >= 2) return { bg: "#B5C5BE", text: "#1F332A" };
+  if (d >= 0.05) return { bg: "#E2E9E5", text: "#355348" };
+  if (d <= -3) return { bg: "#B49F9C", text: "#FFFFFF" };
+  if (d <= -1) return { bg: "#C8B9B6", text: "#4E3834" };
+  if (d <= -0.05) return { bg: "#E8DFDE", text: "#5E4441" };
   return { bg: "#E2E8EF", text: "#3B4B63" };
 }
 
@@ -134,7 +134,7 @@ export function ClientMark({ client }) {
 
 export function InsightCard({ value, title, children, tone = "neutral" }) {
   const [open, setOpen] = useState(false);
-  const color = tone === "positive" ? "#6E9B7B" : tone === "negative" ? "#B5746B" : "#3B4B63";
+  const color = tone === "positive" ? "#9CB2A8" : tone === "negative" ? "#C8B9B6" : "#3B4B63";
 
   return (
     <div className="rail-ins" style={{ borderColor: tone === "neutral" ? "#8798AA" : `${color}66` }}>

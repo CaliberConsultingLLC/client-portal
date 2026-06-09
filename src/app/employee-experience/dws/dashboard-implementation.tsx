@@ -85,21 +85,14 @@ function orderedDimensionNames(questions: EmployeeExperienceQuestionDefinition[]
 const GROUPS = [
   {
     id: "executive" as const,
-    label: "Executive",
+    label: "Executive & HR",
     perspectives: [
       { id: "exec-overview" as const, label: "Campaign Overview" },
-      { id: "exec-location" as const, label: "Brand Breakdown" },
       { id: "ee-campaign-results" as const, label: "Campaign Results" },
-      { id: "ee-department-comparison" as const, label: "Department Comparison" },
-      { id: "ee-location-comparison" as const, label: "Brand Comparison" },
       { id: "ee-historical-report" as const, label: "Detailed History" },
-    ],
-  },
-  {
-    id: "hr" as const,
-    label: "HR",
-    perspectives: [
-      { id: "hr-rankings" as const, label: "Department Rankings" },
+      { id: "ee-location-comparison" as const, label: "Brand Comparison" },
+      { id: "ee-department-comparison" as const, label: "Department Comparison" },
+      { id: "exec-location" as const, label: "Brand Breakdown" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
       { id: "hr-open-text" as const, label: "Open Text" },
     ],
@@ -118,7 +111,7 @@ const GROUPS = [
 type GroupId = (typeof GROUPS)[number]["id"];
 type PerspectiveId =
   | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
-  | "hr-rankings" | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
+  | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
   | "dept-scorecard" | "ee-brand-report" | "ee-department-report" | "ee-historical-report";
 
 const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
@@ -137,7 +130,6 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "ee-department-comparison": "Department Comparison",
   "ee-location-comparison": "Brand Comparison",
   "ee-historical-report": "Detailed History",
-  "hr-rankings": "Department Rankings",
   "hr-index-dive": "Index Deep Dive",
   "hr-supervisor": "Supervisor Reports",
   "hr-open-text": "Open Text",
@@ -1593,16 +1585,6 @@ export function DwsEmployeeExperienceDashboardClient({
       />
 
       {/* Filters */}
-      {(activePersp === "hr-rankings") && (
-        <FilterRail
-          filters={[
-            { id: "location", label: "Brand", value: hrRankFilters.location, options: locationOpts },
-            { id: "fieldCategory", label: "Work Type", value: hrRankFilters.fieldCategory, options: workTypeOpts },
-          ]}
-          onChange={(id, v) => setHrRankFilters((f) => ({ ...f, [id]: v }))}
-          onReset={() => setHrRankFilters({ location: "", fieldCategory: "" })}
-        />
-      )}
       {(activePersp === "hr-index-dive") && (
         <FilterRail
           filters={[
@@ -1770,14 +1752,12 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+            <div style={EE_PERSPECTIVE_MAIN_STYLE}>
               <EEHistoricalReport data={reportBundle.historicalReport} embedded />
             </div>
             {renderGuidance("ee-historical-report", activeExecIndexId)}
           </div>
         );
-      case "hr-rankings":
-        return <HrRankings data={data} current={current} prior={prior} filters={hrRankFilters} />;
       case "hr-index-dive":
         return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
       case "hr-supervisor":

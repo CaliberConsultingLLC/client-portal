@@ -156,7 +156,7 @@ export function EEDepartmentReport({
             <div><h2>{dept.name}</h2><p className="hero-sub">{curCamp.labelLong}{previous ? ` (trend vs ${previous.label})` : ""}</p></div>
             <div className="kpi-strip">
               <div className="kpi"><div className="k-label">Total Index</div><div className="k-value">{total.toFixed(1)}</div></div>
-              <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: totalDelta == null ? "#6E7E96" : totalDelta >= 0 ? "#6E9B7B" : "#B5746B" }}>{totalDelta == null ? "—" : f1(totalDelta)}</div></div>
+              <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: totalDelta == null ? "#6E7E96" : totalDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{totalDelta == null ? "—" : f1(totalDelta)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{dept.responses}</div></div>
             </div>
           </div>

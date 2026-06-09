@@ -48,7 +48,7 @@ function SupBarChart({ rows, axis, scoreColor }) {
                 <div className="sr-bar" style={{ width: `${pct(row.value)}%`, background: color }}><div className="sr-chip">{row.value.toFixed(1)}</div></div>
                 <div className="sr-org" style={{ left: `${pct(row.org)}%` }} />
                 <div className="sr-org-dot" style={{ left: `${pct(row.org)}%` }} />
-                <div className="sr-gap" style={{ left: `${pct(Math.max(row.value, row.org))}%`, color: ahead ? "#6E9B7B" : "#B5746B" }}>{f1(round1(row.value - row.org))}</div>
+                <div className="sr-gap" style={{ left: `${pct(Math.max(row.value, row.org))}%`, color: ahead ? "#9CB2A8" : "#C8B9B6" }}>{f1(round1(row.value - row.org))}</div>
               </div>
             </div>
           );
@@ -140,8 +140,8 @@ export function EESupervisorReport({ data }: { data: any }) {
             <div><h2>{supervisor.name}</h2><p className="hero-sub">{curCamp.labelLong}{previous ? ` (trend vs ${previous.label})` : ""}</p></div>
             <div className="kpi-strip">
               <div className="kpi"><div className="k-label">{index.name} Index</div><div className="k-value">{supervisorOverall.toFixed(1)}</div></div>
-              <div className="kpi"><div className="k-label">vs Org</div><div className="k-value" style={{ color: vsOrg >= 0 ? "#6E9B7B" : "#B5746B" }}>{f1(vsOrg)}</div></div>
-              <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#6E9B7B" : "#B5746B" }}>{overallDelta == null ? "—" : f1(overallDelta)}</div></div>
+              <div className="kpi"><div className="k-label">vs Org</div><div className="k-value" style={{ color: vsOrg >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{f1(vsOrg)}</div></div>
+              <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{overallDelta == null ? "—" : f1(overallDelta)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{supervisor.responses}</div></div>
             </div>
           </div>

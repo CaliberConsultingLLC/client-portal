@@ -144,8 +144,8 @@ export function EEHistoricalReport({ data, embedded = false }: { data: any; embe
             <div><h2>{title}</h2><p className="hero-sub">{scopeLabel} · {first.label} to {last.label}</p></div>
             <div className="kpi-strip">
               <div className="kpi"><div className="k-label">{last.short}</div><div className="k-value">{currentScore.toFixed(1)}</div></div>
-              <div className="kpi"><div className="k-label">Delta Last</div><div className="k-value" style={{ color: deltaLast >= 0 ? "#6E9B7B" : "#B5746B" }}>{f1(deltaLast)}</div></div>
-              <div className="kpi"><div className="k-label">Delta All</div><div className="k-value" style={{ color: deltaAll >= 0 ? "#6E9B7B" : "#B5746B" }}>{f1(deltaAll)}</div></div>
+              <div className="kpi"><div className="k-label">Delta Last</div><div className="k-value" style={{ color: deltaLast >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{f1(deltaLast)}</div></div>
+              <div className="kpi"><div className="k-label">Delta All</div><div className="k-value" style={{ color: deltaAll >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{f1(deltaAll)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{responseCount}</div></div>
             </div>
           </div>

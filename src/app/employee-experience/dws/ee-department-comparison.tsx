@@ -155,13 +155,13 @@ function tensWithin(min: number, max: number) {
 }
 
 function dStyle(d: number) {
-  if (d >= 6)     return { bg: "#5B8D6A", fg: "#fff" };
-  if (d >= 4)     return { bg: "#6E9B7B", fg: "#fff" };
-  if (d >= 2)     return { bg: "#88AE93", fg: "#fff" };
-  if (d >= 0.05)  return { bg: "#CEDFD3", fg: "#244130" };
-  if (d <= -3)    return { bg: "#B5746B", fg: "#fff" };
-  if (d <= -1)    return { bg: "#C88F87", fg: "#fff" };
-  if (d <= -0.05) return { bg: "#E6C5C0", fg: "#5A2D28" };
+  if (d >= 6)     return { bg: "#8BA399", fg: "#fff" };
+  if (d >= 4)     return { bg: "#9CB2A8", fg: "#fff" };
+  if (d >= 2)     return { bg: "#B5C5BE", fg: "#1F332A" };
+  if (d >= 0.05)  return { bg: "#E2E9E5", fg: "#355348" };
+  if (d <= -3)    return { bg: "#B49F9C", fg: "#fff" };
+  if (d <= -1)    return { bg: "#C8B9B6", fg: "#4E3834" };
+  if (d <= -0.05) return { bg: "#E8DFDE", fg: "#5E4441" };
   return { bg: "#E2E8EF", fg: "#3B4B63" };
 }
 
@@ -201,7 +201,7 @@ function InsightCard({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const color = tone === "positive" ? "#6E9B7B" : tone === "negative" ? "#B5746B" : "#3B4B63";
+  const color = tone === "positive" ? "#9CB2A8" : tone === "negative" ? "#C8B9B6" : "#3B4B63";
 
   return (
     <div className="rounded-2xl bg-white p-3" style={{ border: `1px solid ${tone === "neutral" ? "#8798AA" : `${color}66`}` }}>
@@ -473,7 +473,7 @@ export function EEDepartmentComparison({
               <div className="flex shrink-0 gap-3">
                 {([
                   ["Company Avg",   overallAvg.toFixed(1), avgColor],
-                  ["Change YoY",    f1(overallDelta),      overallDelta >= 0 ? "#6E9B7B" : "#B5746B"],
+                  ["Change YoY",    f1(overallDelta),      overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6"],
                   ["Response Rate", rrPct,                 "#152238"],
                 ] as [string, string, string][]).map(([label, value, color]) => (
                   <div key={label} className="flex min-h-[76px] min-w-[104px] flex-col items-center justify-center gap-1 rounded-2xl px-4 py-2" style={{ border: "1px solid #8798AA", background: "rgba(255,255,255,.85)" }}>
