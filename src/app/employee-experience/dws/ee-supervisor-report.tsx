@@ -39,11 +39,10 @@ function SupBarChart({ rows, axis, scoreColor }) {
         .sr-track{height:24px;background:#F1F4F7;border-radius:0 7px 7px 0;position:relative}
         .sr-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
         .sr-chip{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
-        .sr-org{position:absolute;top:3px;bottom:3px;width:0;border-left:2px solid rgba(21,34,56,.55);z-index:5}
-        .sr-org-dot{position:absolute;top:50%;width:13px;height:13px;border-radius:999px;background:${ORG_MARKER};border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
-        .sr-gap{position:absolute;top:50%;transform:translateY(-50%);margin-left:14px;z-index:7;font-size:11px;font-weight:800}
-        .sr-org-meta{position:absolute;right:8px;top:3px;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6E7E96;z-index:8}
-        .sr-org-score{font-size:12px;letter-spacing:0;color:#152238}
+        .sr-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
+        .sr-org-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:999px;background:${ORG_MARKER};border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
+        .sr-gap{position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:7;font-size:13px;font-weight:900}
+        .sr-gap-label{position:absolute;right:8px;top:3px;z-index:8;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6E7E96}
       `}</style>
       <div className="plot">
         <div className="grid-overlay">{axis.ticks.map((tick) => <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />)}</div>
@@ -57,8 +56,8 @@ function SupBarChart({ rows, axis, scoreColor }) {
                 <div className="sr-bar" style={{ width: `${pct(row.value)}%`, background: color }}><div className="sr-chip">{row.value.toFixed(1)}</div></div>
                 <div className="sr-org" style={{ left: `${pct(row.org)}%` }} />
                 <div className="sr-org-dot" style={{ left: `${pct(row.org)}%` }} />
-                <div className="sr-org-meta"><span>Org Avg</span><span className="sr-org-score">{row.org.toFixed(1)}</span></div>
-                <div className="sr-gap" style={{ left: `${pct(Math.max(row.value, row.org))}%`, color: ahead ? "#9CB2A8" : "#C8B9B6" }}>{f1(round1(row.value - row.org))}</div>
+                <div className="sr-gap-label">Org Comparison</div>
+                <div className="sr-gap" style={{ color: ahead ? "#9CB2A8" : "#C8B9B6" }}>{f1(round1(row.value - row.org))}</div>
               </div>
             </div>
           );
@@ -202,7 +201,16 @@ export function EESupervisorReport({ data }: { data: any }) {
       </main>
 
       <aside className="rail right">
-        <EEContextRail howToRead="Bar length and bar value show supervisor score. The vertical line and dot mark the organization average for that statement." />
+        <EEContextRail
+          howToRead="Bar length and bar value show supervisor score. The vertical line and dot mark the organization average, and Org Comparison shows the score gap versus that marker."
+          extraLegend={(
+            <div className="flex items-center gap-2 text-[12px] text-[#3B4B63]">
+              <span className="inline-block h-0 w-6 border-t-[2.5px] border-[#152238]" />
+              <span className="inline-block h-4 w-4 rounded-full border-2 border-white bg-[#152238] shadow-[0_1px_3px_rgba(0,0,0,.32)]" />
+              <span>Organization average marker</span>
+            </div>
+          )}
+        />
       </aside>
     </div>
   );

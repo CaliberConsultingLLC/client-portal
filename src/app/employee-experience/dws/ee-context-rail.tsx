@@ -29,10 +29,12 @@ export function EEContextRail({
   howToRead,
   className,
   compact = false,
+  extraLegend,
 }: {
   howToRead: string;
   className?: string;
   compact?: boolean;
+  extraLegend?: React.ReactNode;
 }) {
   return (
     <div className={className ?? "flex flex-col gap-3"}>
@@ -66,6 +68,14 @@ export function EEContextRail({
               <span className="text-[11px] font-semibold text-[#6E7E96]">Gain</span>
             </div>
           </div>
+          {extraLegend ? (
+            <div>
+              <p style={{ margin: "0 0 8px 0", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6E7E96" }}>
+                Comparison Marker
+              </p>
+              {extraLegend}
+            </div>
+          ) : null}
         </div>
       </InfoSection>
     </div>

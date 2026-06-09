@@ -88,9 +88,9 @@ const GROUPS = [
     label: "Executive & HR",
     perspectives: [
       { id: "exec-overview" as const, label: "Campaign Overview" },
-      { id: "ee-campaign-results" as const, label: "Campaign Results" },
-      { id: "exec-location" as const, label: "Result Heat Maps" },
+      { id: "ee-campaign-results" as const, label: "Detailed Results" },
       { id: "ee-historical-report" as const, label: "Detailed History" },
+      { id: "exec-location" as const, label: "Heat Maps" },
       { id: "ee-location-comparison" as const, label: "Brand Comparison" },
       { id: "ee-department-comparison" as const, label: "Department Comparison" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
@@ -125,8 +125,8 @@ const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
 
 const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "exec-overview": "Campaign Overview",
-  "exec-location": "Result Heat Maps",
-  "ee-campaign-results": "Campaign Results",
+  "exec-location": "Heat Maps",
+  "ee-campaign-results": "Detailed Results",
   "ee-department-comparison": "Department Comparison",
   "ee-location-comparison": "Brand Comparison",
   "ee-historical-report": "Detailed History",
@@ -822,6 +822,27 @@ function ExecLocation({
     [workTypes, curR, data.questions]
   );
 
+  function buildGroupedHeatmap(field: keyof EmployeeExperienceRespondent) {
+    const groups = uniq(curR, field, min);
+    const rowTotals: Record<string, number> = {};
+    groups.forEach((group) => {
+      rowTotals[group] = groupScore(curR.filter((respondent) => respondent[field] === group), allIds);
+    });
+    const sortedRows = [...groups].sort((a, b) => (rowTotals[b] ?? 0) - (rowTotals[a] ?? 0));
+    const heatData = groups.map((group) => {
+      const subset = curR.filter((respondent) => respondent[field] === group);
+      const subsetDims = buildDims(data.questions, subset, []);
+      const scores: Record<string, number | null> = {};
+      subsetDims.forEach((dimension) => { scores[dimension.label] = dimension.score || null; });
+      return { department: group, scores };
+    });
+    return { sortedRows, rowTotals, heatData };
+  }
+
+  const generationHeatmap = useMemo(() => buildGroupedHeatmap("generation"), [curR, data.questions, allIds]);
+  const tenureHeatmap = useMemo(() => buildGroupedHeatmap("tenure"), [curR, data.questions, allIds]);
+  const jobCategoryHeatmap = useMemo(() => buildGroupedHeatmap("jobTitle"), [curR, data.questions, allIds]);
+
   if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
 
   const overallScore = groupScore(curR, allIds);
@@ -831,7 +852,7 @@ function ExecLocation({
   return (
     <div className="space-y-6">
       <ExecutiveHeader
-        title="Brand Breakdown"
+        title="Heat Maps"
         subtitle={`${current}${prior ? ` vs ${prior}` : ""}`}
         kpis={[
           { label: "Responses", value: curR.length.toLocaleString() },
@@ -878,6 +899,72 @@ function ExecLocation({
               rowTotals={wtRowTotals}
               columnTotals={dimColTotals}
               rowLabelHeader="Work Type"
+              minValue={EE.min}
+              midpoint={EE.mid}
+              maxValue={EE.max}
+            />
+          </EEPanelContent>
+        </EEPanel>
+      )}
+
+      {generationHeatmap.sortedRows.length > 0 && (
+        <EEPanel>
+          <EEPanelHeader
+            title="By Generation"
+            description="Score per dimension grouped by generation."
+          />
+          <EEPanelContent className="pt-0">
+            <HeatmapChart
+              rows={generationHeatmap.sortedRows}
+              columns={dimNames}
+              data={generationHeatmap.heatData}
+              rowTotals={generationHeatmap.rowTotals}
+              columnTotals={dimColTotals}
+              rowLabelHeader="Generation"
+              minValue={EE.min}
+              midpoint={EE.mid}
+              maxValue={EE.max}
+            />
+          </EEPanelContent>
+        </EEPanel>
+      )}
+
+      {tenureHeatmap.sortedRows.length > 0 && (
+        <EEPanel>
+          <EEPanelHeader
+            title="By Tenure"
+            description="Score per dimension grouped by tenure cohort."
+          />
+          <EEPanelContent className="pt-0">
+            <HeatmapChart
+              rows={tenureHeatmap.sortedRows}
+              columns={dimNames}
+              data={tenureHeatmap.heatData}
+              rowTotals={tenureHeatmap.rowTotals}
+              columnTotals={dimColTotals}
+              rowLabelHeader="Tenure"
+              minValue={EE.min}
+              midpoint={EE.mid}
+              maxValue={EE.max}
+            />
+          </EEPanelContent>
+        </EEPanel>
+      )}
+
+      {jobCategoryHeatmap.sortedRows.length > 0 && (
+        <EEPanel>
+          <EEPanelHeader
+            title="By Job Category"
+            description="Score per dimension grouped by job category/title."
+          />
+          <EEPanelContent className="pt-0">
+            <HeatmapChart
+              rows={jobCategoryHeatmap.sortedRows}
+              columns={dimNames}
+              data={jobCategoryHeatmap.heatData}
+              rowTotals={jobCategoryHeatmap.rowTotals}
+              columnTotals={dimColTotals}
+              rowLabelHeader="Job Category"
               minValue={EE.min}
               midpoint={EE.mid}
               maxValue={EE.max}
@@ -1498,6 +1585,8 @@ export function DwsEmployeeExperienceDashboardClient({
   const [execCompId, setExecCompId] = useState("");
   const [execIndexId, setExecIndexId] = useState("");
   const [execLocation, setExecLocation] = useState("");
+  const [execWorkType, setExecWorkType] = useState("");
+  const [execGeneration, setExecGeneration] = useState("");
   const [execDeptStatementId, setExecDeptStatementId] = useState(COMPARISON_ALL);
   const [execBrandStatementId, setExecBrandStatementId] = useState(COMPARISON_ALL);
 
@@ -1518,6 +1607,7 @@ export function DwsEmployeeExperienceDashboardClient({
     [curR, min]
   );
   const workTypeOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const generationOpts = useMemo(() => uniq(curR, "generation", min), [curR, min]);
   const deptOpts = useMemo(() => uniq(curR, "department", min), [curR, min]);
 
   const supCurFiltered = useMemo(() => filterR(curR, supFilters), [curR, supFilters]);
@@ -1534,6 +1624,22 @@ export function DwsEmployeeExperienceDashboardClient({
   }, [supOpts, supCurFiltered, allIds]);
 
   const groupDef = GROUPS.find((g) => g.id === activeGroup) ?? GROUPS[0];
+  const campaignResultsData = useMemo(
+    () => ({
+      ...data,
+      respondents: data.respondents.filter(
+        (respondent) =>
+          (!execLocation || respondent.location === execLocation) &&
+          (!execWorkType || respondent.fieldCategory === execWorkType) &&
+          (!execGeneration || respondent.generation === execGeneration)
+      ),
+    }),
+    [data, execLocation, execWorkType, execGeneration]
+  );
+  const campaignResultsBundle = useMemo(
+    () => buildEmployeeExperienceReportBundle(campaignResultsData, { logoUrl, campaignLabel: current }),
+    [campaignResultsData, logoUrl, current]
+  );
   const reportBundle = useMemo(
     () => buildEmployeeExperienceReportBundle(data, { logoUrl, campaignLabel: current }),
     [data, logoUrl, current]
@@ -1595,7 +1701,34 @@ export function DwsEmployeeExperienceDashboardClient({
       location={execLocation}
       onLocation={setExecLocation}
       extraSections={
-        activePersp === "ee-department-comparison" ? (
+        activePersp === "ee-campaign-results" ? (
+          <>
+            <RailSection title="Work Type">
+              <select
+                value={execWorkType}
+                onChange={(event) => setExecWorkType(event.target.value)}
+                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+              >
+                <option value="">All work types</option>
+                {workTypeOpts.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </RailSection>
+            <RailSection title="Generation">
+              <select
+                value={execGeneration}
+                onChange={(event) => setExecGeneration(event.target.value)}
+                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+              >
+                <option value="">All generations</option>
+                {generationOpts.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </RailSection>
+          </>
+        ) : activePersp === "ee-department-comparison" ? (
           <RailSection title="Statement">
             <select
               value={execDeptStatementId}
@@ -1628,8 +1761,8 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const perspectiveHowToRead: Record<PerspectiveId, string> = {
     "exec-overview": "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
-    "exec-location": "Heatmap rows are brands and work types, columns are indexes, and row totals summarize each group. Use this to compare strengths and watch areas.",
-    "ee-campaign-results": "Use index cards and statement tables to compare campaign scores and deltas. Green indicates positive movement and red indicates decline.",
+    "exec-location": "Heat map rows are grouped by brand and demographic/workforce categories. Compare row totals to quickly identify where strengths and watch areas concentrate.",
+    "ee-campaign-results": "Use Detailed Results filters in the left rail to investigate index and statement movement for specific groups. Green indicates positive movement and red indicates decline.",
     "ee-department-comparison": "Each row is a department for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-historical-report": "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
@@ -1784,7 +1917,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-campaign-results":
         return (
           <EECampaignResults
-            data={reportBundle.campaignResults}
+            data={campaignResultsBundle.campaignResults}
             dashboardInstanceId={dashboardInstanceId}
             canEditGuidance={canEditGuidance}
             executiveRail={executiveRail}
@@ -1875,7 +2008,7 @@ export function DwsEmployeeExperienceDashboardClient({
         return <EEDepartmentReport key="department-report" data={reportBundle.departmentReport} />;
       default: return null;
     }
-  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
+  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, selectedDept, deptOpts, reportBundle, campaignResultsBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
 
   return (
     <>

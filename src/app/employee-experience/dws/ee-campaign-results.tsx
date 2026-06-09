@@ -275,7 +275,7 @@ export function EECampaignResults({
   });
 
   if (!idx || indexes.length === 0) {
-    return <div className="p-8 text-sm text-text-secondary">No campaign results are available for this dataset yet.</div>;
+    return <div className="p-8 text-sm text-text-secondary">No detailed results are available for this dataset yet.</div>;
   }
 
   return (
@@ -330,8 +330,8 @@ export function EECampaignResults({
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="font-bold uppercase" style={{ fontSize: 11, letterSpacing: "0.2em", color: "#6E7E96" }}>Campaign Results · {idx.name}</p>
-                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Campaign Results</h2>
+                <p className="font-bold uppercase" style={{ fontSize: 11, letterSpacing: "0.2em", color: "#6E7E96" }}>Detailed Results · {idx.name}</p>
+                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Detailed Results</h2>
                 <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{idx.name} index · {current.labelLong} · compared to {comp.label}</p>
               </div>
               <div className="flex shrink-0 gap-3">

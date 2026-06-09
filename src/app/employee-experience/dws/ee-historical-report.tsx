@@ -134,18 +134,6 @@ export function EEHistoricalReport({
   const responseCount = isAll ? totalResponses : dept.responses;
   const latestCampaign = activeCampaign;
 
-  const currentIndexRows = indexes.map((index) => {
-    const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
-    const currentValue = indexValues[activeCampaignIndex] ?? indexValues.at(-1);
-    const priorValue = previousCampaign ? indexValues[activeCampaignIndex - 1] : null;
-    return {
-      id: index.id,
-      name: index.name,
-      current: currentValue,
-      deltaLast: priorValue == null ? null : round1(currentValue - priorValue),
-    };
-  });
-
   return (
     <div className={`canvas${embedded ? " embedded" : ""}`} style={embedded ? { minHeight: "auto" } : undefined}>
       <EEReportStyles />
@@ -183,24 +171,39 @@ export function EEHistoricalReport({
           {variant === "overview" ? (
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]" style={{ marginBottom: 18 }}>
               <div className="card">
-                <div className="card-head"><h3 className="card-title">Current Campaign Index Scores</h3></div>
+                <div className="card-head"><h3 className="card-title">Statement History</h3></div>
                 <div className="card-body">
                   <div className="stmt-wrap">
                     <table className="stmt-table">
                       <thead>
                         <tr>
-                          <th>Index</th>
-                          <th className="num">{latestCampaign?.label ?? "Current"}</th>
+                          <th>Expand an index for statements</th>
+                          <th className="num col-group-end"><DateHead campaign={latestCampaign} /></th>
+                          <th className="num col-group-start">Delta Last</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {currentIndexRows.map((row) => {
-                          const color = scoreColor(row.current);
+                        {indexes.map((index) => {
+                          const open = focus === index.id;
+                          const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
+                          const indexLast = indexValues[activeCampaignIndex] ?? indexValues.at(-1);
+                          const indexDeltaLast = previousCampaign ? round1(indexLast - indexValues[activeCampaignIndex - 1]) : null;
+                          const indexColor = scoreColor(indexLast);
                           return (
-                            <tr key={row.id} className="stmt-row">
-                              <td className="stmt">{row.name}</td>
-                              <td className="cell" style={{ background: color, color: textFor(color) }}>{row.current.toFixed(1)}</td>
-                            </tr>
+                            <>
+                              <tr key={index.id} className={`acc-head${open ? " acc-open" : ""}`} onClick={() => setFocus(open ? ALL : index.id)}>
+                                <td><div className="acc-name"><span className="acc-chev"><Chevron /></span><span className="acc-title">{index.name}</span></div></td>
+                                <td className="cell col-group-end" style={{ background: indexColor, color: textFor(indexColor) }}>{indexLast.toFixed(1)}</td>
+                                <td className="cell col-group-start" style={indexDeltaLast == null ? { color: "#6E7E96" } : { background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{indexDeltaLast == null ? "—" : f1(indexDeltaLast)}</td>
+                              </tr>
+                              {open && index.statements.map((statement) => {
+                                const values = campaigns.map((campaign) => statementValue(statement, campaign.id));
+                                const statementLast = values[activeCampaignIndex] ?? values.at(-1);
+                                const statementDeltaLast = previousCampaign ? round1(statementLast - values[activeCampaignIndex - 1]) : null;
+                                const statementColor = scoreColor(statementLast);
+                                return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td><td className="cell col-group-end" style={{ background: statementColor, color: textFor(statementColor) }}>{statementLast.toFixed(1)}</td><td className="cell col-group-start" style={statementDeltaLast == null ? { color: "#6E7E96" } : { background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{statementDeltaLast == null ? "—" : f1(statementDeltaLast)}</td></tr>;
+                              })}
+                            </>
                           );
                         })}
                       </tbody>
@@ -220,9 +223,11 @@ export function EEHistoricalReport({
             </div>
           )}
 
-          <p className="slabel" style={{ marginBottom: 8 }}>Statement History · {scopeLabel}</p>
-          <div className="stmt-wrap">
-            <table className="stmt-table">
+          {variant !== "overview" ? (
+            <>
+              <p className="slabel" style={{ marginBottom: 8 }}>Statement History · {scopeLabel}</p>
+              <div className="stmt-wrap">
+                <table className="stmt-table">
               <thead>
                 <tr>
                   <th>Expand an index for statements</th>
@@ -280,8 +285,10 @@ export function EEHistoricalReport({
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+                </table>
+              </div>
+            </>
+          ) : null}
         </div>
       </main>
 
