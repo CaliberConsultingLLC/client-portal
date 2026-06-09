@@ -38,11 +38,11 @@ function SupBarChart({ rows, axis, scoreColor }) {
       <style>{`
         .sr-track{height:24px;background:#F1F4F7;border-radius:0 7px 7px 0;position:relative}
         .sr-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
-        .sr-chip{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
+        .sr-chip{position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
         .sr-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
         .sr-org-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:999px;background:${ORG_MARKER};border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
         .sr-gap{position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:7;font-size:13px;font-weight:900}
-        .sr-gap-label{position:absolute;right:8px;top:3px;z-index:8;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6E7E96}
+        .sr-gap-label{display:none}
       `}</style>
       <div className="plot">
         <div className="grid-overlay">{axis.ticks.map((tick) => <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />)}</div>
@@ -56,7 +56,6 @@ function SupBarChart({ rows, axis, scoreColor }) {
                 <div className="sr-bar" style={{ width: `${pct(row.value)}%`, background: color }}><div className="sr-chip">{row.value.toFixed(1)}</div></div>
                 <div className="sr-org" style={{ left: `${pct(row.org)}%` }} />
                 <div className="sr-org-dot" style={{ left: `${pct(row.org)}%` }} />
-                <div className="sr-gap-label">Org Comparison</div>
                 <div className="sr-gap" style={{ color: ahead ? "#9CB2A8" : "#C8B9B6" }}>{f1(round1(row.value - row.org))}</div>
               </div>
             </div>

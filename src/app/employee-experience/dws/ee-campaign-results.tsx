@@ -362,20 +362,21 @@ export function EECampaignResults({
               <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Expand one index at a time to review statement-level scores for {current.label} and change vs {comp.label}.</p>
             </div>
             <div className="px-6 py-5">
-              <div className="stmt-wrap">
-                <table className="stmt-table">
+              <div style={{ overflow: "hidden", border: "1px solid #8798AA", borderRadius: 16 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr>
-                      <th>Expand an index for statements</th>
-                      <th className="num col-group-end">{current.label}</th>
-                      <th className="num col-group-start">Delta</th>
+                      <th style={{ background: "#E2E8EF", textAlign: "left", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 14px", borderBottom: "1px solid #8798AA" }}>Expand an index for statements</th>
+                      <th style={{ background: "#E2E8EF", textAlign: "center", width: 84, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 8px", borderBottom: "1px solid #8798AA", borderRight: "3px solid #8798AA" }}>{current.label}</th>
+                      <th style={{ background: "#E2E8EF", textAlign: "center", width: 84, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 8px", borderBottom: "1px solid #8798AA", borderLeft: "3px solid #8798AA" }}>Delta</th>
                     </tr>
                   </thead>
                   <tbody>
                     {indexes.map((index) => {
                       const open = openIndexId === index.id;
                       const statementRows = index.statements.map((statement) => {
-                        const prev = Object.prototype.hasOwnProperty.call(statement.comparisons, compId) ? statement.comparisons[compId] : null;
+                        const candidate = Object.prototype.hasOwnProperty.call(statement.comparisons, compId) ? statement.comparisons[compId] : null;
+                        const prev = candidate != null && candidate > 0 ? candidate : null;
                         return {
                           id: statement.text,
                           text: statement.text,
@@ -389,18 +390,18 @@ export function EECampaignResults({
                       const currentColor = sc(indexCurrent);
                       return (
                         <>
-                          <tr className={`acc-head${open ? " acc-open" : ""}`} onClick={() => setOpenIndexId(open ? "" : index.id)}>
-                            <td><div className="acc-name"><span className="acc-chev"><ChevronRight className="h-4 w-4" /></span><span className="acc-title">{index.name}</span></div></td>
-                            <td className="cell col-group-end" style={{ background: currentColor, color: readableText(currentColor) }}>{indexCurrent.toFixed(1)}</td>
-                            <td className="cell col-group-start" style={indexDelta == null ? { color: "#6E7E96" } : { background: dStyle(indexDelta).bg, color: dStyle(indexDelta).fg }}>{indexDelta == null ? "—" : f1(indexDelta)}</td>
+                          <tr onClick={() => setOpenIndexId(open ? "" : index.id)} style={{ cursor: "pointer", background: "#F1F4F7", borderTop: "1px solid #D3DDE7" }}>
+                            <td style={{ padding: "9px 14px" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ width: 14, height: 14, color: "#6E7E96", transform: open ? "rotate(90deg)" : undefined, transition: "transform .2s" }}><ChevronRight className="h-4 w-4" /></span><span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#152238" }}>{index.name}</span></div></td>
+                            <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderRight: "3px solid #8798AA", background: currentColor, color: readableText(currentColor) }}>{indexCurrent.toFixed(1)}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderLeft: "3px solid #8798AA", ...(indexDelta == null ? { color: "#6E7E96" } : { background: dStyle(indexDelta).bg, color: dStyle(indexDelta).fg }) }}>{indexDelta == null ? "—" : f1(indexDelta)}</td>
                           </tr>
                           {open && statementRows.map((row) => {
                             const color = sc(row.current);
                             return (
-                              <tr key={`${index.id}-${row.id}`} className="stmt-row">
-                                <td className="stmt-sub">{row.text}</td>
-                                <td className="cell col-group-end" style={{ background: color, color: readableText(color) }}>{row.current.toFixed(1)}</td>
-                                <td className="cell col-group-start" style={row.delta == null ? { color: "#6E7E96" } : { background: dStyle(row.delta).bg, color: dStyle(row.delta).fg }}>{row.delta == null ? "—" : f1(row.delta)}</td>
+                              <tr key={`${index.id}-${row.id}`} style={{ borderTop: "1px solid #D3DDE7" }}>
+                                <td style={{ padding: "7px 14px 7px 30px", color: "#3B4B63", fontWeight: 500, lineHeight: 1.34, fontSize: 12.5 }}>{row.text}</td>
+                                <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderRight: "3px solid #8798AA", background: color, color: readableText(color) }}>{row.current.toFixed(1)}</td>
+                                <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderLeft: "3px solid #8798AA", ...(row.delta == null ? { color: "#6E7E96" } : { background: dStyle(row.delta).bg, color: dStyle(row.delta).fg }) }}>{row.delta == null ? "—" : f1(row.delta)}</td>
                               </tr>
                             );
                           })}

@@ -332,13 +332,14 @@ export function EELocationComparison({
     if (activeStatement) {
       const cell = activeStatement.byLocation[d.id];
       cur = cell.current;
-      prev = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
+      const prior = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
+      prev = prior != null && prior > 0 ? prior : null;
     } else {
       const curs = idx.statements.map(s => s.byLocation[d.id].current);
       const prevs = idx.statements
         .map((statement) => {
           const prior = statement.byLocation[d.id].comparisons[compId];
-          return Object.prototype.hasOwnProperty.call(statement.byLocation[d.id].comparisons, compId) ? prior : null;
+          return Object.prototype.hasOwnProperty.call(statement.byLocation[d.id].comparisons, compId) && prior > 0 ? prior : null;
         })
         .filter((value): value is number => value != null);
       cur = r1(mean(curs));
