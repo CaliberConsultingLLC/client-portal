@@ -210,24 +210,24 @@ function DeptFavChart({ rows, avg, axis, color }: {
         </div>
         {rows.map((r, i) => (
           <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 44%) minmax(0, 1fr)", minHeight: ROW_HEIGHT, alignItems: "center", position: "relative" }}>
-          <div title={r.name} style={{ padding: "3px 12px 3px 0", alignSelf: "center", fontSize: 12.5, lineHeight: 1.18, fontWeight: 500, color: "#3B4B63", zIndex: 2 }}>{r.name}</div>
+          <div title={r.name} style={{ padding: "3px 12px 3px 0", alignSelf: "center", fontSize: 12.5, lineHeight: 1.18, fontWeight: 500, color: "#152238", zIndex: 2 }}>{r.name}</div>
           <div style={{ position: "relative", height: 24, alignSelf: "center", zIndex: 2 }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pct(r.value), background: color(r.value), borderRadius: 3, transition: "width .55s cubic-bezier(.34,1.1,.64,1)" }}>
-              <div style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(21,34,56,.82)", color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px" }}>{r.value.toFixed(1)}</div>
+              <div style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.88)", color: "#152238", fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{r.value.toFixed(1)}</div>
             </div>
           </div>
           </div>
         ))}
         <div style={{ position: "absolute", left: "44%", right: 0, top: 0, bottom: 0, pointerEvents: "none", zIndex: 3 }}>
           <div style={{ position: "absolute", left: pct(avg), top: 0, bottom: 0, borderLeft: "2px dashed #8798AA" }}>
-            <div style={{ position: "absolute", top: 4, left: "50%", transform: "translateX(-50%)", background: "#E8ECE9", border: "1px solid #D4DAD6", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#3B4B63", whiteSpace: "nowrap" }}>Dept avg {avg.toFixed(1)}</div>
+            <div style={{ position: "absolute", top: 4, left: "50%", transform: "translateX(-50%)", background: "#E8ECE9", border: "1px solid #D4DAD6", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#152238", whiteSpace: "nowrap" }}>Dept avg {avg.toFixed(1)}</div>
           </div>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(150px, 44%) minmax(0, 1fr)", marginTop: 4 }}>
         <div />
         <div style={{ position: "relative", height: 20 }}>
-          {axis.ticks.map(t => <div key={t} style={{ position: "absolute", left: pct(t), transform: "translateX(-50%)", fontSize: 11, color: "#6E7E96" }}>{t}</div>)}
+          {axis.ticks.map(t => <div key={t} style={{ position: "absolute", left: pct(t), transform: "translateX(-50%)", fontSize: 11, color: "#152238" }}>{t}</div>)}
         </div>
       </div>
     </div>
@@ -253,12 +253,15 @@ function DeptDeltaChart({ rows, axis }: { rows: { name: string; delta: number }[
           const rawLeft = pos ? z0 : z0 - w;
           const left = Math.max(0, Math.min(100 - w, rawLeft));
           const width = Math.min(w, 100 - left);
+          const labelAnchor = pos
+            ? Math.min(99, left + width + 2)
+            : Math.max(1, left - 2);
           return (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 44%) minmax(0, 1fr)", minHeight: ROW_HEIGHT, alignItems: "center", position: "relative" }}>
-            <div title={r.name} style={{ padding: "3px 12px 3px 0", alignSelf: "center", fontSize: 12.5, lineHeight: 1.18, fontWeight: 500, color: "#3B4B63", zIndex: 2 }}>{r.name}</div>
+            <div title={r.name} style={{ padding: "3px 12px 3px 0", alignSelf: "center", fontSize: 12.5, lineHeight: 1.18, fontWeight: 500, color: "#152238", zIndex: 2 }}>{r.name}</div>
             <div style={{ position: "relative", height: 24, alignSelf: "center", zIndex: 2, overflow: "hidden" }}>
               <div style={{ position: "absolute", left: `${left}%`, width: `${width}%`, top: 0, bottom: 0, background: s.bg, borderRadius: 3, transition: "left .55s cubic-bezier(.34,1.1,.64,1), width .55s cubic-bezier(.34,1.1,.64,1)" }} />
-              <div style={{ position: "absolute", top: "50%", transform: pos ? "translateY(-50%)" : "translate(-100%, -50%)", left: pos ? `calc(${left + width}% + 6px)` : `calc(${left}% - 6px)`, background: s.bg, color: s.fg, fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{f1(r.delta)}</div>
+              <div style={{ position: "absolute", top: "50%", transform: pos ? "translate(-100%, -50%)" : "translateY(-50%)", left: `${labelAnchor}%`, background: s.bg, color: "#152238", fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{f1(r.delta)}</div>
             </div>
             </div>
           );
@@ -267,7 +270,7 @@ function DeptDeltaChart({ rows, axis }: { rows: { name: string; delta: number }[
       <div style={{ display: "grid", gridTemplateColumns: "minmax(150px, 44%) minmax(0, 1fr)", marginTop: 4 }}>
         <div />
         <div style={{ position: "relative", height: 20 }}>
-          {axis.ticks.map(t => <div key={t} style={{ position: "absolute", left: xp(t), transform: "translateX(-50%)", fontSize: 11, color: "#6E7E96" }}>{t}</div>)}
+          {axis.ticks.map(t => <div key={t} style={{ position: "absolute", left: xp(t), transform: "translateX(-50%)", fontSize: 11, color: "#152238" }}>{t}</div>)}
         </div>
       </div>
     </div>
