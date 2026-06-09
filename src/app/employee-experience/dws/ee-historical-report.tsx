@@ -7,7 +7,6 @@ import {
   ClientMark,
   DateHead,
   EEReportStyles,
-  InsightCard,
   RailSection,
   Chevron,
   deltaStyle,
@@ -190,23 +189,7 @@ export function EEHistoricalReport({ data, embedded = false }: { data: any; embe
         </div>
       </main>
 
-      {!embedded ? (
-      <aside className="rail right">
-        <div className="rail-meta"><h4>Legend</h4><p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>{isAll ? "Dashed trend omitted in this compact portal port; the line shows org-wide history." : "The darker dashed line shows the organization average for comparison."}</p></div>
-        <div className="rail-meta" style={{ marginTop: 14 }}><h4>How to read</h4><p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>The table shows all six surveys. Delta Last compares the latest survey to {previous.label}; Delta All compares {first.label} to {last.label}.</p></div>
-        <div className="rail-insights" style={{ marginTop: 14 }}>
-          <InsightCard value={currentScore.toFixed(0)} title="Current Score" tone="neutral">
-            {scopeLabel} in {last.label}.
-          </InsightCard>
-          <InsightCard value={f1(deltaAll)} title="Change Since Baseline" tone={deltaAll >= 0 ? "positive" : "negative"}>
-            Movement from {first.label} to {last.label}.
-          </InsightCard>
-          <InsightCard value={series[peakIndex].toFixed(0)} title="Peak Survey" tone="positive">
-            Highest point was {campaigns[peakIndex].label}.
-          </InsightCard>
-        </div>
-      </aside>
-      ) : null}
+      {!embedded ? <aside className="rail right" /> : null}
     </div>
   );
 }

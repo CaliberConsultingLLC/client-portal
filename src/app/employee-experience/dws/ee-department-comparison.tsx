@@ -189,34 +189,6 @@ function RailSection({ title, children }: { title: string; children: React.React
   );
 }
 
-function InsightCard({
-  value,
-  title,
-  tone,
-  children,
-}: {
-  value: string;
-  title: string;
-  tone: "positive" | "negative" | "neutral";
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const color = tone === "positive" ? "#9CB2A8" : tone === "negative" ? "#C8B9B6" : "#3B4B63";
-
-  return (
-    <div className="rounded-2xl bg-white p-3" style={{ border: `1px solid ${tone === "neutral" ? "#8798AA" : `${color}66`}` }}>
-      <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-start gap-3 text-left">
-        <span className="flex h-[38px] min-w-[46px] items-center justify-center rounded-[11px] px-2 text-sm font-bold" style={{ background: color, color: "#fff" }}>
-          {value}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color }}>{title}</span>
-          {open ? <span className="mt-1 block text-xs font-semibold leading-snug text-[#152238]">{children}</span> : null}
-        </span>
-      </button>
-    </div>
-  );
-}
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
 // Department rows preserve their dataset order (NOT sorted) so the left bar
@@ -381,13 +353,6 @@ export function EEDepartmentComparison({
   const overallPrev = r1(mean(rows.map(r => r.prev)));
   const overallDelta = r1(overallAvg - overallPrev);
 
-  const byDelta = [...rows].sort((a, b) => b.delta - a.delta);
-  const biggestGain = byDelta.find((row) => row.delta > 0.05) ?? null;
-  const steepestDecline = [...rows].sort((a, b) => a.delta - b.delta).find((row) => row.delta < -0.05) ?? null;
-  const peerGaps = rows.map((row) => ({ ...row, gap: r1(row.value - overallAvg) }));
-  const leading = [...peerGaps].sort((a, b) => b.gap - a.gap)[0];
-  const focusPeer = [...peerGaps].sort((a, b) => a.gap - b.gap)[0];
-
   const rrPct = current.responseRate != null ? `${Math.round(current.responseRate * 100)}%` : "—";
   const avgColor = readableText(sc(overallAvg)) === "#fff" ? sc(overallAvg) : "#152238";
 
@@ -521,32 +486,6 @@ export function EEDepartmentComparison({
           className="flex flex-col gap-4"
           style={{ position: "static", width: "auto", background: "transparent", border: "none", overflow: "visible" }}
         />
-        <div className="rounded-2xl bg-white p-4" style={{ border: "1px solid #8798AA" }}>
-          <h4 className="font-bold" style={{ fontSize: 13, color: "#152238", marginBottom: 8 }}>How to read</h4>
-          <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63", margin: 0 }}>
-            Each row is a department. Pick an index for the overall average, or choose one statement to compare that question across departments.
-          </p>
-        </div>
-        {biggestGain ? (
-          <InsightCard value={f1(biggestGain.delta)} title="Biggest Gain" tone="positive">
-            {biggestGain.name} gained the most points versus {comp.label}.
-          </InsightCard>
-        ) : null}
-        {steepestDecline ? (
-          <InsightCard value={f1(steepestDecline.delta)} title="Steepest Decline" tone="negative">
-            {steepestDecline.name} dropped the most versus {comp.label}.
-          </InsightCard>
-        ) : null}
-        {leading ? (
-          <InsightCard value={f1(leading.gap)} title="Leading vs Peers" tone="positive">
-            {leading.name} sits furthest above the company average on this view.
-          </InsightCard>
-        ) : null}
-        {focusPeer && focusPeer.id !== leading?.id ? (
-          <InsightCard value={f1(focusPeer.gap)} title="Focus vs Peers" tone="negative">
-            {focusPeer.name} trails the company average by the widest margin.
-          </InsightCard>
-        ) : null}
       </aside>
 
     </div>

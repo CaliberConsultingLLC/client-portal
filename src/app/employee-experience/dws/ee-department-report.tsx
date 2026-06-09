@@ -7,7 +7,6 @@ import {
   ClientMark,
   DateHead,
   EEReportStyles,
-  InsightCard,
   RailSection,
   Chevron,
   deltaStyle,
@@ -20,6 +19,8 @@ import {
 
 const REPORT_DATA = toDepartmentReportData();
 const ALL = "all";
+const PREFERRED_CURRENT_CAMPAIGN = "May 2026";
+const PREFERRED_PRIOR_CAMPAIGN = "Aug 2025";
 
 function valueFor(cell, campaign) {
   return campaign.isCurrent ? cell.current : cell.comparisons[campaign.id] ?? 0;
@@ -27,6 +28,11 @@ function valueFor(cell, campaign) {
 
 function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
+}
+
+function campaignMatches(campaign, label) {
+  const source = String(campaign?.labelLong || campaign?.label || "").toLowerCase();
+  return source === label.toLowerCase();
 }
 
 function SegmentCard({ segment, deptId, minN, companyAvg, scoreColor }) {
@@ -75,7 +81,14 @@ export function EEDepartmentReport({
   const scoreColor = makeScoreColor(scale);
   const [deptId, setDeptId] = useState(departments[0]?.id ?? "");
   const [focus, setFocus] = useState(ALL);
-  const [asOf, setAsOf] = useState(current.id);
+  const [currentCampaignId, setCurrentCampaignId] = useState(() => {
+    const preferredCurrent = [current, ...comparisons].find((campaign) => campaignMatches(campaign, PREFERRED_CURRENT_CAMPAIGN));
+    return preferredCurrent?.id ?? current.id;
+  });
+  const [priorCampaignId, setPriorCampaignId] = useState(() => {
+    const preferredPrior = comparisons.find((campaign) => campaignMatches(campaign, PREFERRED_PRIOR_CAMPAIGN));
+    return preferredPrior?.id ?? comparisons[comparisons.length - 1]?.id ?? "";
+  });
   const timeline = useMemo(
     () => [...comparisons.map((item) => ({ ...item, isCurrent: false })), { ...current, isCurrent: true }],
     [comparisons, current]
@@ -96,10 +109,9 @@ export function EEDepartmentReport({
 
   const dept = departments.find((item) => item.id === deptId) ?? departments[0];
   const timelineRecentFirst = useMemo(() => [...timeline].reverse(), [timeline]);
-  const asOfIndex = Math.max(0, timeline.findIndex((item) => item.id === asOf));
-  const campaigns = timeline.slice(0, asOfIndex + 1).slice(-3);
-  const curCamp = campaigns[campaigns.length - 1];
-  const previous = campaigns.length > 1 ? campaigns[campaigns.length - 2] : null;
+  const curCamp = timeline.find((item) => item.id === currentCampaignId) ?? current;
+  const previous = timeline.find((item) => item.id === priorCampaignId) ?? comparisons[comparisons.length - 1] ?? null;
+  const campaigns = previous ? [previous, curCamp] : [curCamp];
   const minN = data.segmentMinResponses ?? 5;
 
   const deptIndex = (index, campaign) => round1(mean(index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign))));
@@ -118,10 +130,6 @@ export function EEDepartmentReport({
 
   const total = deptTotal(curCamp);
   const totalDelta = previous ? round1(total - deptTotal(previous)) : null;
-  const indexScores = indexes.map((index) => ({ id: index.id, name: index.name, score: deptIndex(index, curCamp) }));
-  const strongest = [...indexScores].sort((left, right) => right.score - left.score)[0];
-  const weakest = [...indexScores].sort((left, right) => left.score - right.score)[0];
-
   return (
     <div className="canvas">
       <EEReportStyles />
@@ -133,16 +141,23 @@ export function EEDepartmentReport({
           </select>
           <p className="rs-hint">{dept.location ? `${dept.location} · ` : ""}{dept.responses} responses</p>
         </RailSection>
-        <RailSection title="Campaign">
-          <div className="rs-stack">
-            {timelineRecentFirst.map((campaign) => (
-              <button key={campaign.id} className={`toggle-btn${asOf === campaign.id ? " active" : ""}`} onClick={() => setAsOf(campaign.id)}>
-                {campaign.labelLong || campaign.label}
-              </button>
-            ))}
+        <RailSection title="Campaign Selection">
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="block text-center text-xs font-medium text-[#6E7E96]">Current</span>
+              <select className="rail-select" value={curCamp.id} onChange={(event) => setCurrentCampaignId(event.target.value)}>
+                {timelineRecentFirst.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <span className="block text-center text-xs font-medium text-[#6E7E96]">Compared To</span>
+              <select className="rail-select" value={previous?.id ?? ""} onChange={(event) => setPriorCampaignId(event.target.value)}>
+                {timelineRecentFirst.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
+              </select>
+            </div>
           </div>
         </RailSection>
-        <RailSection title="Index Selection">
+        <RailSection title="Index">
           <div className="rs-stack">
             <button className={`index-btn${focus === ALL ? " active" : ""}`} onClick={() => setFocus(ALL)}>All indexes</button>
             {indexes.map((index) => <button key={index.id} className={`index-btn${focus === index.id ? " active" : ""}`} onClick={() => setFocus(index.id)}>{index.name}</button>)}
@@ -198,17 +213,7 @@ export function EEDepartmentReport({
         </div>
       </main>
 
-      <aside className="rail right">
-        <div className="rail-meta"><h4>How to read</h4><p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>Cells are favorability points. Delta compares the selected survey to the prior survey; vs Org compares this {unitLabel.toLowerCase()} to the company average.</p></div>
-        <div className="rail-insights" style={{ marginTop: 14 }}>
-          <InsightCard value={strongest.score.toFixed(0)} title="Strongest Index" tone="positive">
-            {strongest.name}
-          </InsightCard>
-          <InsightCard value={weakest.score.toFixed(0)} title="Lowest Index" tone="negative">
-            {weakest.name}
-          </InsightCard>
-        </div>
-      </aside>
+      <aside className="rail right" />
     </div>
   );
 }

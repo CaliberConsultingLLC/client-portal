@@ -7,7 +7,6 @@ import {
   ClientMark,
   DateHead,
   EEReportStyles,
-  InsightCard,
   RailSection,
   deltaStyle,
   f1,
@@ -19,9 +18,16 @@ import {
 
 const REPORT_DATA = toSupervisorReportData();
 const ORG_MARKER = "#152238";
+const PREFERRED_CURRENT_CAMPAIGN = "May 2026";
+const PREFERRED_PRIOR_CAMPAIGN = "Aug 2025";
 
 function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
+}
+
+function campaignMatches(campaign, label) {
+  const source = String(campaign?.labelLong || campaign?.label || "").toLowerCase();
+  return source === label.toLowerCase();
 }
 
 function SupBarChart({ rows, axis, scoreColor }) {
@@ -64,16 +70,22 @@ export function EESupervisorReport({ data }: { data: any }) {
   const scoreColor = makeScoreColor(scale);
   const barAxis = display?.barAxis ?? { min: 55, max: 100, ticks: [60, 70, 80, 90, 100] };
   const [supervisorId, setSupervisorId] = useState(supervisors[0]?.id ?? "");
-  const [asOf, setAsOf] = useState(current.id);
+  const [currentCampaignId, setCurrentCampaignId] = useState(() => {
+    const preferredCurrent = [current, ...comparisons].find((campaign) => campaignMatches(campaign, PREFERRED_CURRENT_CAMPAIGN));
+    return preferredCurrent?.id ?? current.id;
+  });
+  const [priorCampaignId, setPriorCampaignId] = useState(() => {
+    const preferredPrior = comparisons.find((campaign) => campaignMatches(campaign, PREFERRED_PRIOR_CAMPAIGN));
+    return preferredPrior?.id ?? comparisons[comparisons.length - 1]?.id ?? "";
+  });
   const supervisor = supervisors.find((item) => item.id === supervisorId) ?? supervisors[0];
   const timeline = useMemo(
     () => [...comparisons.map((item) => ({ ...item, key: item.id })), { ...current, key: "current" }],
     [comparisons, current]
   );
-  const asOfIndex = Math.max(0, timeline.findIndex((item) => item.id === asOf));
-  const campaigns = timeline.slice(0, asOfIndex + 1).slice(-3);
-  const curCamp = campaigns[campaigns.length - 1];
-  const previous = campaigns.length > 1 ? campaigns[campaigns.length - 2] : null;
+  const curCamp = timeline.find((item) => item.id === currentCampaignId) ?? current;
+  const previous = timeline.find((item) => item.id === priorCampaignId) ?? comparisons[comparisons.length - 1] ?? null;
+  const campaigns = previous ? [previous, curCamp] : [curCamp];
   const hasData = supervisors.length > 0 && (index?.statements?.length ?? 0) > 0;
 
   const supervisorValue = (statement, campaign) => {
@@ -114,10 +126,6 @@ export function EESupervisorReport({ data }: { data: any }) {
   const orgOverall = round1(mean(index.statements.map((statement) => orgValue(statement, curCamp))));
   const overallDelta = supervisorPrevious == null ? null : round1(supervisorOverall - supervisorPrevious);
   const vsOrg = round1(supervisorOverall - orgOverall);
-  const gaps = barRows.map((row) => ({ ...row, gap: round1(row.value - row.org) })).sort((left, right) => right.gap - left.gap);
-  const lead = gaps[0];
-  const focus = gaps[gaps.length - 1];
-
   return (
     <div className="canvas">
       <EEReportStyles />
@@ -129,8 +137,21 @@ export function EESupervisorReport({ data }: { data: any }) {
           </select>
           <p className="rs-hint">{supervisor.dept} · {supervisor.responses} responses</p>
         </RailSection>
-        <RailSection title="Campaign">
-          <div className="rs-stack">{timeline.map((campaign) => <button key={campaign.id} className={`toggle-btn${asOf === campaign.id ? " active" : ""}`} onClick={() => setAsOf(campaign.id)}>{campaign.labelLong || campaign.label}</button>)}</div>
+        <RailSection title="Campaign Selection">
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="block text-center text-xs font-medium text-[#6E7E96]">Current</span>
+              <select className="rail-select" value={curCamp.id} onChange={(event) => setCurrentCampaignId(event.target.value)}>
+                {timeline.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <span className="block text-center text-xs font-medium text-[#6E7E96]">Compared To</span>
+              <select className="rail-select" value={previous?.id ?? ""} onChange={(event) => setPriorCampaignId(event.target.value)}>
+                {timeline.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
+              </select>
+            </div>
+          </div>
         </RailSection>
       </aside>
 
@@ -176,17 +197,7 @@ export function EESupervisorReport({ data }: { data: any }) {
         </div>
       </main>
 
-      <aside className="rail right">
-        <div className="rail-meta"><h4>Legend</h4><p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>Bars show the supervisor score. The black marker shows the organization average for that statement.</p></div>
-        <div className="rail-insights" style={{ marginTop: 14 }}>
-          <InsightCard value={f1(lead.gap)} title="Leading vs peers" tone="positive">
-            {lead.text}
-          </InsightCard>
-          <InsightCard value={f1(focus.gap)} title="Focus vs peers" tone="negative">
-            {focus.text}
-          </InsightCard>
-        </div>
-      </aside>
+      <aside className="rail right" />
     </div>
   );
 }

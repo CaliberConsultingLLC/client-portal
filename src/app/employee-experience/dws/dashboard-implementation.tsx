@@ -146,6 +146,12 @@ const OPEN_TEXT_FIELDS = [
 ];
 type OpenTextField = "strengths" | "improvement" | "supervisor" | "acquisition";
 const COMPARISON_ALL = "__ALL__";
+const PREFERRED_CURRENT_CAMPAIGN = "May 2026";
+const PREFERRED_PRIOR_CAMPAIGN = "Aug 2025";
+
+function resolvePreferredCampaign(campaigns: string[], preferred: string) {
+  return campaigns.find((campaign) => campaign.toLowerCase() === preferred.toLowerCase()) ?? campaigns[campaigns.length - 1] ?? "";
+}
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -1396,8 +1402,12 @@ export function DwsEmployeeExperienceDashboardClient({
 }) {
   const [activeGroup, setActiveGroup] = useState<GroupId>("executive");
   const [activePersp, setActivePersp] = useState<PerspectiveId>("exec-overview");
-  const [current, setCurrent] = useState(data.meta.currentCampaignLabel);
-  const [prior, setPrior] = useState(data.meta.priorCampaignLabel ?? "");
+  const [current, setCurrent] = useState(() => resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN));
+  const [prior, setPrior] = useState(() => {
+    const preferredPrior = data.meta.campaigns.find((campaign) => campaign.toLowerCase() === PREFERRED_PRIOR_CAMPAIGN.toLowerCase());
+    if (preferredPrior) return preferredPrior;
+    return [...data.meta.campaigns].reverse().find((campaign) => campaign !== resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN)) ?? "";
+  });
 
   const [hrRankFilters, setHrRankFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
   const dimensionOptions = useMemo(() => orderedDimensionNames(data.questions), [data.questions]);
@@ -1456,7 +1466,8 @@ export function DwsEmployeeExperienceDashboardClient({
     [reportBundle]
   );
   const executiveComparisons = reportBundle.campaignResults.comparisons;
-  const activeExecCompId = execCompId || defaultComparisonId(executiveComparisons);
+  const derivedExecCompId = executiveComparisons.find((comparison) => comparison.label === prior)?.id;
+  const activeExecCompId = execCompId || derivedExecCompId || defaultComparisonId(executiveComparisons);
   const activeExecIndexId = execIndexId || executiveIndexes[0]?.id || "";
   const brandLocations = locationOpts;
   const activeDepartmentIndex = reportBundle.departmentComparison.indexes.find((index) => index.id === activeExecIndexId)
@@ -1465,17 +1476,27 @@ export function DwsEmployeeExperienceDashboardClient({
     ?? reportBundle.locationComparison.indexes[0];
 
   useEffect(() => {
-    if (!data.meta.campaigns.includes(current)) {
-      setCurrent(data.meta.currentCampaignLabel);
+    const preferredCurrent = resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN);
+    if (!current || !data.meta.campaigns.includes(current)) {
+      setCurrent(preferredCurrent);
     }
-  }, [data.meta.campaigns, data.meta.currentCampaignLabel, current]);
+  }, [current, data.meta.campaigns]);
 
   useEffect(() => {
-    const fallbackPrior = [...data.meta.campaigns].reverse().find((campaign) => campaign !== current) ?? "";
+    const preferredPrior = data.meta.campaigns.find((campaign) => campaign.toLowerCase() === PREFERRED_PRIOR_CAMPAIGN.toLowerCase());
+    const fallbackPrior = preferredPrior && preferredPrior !== current
+      ? preferredPrior
+      : [...data.meta.campaigns].reverse().find((campaign) => campaign !== current) ?? "";
     if (!prior || prior === current || !data.meta.campaigns.includes(prior)) {
       setPrior(fallbackPrior);
     }
   }, [current, data.meta.campaigns, prior]);
+
+  useEffect(() => {
+    if (derivedExecCompId && execCompId !== derivedExecCompId) {
+      setExecCompId(derivedExecCompId);
+    }
+  }, [derivedExecCompId, execCompId]);
 
   const executiveRail = EXECUTIVE_PERSPECTIVES.has(activePersp) ? (
     <EEExecutiveRail
@@ -1502,7 +1523,7 @@ export function DwsEmployeeExperienceDashboardClient({
             <select
               value={execDeptStatementId}
               onChange={(event) => setExecDeptStatementId(event.target.value)}
-              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
             >
               <option value={COMPARISON_ALL}>Index average (all statements)</option>
               {activeDepartmentIndex?.statements.map((statement) => (
@@ -1515,7 +1536,7 @@ export function DwsEmployeeExperienceDashboardClient({
             <select
               value={execBrandStatementId}
               onChange={(event) => setExecBrandStatementId(event.target.value)}
-              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
             >
               <option value={COMPARISON_ALL}>Index average (all statements)</option>
               {activeBrandIndex?.statements.map((statement) => (
@@ -1608,7 +1629,7 @@ export function DwsEmployeeExperienceDashboardClient({
 
       {/* Dimension selector (Index Deep Dive) */}
       {activePersp === "hr-index-dive" && (
-        <RailSection title="Dimension">
+        <RailSection title="Index">
           <div className="space-y-0.5">
             {dimensionOptions.map((d) => (
               <button
