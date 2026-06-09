@@ -25,10 +25,10 @@ function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
 }
 
-function HistoryChart({ campaigns, values, orgValues }) {
-  const width = 940;
-  const height = 292;
-  const pad = { left: 36, right: 74, top: 18, bottom: 36 };
+function HistoryChart({ campaigns, values, orgValues, compact = false }: { campaigns: any[]; values: number[]; orgValues?: number[] | null; compact?: boolean }) {
+  const width = compact ? 640 : 940;
+  const height = compact ? 238 : 292;
+  const pad = { left: 36, right: compact ? 42 : 74, top: 18, bottom: 36 };
   const months = campaigns.map((campaign) => campaign.month);
   const maxMonth = Math.max(...months);
   const domain = orgValues ? [...values, ...orgValues] : values;
@@ -59,7 +59,7 @@ function HistoryChart({ campaigns, values, orgValues }) {
       ))}
       <path d={area} fill="rgba(129,153,180,.22)" />
       {orgLine ? <path d={orgLine} fill="none" stroke="#1C252A" strokeDasharray="6 5" strokeWidth="1.5" opacity=".7" /> : null}
-      {orgPoints?.length ? (
+      {orgPoints?.length && !compact ? (
         <g>
           <rect x={orgPoints.at(-1).x + 10} y={orgPoints.at(-1).y - 12} width="72" height="20" rx="10" fill="#FFFFFF" stroke="#8798AA" />
           <text x={orgPoints.at(-1).x + 46} y={orgPoints.at(-1).y + 2} textAnchor="middle" fill="#1C252A" fontSize="10" fontWeight="800">Org avg</text>
@@ -71,14 +71,14 @@ function HistoryChart({ campaigns, values, orgValues }) {
           <rect x={point.x - 20} y={point.y - 31} width="40" height="22" rx="6" fill="#3B4B63" />
           <text x={point.x} y={point.y - 15} textAnchor="middle" fill="#fff" fontSize="12" fontWeight="800">{point.value.toFixed(1)}</text>
           <circle cx={point.x} cy={point.y} r="4.5" fill="#fff" stroke="#3F5F86" strokeWidth="1.875" />
-          <text x={point.x} y={height - 14} textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"} fill="#3B4B63" fontSize="12" fontWeight="700">{campaigns[index].label}</text>
+          <text x={point.x} y={height - 14} textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"} fill="#3B4B63" fontSize={compact ? "11" : "12"} fontWeight="700">{campaigns[index].label}</text>
         </g>
       ))}
     </svg>
   );
 }
 
-export function EEHistoricalReport({ data, embedded = false }: { data: any; embedded?: boolean }) {
+export function EEHistoricalReport({ data, embedded = false, variant = "history" }: { data: any; embedded?: boolean; variant?: "history" | "overview" }) {
   const { client, scale, departments, campaigns, indexes } = data;
   const scoreColor = makeScoreColor(scale);
   const [deptId, setDeptId] = useState(ALL);
@@ -115,6 +115,19 @@ export function EEHistoricalReport({ data, embedded = false }: { data: any; embe
   const scopeLabel = focusIndex ? `${focusIndex.name} index` : "Overall (all indexes)";
   const title = isAll ? "All Departments" : dept.name;
   const responseCount = isAll ? totalResponses : dept.responses;
+  const latestCampaign = campaigns[campaigns.length - 1];
+
+  const currentIndexRows = indexes.map((index) => {
+    const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
+    const currentValue = indexValues.at(-1);
+    const priorValue = indexValues.at(-2);
+    return {
+      id: index.id,
+      name: index.name,
+      current: currentValue,
+      deltaLast: round1(currentValue - priorValue),
+    };
+  });
 
   return (
     <div className={`canvas${embedded ? " embedded" : ""}`} style={embedded ? { minHeight: "auto" } : undefined}>
@@ -150,15 +163,66 @@ export function EEHistoricalReport({ data, embedded = false }: { data: any; embe
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: 18 }}>
-            <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-            <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} /></div>
-          </div>
+          {variant === "overview" ? (
+            <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]" style={{ marginBottom: 18 }}>
+              <div className="card">
+                <div className="card-head"><h3 className="card-title">Current Campaign Index Scores</h3></div>
+                <div className="card-body">
+                  <div className="stmt-wrap">
+                    <table className="stmt-table">
+                      <thead>
+                        <tr>
+                          <th>Index</th>
+                          <th className="num">{latestCampaign?.label ?? "Current"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentIndexRows.map((row) => {
+                          const color = scoreColor(row.current);
+                          return (
+                            <tr key={row.id} className="stmt-row">
+                              <td className="stmt">{row.name}</td>
+                              <td className="cell" style={{ background: color, color: textFor(color) }}>{row.current.toFixed(1)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
+                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} compact /></div>
+              </div>
+            </div>
+          ) : (
+            <div className="card" style={{ marginBottom: 18 }}>
+              <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
+              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} /></div>
+            </div>
+          )}
 
           <p className="slabel" style={{ marginBottom: 8 }}>Statement History · {scopeLabel}</p>
           <div className="stmt-wrap">
             <table className="stmt-table">
-              <thead><tr><th>Expand an index for statements</th>{campaigns.map((campaign, campaignIndex) => <th key={campaign.id} className={`num${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`}><DateHead campaign={campaign} /></th>)}<th className="num col-group-start">Delta Last</th><th className="num">Delta All</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Expand an index for statements</th>
+                  {variant === "overview" ? (
+                    <>
+                      <th className="num col-group-end"><DateHead campaign={latestCampaign} /></th>
+                      <th className="num col-group-start">Delta Last</th>
+                    </>
+                  ) : (
+                    <>
+                      {campaigns.map((campaign, campaignIndex) => <th key={campaign.id} className={`num${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`}><DateHead campaign={campaign} /></th>)}
+                      <th className="num col-group-start">Delta Last</th>
+                      <th className="num">Delta All</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
               <tbody>
                 {indexes.map((index) => {
                   const open = focus === index.id;
@@ -170,15 +234,29 @@ export function EEHistoricalReport({ data, embedded = false }: { data: any; embe
                     <>
                       <tr className={`acc-head${open ? " acc-open" : ""}`} onClick={() => setFocus(open ? ALL : index.id)}>
                         <td><div className="acc-name"><span className="acc-chev"><Chevron /></span><span className="acc-title">{index.name}</span></div></td>
-                        {indexValues.map((value, idx) => { const color = scoreColor(value); return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}
-                        <td className="cell col-group-start" style={{ background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{f1(indexDeltaLast)}</td>
-                        <td className="cell" style={{ background: deltaStyle(indexDeltaAll).bg, color: deltaStyle(indexDeltaAll).text }}>{f1(indexDeltaAll)}</td>
+                        {variant === "overview" ? (
+                          <>
+                            {(() => { const color = scoreColor(indexLast); return <td className="cell col-group-end" style={{ background: color, color: textFor(color) }}>{indexLast.toFixed(1)}</td>; })()}
+                            <td className="cell col-group-start" style={{ background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{f1(indexDeltaLast)}</td>
+                          </>
+                        ) : (
+                          <>
+                            {indexValues.map((value, idx) => { const color = scoreColor(value); return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}
+                            <td className="cell col-group-start" style={{ background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{f1(indexDeltaLast)}</td>
+                            <td className="cell" style={{ background: deltaStyle(indexDeltaAll).bg, color: deltaStyle(indexDeltaAll).text }}>{f1(indexDeltaAll)}</td>
+                          </>
+                        )}
                       </tr>
                       {open && index.statements.map((statement) => {
                         const values = campaigns.map((campaign) => statementValue(statement, campaign.id));
                         const statementLast = values.at(-1);
                         const statementDeltaLast = round1(statementLast - values.at(-2));
                         const statementDeltaAll = round1(statementLast - values[0]);
+                        if (variant === "overview") {
+                          const currentValue = values.at(-1);
+                          const currentColor = scoreColor(currentValue);
+                          return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td><td className="cell col-group-end" style={{ background: currentColor, color: textFor(currentColor) }}>{currentValue.toFixed(1)}</td><td className="cell col-group-start" style={{ background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{f1(statementDeltaLast)}</td></tr>;
+                        }
                         return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td>{values.map((value, idx) => { const color = scoreColor(value); return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}<td className="cell col-group-start" style={{ background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{f1(statementDeltaLast)}</td><td className="cell" style={{ background: deltaStyle(statementDeltaAll).bg, color: deltaStyle(statementDeltaAll).text }}>{f1(statementDeltaAll)}</td></tr>;
                       })}
                     </>
