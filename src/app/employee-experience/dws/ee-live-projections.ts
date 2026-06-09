@@ -41,6 +41,34 @@ function campaignId(label: string) {
   return slugify(label);
 }
 
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
+
+function campaignSortKey(label: string) {
+  const normalized = String(label).trim().toLowerCase();
+  const yearMatch = normalized.match(/\b(20\d{2}|\d{2})\b/);
+  const year = yearMatch ? (yearMatch[1].length === 2 ? Number(`20${yearMatch[1]}`) : Number(yearMatch[1])) : 0;
+  const monthToken = normalized.match(/\b([a-z]+)\b/)?.[1] ?? "";
+  const month = MONTH_INDEX[monthToken] ?? 0;
+  return year * 100 + month;
+}
+
+function sortedCampaigns(labels: string[]) {
+  return [...labels].sort((a, b) => campaignSortKey(a) - campaignSortKey(b) || a.localeCompare(b));
+}
+
 function respondentsForCampaign(respondents: EmployeeExperienceRespondent[], campaignLabel: string) {
   return respondents.filter((respondent) => respondent.campaignLabel === campaignLabel);
 }
@@ -493,7 +521,7 @@ export function projectCampaignResultsData(
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const comparisons = buildComparisons(campaigns, currentLabel);
 
   return {
@@ -514,7 +542,7 @@ export function projectDepartmentComparisonData(
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const departments = buildDepartments(
     data.respondents,
     currentLabel,
@@ -550,7 +578,7 @@ export function projectLocationComparisonData(
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const locations = buildLocations(
     data.respondents,
     currentLabel,
@@ -586,7 +614,7 @@ export function projectDepartmentReportData(
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const departments = buildDepartments(
     data.respondents,
     currentLabel,
@@ -627,7 +655,7 @@ export function projectBrandReportData(
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const brands = buildBrands(
     data.respondents,
     currentLabel,
@@ -668,7 +696,7 @@ export function projectSupervisorReportData(
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const comparisons = buildComparisons(campaigns, currentLabel);
   const supervisorDimension = findSupervisorDimension(data.questions);
   const supervisorQuestions = data.questions.filter(
@@ -746,7 +774,7 @@ export function projectHistoricalData(
   data: EmployeeExperienceDashboardData,
   options?: ProjectionOptions
 ) {
-  const campaigns = data.meta.campaigns;
+  const campaigns = sortedCampaigns(data.meta.campaigns);
   const currentLabel = resolveCampaignLabel(data, options);
   const departments = buildDepartments(
     data.respondents,

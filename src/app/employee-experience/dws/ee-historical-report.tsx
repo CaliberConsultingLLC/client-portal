@@ -78,7 +78,17 @@ function HistoryChart({ campaigns, values, orgValues, compact = false }: { campa
   );
 }
 
-export function EEHistoricalReport({ data, embedded = false, variant = "history" }: { data: any; embedded?: boolean; variant?: "history" | "overview" }) {
+export function EEHistoricalReport({
+  data,
+  embedded = false,
+  variant = "history",
+  currentCampaignLabel,
+}: {
+  data: any;
+  embedded?: boolean;
+  variant?: "history" | "overview";
+  currentCampaignLabel?: string;
+}) {
   const { client, scale, departments, campaigns, indexes } = data;
   const scoreColor = makeScoreColor(scale);
   const [deptId, setDeptId] = useState(ALL);
@@ -87,7 +97,6 @@ export function EEHistoricalReport({ data, embedded = false, variant = "history"
   const dept = departments.find((item) => item.id === deptId) ?? departments[0];
   const first = campaigns[0];
   const last = campaigns[campaigns.length - 1];
-  const previous = campaigns[campaigns.length - 2];
   const allStatements = useMemo(() => indexes.flatMap((index) => index.statements), [indexes]);
   const focusIndex = focus === ALL ? null : indexes.find((index) => index.id === focus);
   const scopeStatements = focusIndex ? focusIndex.statements : allStatements;
@@ -108,24 +117,32 @@ export function EEHistoricalReport({ data, embedded = false, variant = "history"
 
   const series = campaigns.map((campaign) => avgAt(scopeStatements, campaign.id));
   const orgSeries = isAll ? null : campaigns.map((campaign) => orgAvgAt(scopeStatements, campaign.id));
-  const currentScore = series.at(-1);
-  const deltaLast = round1(currentScore - series.at(-2));
+  const activeCampaignIndex = Math.max(
+    0,
+    currentCampaignLabel
+      ? campaigns.findIndex((campaign) => campaign.label === currentCampaignLabel)
+      : campaigns.length - 1
+  );
+  const activeCampaign = campaigns[activeCampaignIndex] ?? last;
+  const previousCampaign = activeCampaignIndex > 0 ? campaigns[activeCampaignIndex - 1] : null;
+  const currentScore = series[activeCampaignIndex] ?? series.at(-1);
+  const deltaLast = previousCampaign ? round1(currentScore - series[activeCampaignIndex - 1]) : null;
   const deltaAll = round1(currentScore - series[0]);
   const peakIndex = series.reduce((best, value, index) => value > series[best] ? index : best, 0);
   const scopeLabel = focusIndex ? `${focusIndex.name} index` : "Overall (all indexes)";
   const title = isAll ? "All Departments" : dept.name;
   const responseCount = isAll ? totalResponses : dept.responses;
-  const latestCampaign = campaigns[campaigns.length - 1];
+  const latestCampaign = activeCampaign;
 
   const currentIndexRows = indexes.map((index) => {
     const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
-    const currentValue = indexValues.at(-1);
-    const priorValue = indexValues.at(-2);
+    const currentValue = indexValues[activeCampaignIndex] ?? indexValues.at(-1);
+    const priorValue = previousCampaign ? indexValues[activeCampaignIndex - 1] : null;
     return {
       id: index.id,
       name: index.name,
       current: currentValue,
-      deltaLast: round1(currentValue - priorValue),
+      deltaLast: priorValue == null ? null : round1(currentValue - priorValue),
     };
   });
 
@@ -156,8 +173,8 @@ export function EEHistoricalReport({ data, embedded = false, variant = "history"
           <div className="hero">
             <div><h2>{title}</h2><p className="hero-sub">{scopeLabel} · {first.label} to {last.label}</p></div>
             <div className="kpi-strip">
-              <div className="kpi"><div className="k-label">{last.short}</div><div className="k-value">{currentScore.toFixed(1)}</div></div>
-              <div className="kpi"><div className="k-label">Delta Last</div><div className="k-value" style={{ color: deltaLast >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{f1(deltaLast)}</div></div>
+              <div className="kpi"><div className="k-label">{activeCampaign.short}</div><div className="k-value">{currentScore.toFixed(1)}</div></div>
+              <div className="kpi"><div className="k-label">Delta Last</div><div className="k-value" style={{ color: deltaLast == null ? "#6E7E96" : deltaLast >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{deltaLast == null ? "—" : f1(deltaLast)}</div></div>
               <div className="kpi"><div className="k-label">Delta All</div><div className="k-value" style={{ color: deltaAll >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{f1(deltaAll)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{responseCount}</div></div>
             </div>
@@ -227,8 +244,8 @@ export function EEHistoricalReport({ data, embedded = false, variant = "history"
                 {indexes.map((index) => {
                   const open = focus === index.id;
                   const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
-                  const indexLast = indexValues.at(-1);
-                  const indexDeltaLast = round1(indexLast - indexValues.at(-2));
+                  const indexLast = indexValues[activeCampaignIndex] ?? indexValues.at(-1);
+                  const indexDeltaLast = previousCampaign ? round1(indexLast - indexValues[activeCampaignIndex - 1]) : null;
                   const indexDeltaAll = round1(indexLast - indexValues[0]);
                   return (
                     <>
@@ -237,27 +254,27 @@ export function EEHistoricalReport({ data, embedded = false, variant = "history"
                         {variant === "overview" ? (
                           <>
                             {(() => { const color = scoreColor(indexLast); return <td className="cell col-group-end" style={{ background: color, color: textFor(color) }}>{indexLast.toFixed(1)}</td>; })()}
-                            <td className="cell col-group-start" style={{ background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{f1(indexDeltaLast)}</td>
+                            <td className="cell col-group-start" style={indexDeltaLast == null ? { color: "#6E7E96" } : { background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{indexDeltaLast == null ? "—" : f1(indexDeltaLast)}</td>
                           </>
                         ) : (
                           <>
                             {indexValues.map((value, idx) => { const color = scoreColor(value); return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}
-                            <td className="cell col-group-start" style={{ background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{f1(indexDeltaLast)}</td>
+                            <td className="cell col-group-start" style={indexDeltaLast == null ? { color: "#6E7E96" } : { background: deltaStyle(indexDeltaLast).bg, color: deltaStyle(indexDeltaLast).text }}>{indexDeltaLast == null ? "—" : f1(indexDeltaLast)}</td>
                             <td className="cell" style={{ background: deltaStyle(indexDeltaAll).bg, color: deltaStyle(indexDeltaAll).text }}>{f1(indexDeltaAll)}</td>
                           </>
                         )}
                       </tr>
                       {open && index.statements.map((statement) => {
                         const values = campaigns.map((campaign) => statementValue(statement, campaign.id));
-                        const statementLast = values.at(-1);
-                        const statementDeltaLast = round1(statementLast - values.at(-2));
+                        const statementLast = values[activeCampaignIndex] ?? values.at(-1);
+                        const statementDeltaLast = previousCampaign ? round1(statementLast - values[activeCampaignIndex - 1]) : null;
                         const statementDeltaAll = round1(statementLast - values[0]);
                         if (variant === "overview") {
-                          const currentValue = values.at(-1);
+                          const currentValue = values[activeCampaignIndex] ?? values.at(-1);
                           const currentColor = scoreColor(currentValue);
-                          return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td><td className="cell col-group-end" style={{ background: currentColor, color: textFor(currentColor) }}>{currentValue.toFixed(1)}</td><td className="cell col-group-start" style={{ background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{f1(statementDeltaLast)}</td></tr>;
+                          return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td><td className="cell col-group-end" style={{ background: currentColor, color: textFor(currentColor) }}>{currentValue.toFixed(1)}</td><td className="cell col-group-start" style={statementDeltaLast == null ? { color: "#6E7E96" } : { background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{statementDeltaLast == null ? "—" : f1(statementDeltaLast)}</td></tr>;
                         }
-                        return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td>{values.map((value, idx) => { const color = scoreColor(value); return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}<td className="cell col-group-start" style={{ background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{f1(statementDeltaLast)}</td><td className="cell" style={{ background: deltaStyle(statementDeltaAll).bg, color: deltaStyle(statementDeltaAll).text }}>{f1(statementDeltaAll)}</td></tr>;
+                        return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td>{values.map((value, idx) => { const color = scoreColor(value); return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}<td className="cell col-group-start" style={statementDeltaLast == null ? { color: "#6E7E96" } : { background: deltaStyle(statementDeltaLast).bg, color: deltaStyle(statementDeltaLast).text }}>{statementDeltaLast == null ? "—" : f1(statementDeltaLast)}</td><td className="cell" style={{ background: deltaStyle(statementDeltaAll).bg, color: deltaStyle(statementDeltaAll).text }}>{f1(statementDeltaAll)}</td></tr>;
                       })}
                     </>
                   );

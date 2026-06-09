@@ -1829,7 +1829,7 @@ export function DwsEmployeeExperienceDashboardClient({
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
             <div style={EE_PERSPECTIVE_MAIN_STYLE}>
-              <EEHistoricalReport data={reportBundle.historicalReport} embedded variant="overview" />
+              <EEHistoricalReport data={reportBundle.historicalReport} embedded variant="overview" currentCampaignLabel={current} />
             </div>
             {fixedInfoRail}
           </div>
@@ -1849,7 +1849,7 @@ export function DwsEmployeeExperienceDashboardClient({
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
             <div style={EE_PERSPECTIVE_MAIN_STYLE}>
-              <EEHistoricalReport data={reportBundle.historicalReport} embedded />
+              <EEHistoricalReport data={reportBundle.historicalReport} embedded currentCampaignLabel={current} />
             </div>
             {fixedInfoRail}
           </div>
