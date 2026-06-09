@@ -9,18 +9,18 @@ import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-re
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface LocationCell { current: number; comparisons: Record<string, number> }
-interface Statement { id: string; text: string; byLocation: Record<string, LocationCell> }
+interface DeptCell { current: number; comparisons: Record<string, number> }
+interface Statement { id: string; text: string; byDept: Record<string, DeptCell> }
 interface Index { id: string; name: string; statements: Statement[] }
 interface Comparison { id: string; label: string; labelLong: string }
-interface Location { id: string; name: string }
+interface Department { id: string; name: string }
 interface Data {
   client: { name: string; tagline?: string; logoUrl?: string };
   current: { id: string; label: string; labelLong: string; responseRate?: number };
   comparisons: Comparison[];
   scale: { min: number; mid: number; max: number };
   display?: { barAxis?: { min: number; max: number; ticks?: number[] }; deltaAxis?: { min: number; max: number; ticks?: number[] } };
-  locations: Location[];
+  departments: Department[];
   indexes: Index[];
 }
 
@@ -46,7 +46,7 @@ const DC_INDEX_DEFS: { id: string; name: string; off: number; yoyScale: number; 
     statements: [
       "Top Flight delivers on its promises to its customers",
       "Leaders at Top Flight demonstrate professional integrity",
-      "My department receives good cooperation and support from other locations",
+      "My department receives good cooperation and support from other departments",
       "Top Flight delivers on its promises to its employees",
       "Top Flight employees work well together",
       "Top Flight encourages open and honest communication",
@@ -108,7 +108,7 @@ const DATA: Data = (() => {
     name: def.name,
     statements: def.statements.map((text, sIdx) => {
       const id = `${def.id}-${sIdx + 1}`;
-      const byLocation: Record<string, LocationCell> = {};
+      const byDept: Record<string, DeptCell> = {};
       DC_DEPARTMENTS.forEach((d) => {
         const bias = def.id === "culture" ? 0 : ((hash(d.id + def.id) % 70) / 10) - 3.5;
         const target = cl(d.base + def.off + bias, 26, 97);
@@ -118,9 +118,9 @@ const DATA: Data = (() => {
         const yj = ((hash(id + d.id + "y") % 40) / 10) - 2.0;
         const jul = rd(cl(cur - (yoy + yj), 18, 99));
         const feb = rd(cl(cur - (yoy * 0.55 + yj * 0.5), 18, 99));
-        byLocation[d.id] = { current: cur, comparisons: { jul, feb } };
+        byDept[d.id] = { current: cur, comparisons: { jul, feb } };
       });
-      return { id, text, byLocation };
+      return { id, text, byDept };
     }),
   }));
 
@@ -136,7 +136,7 @@ const DATA: Data = (() => {
       barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
       deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
     },
-    locations: DC_DEPARTMENTS.map((d) => ({ id: d.id, name: d.name })),
+    departments: DC_DEPARTMENTS.map((d) => ({ id: d.id, name: d.name })),
     indexes,
   };
 })();
@@ -219,8 +219,8 @@ function InsightCard({
 }
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
-// Location rows preserve their dataset order (NOT sorted) so the left bar
-// chart and the right delta chart line up location-for-location.
+// Department rows preserve their dataset order (NOT sorted) so the left bar
+// chart and the right delta chart line up department-for-department.
 
 function DeptFavChart({ rows, avg, axis, color }: {
   rows: { name: string; value: number }[];
@@ -306,7 +306,7 @@ function DeptDeltaChart({ rows, axis }: { rows: { name: string; delta: number }[
 
 const ALL = "__ALL__";
 
-export function EELocationComparison({
+export function EEDepartmentComparison({
   data,
   dashboardInstanceId,
   canEditGuidance = false,
@@ -329,7 +329,7 @@ export function EELocationComparison({
   statementId?: string;
   onStatementId?: (value: string) => void;
 }) {
-  const { client, current, comparisons, scale, indexes, locations } = data;
+  const { client, current, comparisons, scale, indexes, departments } = data;
   const sc = (v: number) => scoreScaleColor(v, scale.min, scale.mid, scale.max);
 
   const [localIndexId, setLocalIndexId] = useState(indexes[0]?.id ?? "");
@@ -355,20 +355,20 @@ export function EELocationComparison({
     return { min: a.min, max: a.max, ticks: a.ticks ?? tensWithin(a.min, a.max) };
   }, [data.display?.barAxis, scale.min, scale.max]);
 
-  const rows = useMemo(() => locations.map(d => {
+  const rows = useMemo(() => departments.map(d => {
     let cur: number, prev: number;
     if (activeStatement) {
-      const cell = activeStatement.byLocation[d.id];
+      const cell = activeStatement.byDept[d.id];
       cur = cell.current;
       prev = cell.comparisons[compId] ?? 0;
     } else {
-      const curs = idx.statements.map(s => s.byLocation[d.id].current);
-      const prevs = idx.statements.map(s => s.byLocation[d.id].comparisons[compId] ?? 0);
+      const curs = idx.statements.map(s => s.byDept[d.id].current);
+      const prevs = idx.statements.map(s => s.byDept[d.id].comparisons[compId] ?? 0);
       cur = r1(mean(curs));
       prev = r1(mean(prevs));
     }
     return { id: d.id, name: d.name, value: cur, prev, delta: r1(cur - prev) };
-  }), [locations, idx, activeStatement, compId]);
+  }), [departments, idx, activeStatement, compId]);
 
   const deltaAxis = useMemo(() => {
     const fallback = data.display?.deltaAxis
@@ -394,13 +394,71 @@ export function EELocationComparison({
   const scopeLabel = activeStatement ? "Statement view" : `${idx.name} index average`;
   const scopeDetail = activeStatement ? `“${activeStatement.text}”` : `${idx.name} index average across all statements`;
 
-  if (!idx || indexes.length === 0 || locations.length === 0) {
-    return <div className="p-8 text-sm text-text-secondary">No brand comparison data is available for this campaign yet.</div>;
-  }
-
   return (
     <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
       {executiveRail}
+
+      {!executiveRail ? (
+      <aside
+        className="flex flex-col gap-4 p-6"
+        style={{
+          position: "fixed",
+          top: "calc(var(--app-top-banner-height,78px) + 66px)",
+          bottom: 0,
+          left: 0,
+          width: 268,
+          overflow: "auto",
+          background: "#E8ECE9",
+          borderRight: "1px solid #D4DAD6",
+        }}
+      >
+
+        <div className="rounded-[18px] bg-white p-4 text-center" style={{ border: "1px solid #8798AA", boxShadow: "0 2px 8px rgba(15,23,42,.07)" }}>
+          <img src={client.logoUrl ?? "/top-flight-logo.png"} alt={`${client.name} logo`} className="mx-auto h-auto w-[180px]" />
+          <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>{current.label.toUpperCase()} DEPARTMENT COMPARISON</div>
+          <div className="mt-0.5 italic" style={{ fontSize: 10.5, color: "#6E7E96" }}>(compared to {comp.labelLong})</div>
+        </div>
+
+        <RailSection title="Campaign Comparison">
+          <div className="flex flex-col gap-2">
+            {[...comparisons].reverse().map(c => {
+              const active = compId === c.id;
+              return (
+                <button key={c.id} type="button" onClick={() => setCompId(c.id)} className="w-full rounded-[11px] px-3 py-2.5 text-sm font-semibold transition-colors"
+                  style={active ? { background: "#2B2B2B", color: "#fff", border: "1px solid #2B2B2B" } : { background: "#fff", color: "#3B4B63", border: "1px solid #D4DAD6" }}>{c.label}</button>
+              );
+            })}
+          </div>
+        </RailSection>
+
+        <RailSection title="Index Selection">
+          <div className="flex flex-col gap-2">
+            {indexes.map(ix => {
+              const active = indexId === ix.id;
+              return (
+                <button key={ix.id} type="button" onClick={() => setIndexId(ix.id)} className="w-full rounded-[11px] px-3 py-2.5 text-center text-sm font-semibold transition-colors"
+                  style={active ? { background: "#2B2B2B", color: "#fff", border: "1px solid #2B2B2B" } : { background: "#fff", color: "#3B4B63", border: "1px solid #D4DAD6" }}>{ix.name}</button>
+              );
+            })}
+          </div>
+        </RailSection>
+
+        <RailSection title="Statement">
+          <select
+            value={statementId}
+            onChange={e => setStatementId(e.target.value)}
+            className="w-full rounded-[11px] px-3 py-2.5 text-[12.5px] font-semibold leading-snug"
+            style={{ border: "1px solid #D4DAD6", background: "#fff", color: "#3B4B63" }}
+          >
+            <option value={ALL}>Index average (all statements)</option>
+            {idx.statements.map(s => <option key={s.id} value={s.id}>{s.text}</option>)}
+          </select>
+          <p className="mt-2.5 px-0.5 text-[11px] leading-relaxed" style={{ color: "#6E7E96" }}>
+            Choose a single statement to compare departments on that question, or keep the index average.
+          </p>
+        </RailSection>
+      </aside>
+      ) : null}
 
       <main className="flex flex-col gap-5" style={EE_PERSPECTIVE_MAIN_STYLE}>
         <div style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }} className="flex flex-col gap-5">
@@ -409,7 +467,7 @@ export function EELocationComparison({
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Brand Comparison</h2>
+                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Department Comparison</h2>
                 <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong} · compared to {comp.label} · {scopeLabel}</p>
               </div>
               <div className="flex shrink-0 gap-3">
@@ -432,7 +490,7 @@ export function EELocationComparison({
             <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
               <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
                 <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign</h3>
-                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Favorability by brand · {scopeDetail} · dashed line marks the company average.</p>
+                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Favorability by department · {scopeDetail} · dashed line marks the company average.</p>
               </div>
               <div className="px-6 py-5">
                 <DeptFavChart rows={rows.map(r => ({ name: r.name, value: r.value }))} avg={overallAvg} axis={barAxis} color={sc} />
@@ -442,7 +500,7 @@ export function EELocationComparison({
             <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
               <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
                 <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Point Difference (YoY)</h3>
-                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by brand vs {comp.label} · gains in green, declines in red.</p>
+                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by department vs {comp.label} · gains in green, declines in red.</p>
               </div>
               <div className="px-6 py-5">
                 <DeptDeltaChart rows={rows.map(r => ({ name: r.name, delta: r.delta }))} axis={deltaAxis} />
@@ -453,11 +511,10 @@ export function EELocationComparison({
         </div>
       </main>
 
-      {/* Right rail */}
       <aside className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6" style={EE_GUIDANCE_RAIL_STYLE}>
         <GuidancePinRail
           dashboardInstanceId={dashboardInstanceId}
-          perspectiveId="ee-location-comparison"
+          perspectiveId="ee-department-comparison"
           campaignLabel={current.label}
           filterKey={indexId}
           canEdit={canEditGuidance}
@@ -467,7 +524,7 @@ export function EELocationComparison({
         <div className="rounded-2xl bg-white p-4" style={{ border: "1px solid #8798AA" }}>
           <h4 className="font-bold" style={{ fontSize: 13, color: "#152238", marginBottom: 8 }}>How to read</h4>
           <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63", margin: 0 }}>
-            Each row is a brand. Pick an index for the overall average, or choose one statement to compare that question across brands.
+            Each row is a department. Pick an index for the overall average, or choose one statement to compare that question across departments.
           </p>
         </div>
         {biggestGain ? (

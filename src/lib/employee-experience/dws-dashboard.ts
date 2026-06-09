@@ -37,6 +37,7 @@ const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string
     statements: "Canopy Services Campaign Statements.csv",
   },
 };
+const CSG_EXCLUDED_DIMENSION_IDS = ["integration"];
 const DEMO_DATABASE_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWSDatabase.csv");
 const DEMO_STATEMENTS_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWS 2024 Campaign Statements.csv");
 const DEMO_HIDDEN_DIMENSION_IDS = ["acquisition"];
@@ -1350,9 +1351,10 @@ export async function loadDwsEmployeeExperienceDashboardData({
       : `${organizationName} employee experience Firebase CSV workspace`,
     definitions,
     respondents,
-    hiddenDimensionIds: mergeHiddenDimensionIds(
-      hiddenDimensionIds ?? (demo ? DEMO_HIDDEN_DIMENSION_IDS : [])
-    ),
+    hiddenDimensionIds: mergeHiddenDimensionIds([
+      ...(hiddenDimensionIds ?? (demo ? DEMO_HIDDEN_DIMENSION_IDS : [])),
+      ...(safeSourceClientId === "csg" ? CSG_EXCLUDED_DIMENSION_IDS : []),
+    ]),
   });
 }
 

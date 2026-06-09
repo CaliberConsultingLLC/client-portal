@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
 import { EECampaignResults } from "./ee-campaign-results";
 import { EEDepartmentComparison } from "./ee-department-comparison";
@@ -151,6 +151,7 @@ const OPEN_TEXT_FIELDS = [
   { id: "acquisition" as const, label: "Acquisition Comments", dimensionId: "acquisition" },
 ];
 type OpenTextField = "strengths" | "improvement" | "supervisor" | "acquisition";
+const COMPARISON_ALL = "__ALL__";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -1416,6 +1417,8 @@ export function DwsEmployeeExperienceDashboardClient({
   const [execCompId, setExecCompId] = useState("");
   const [execIndexId, setExecIndexId] = useState("");
   const [execLocation, setExecLocation] = useState("");
+  const [execDeptStatementId, setExecDeptStatementId] = useState(COMPARISON_ALL);
+  const [execBrandStatementId, setExecBrandStatementId] = useState(COMPARISON_ALL);
 
   const min = data.settings.minimumSegmentSize;
   const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
@@ -1462,6 +1465,23 @@ export function DwsEmployeeExperienceDashboardClient({
   const activeExecCompId = execCompId || defaultComparisonId(executiveComparisons);
   const activeExecIndexId = execIndexId || executiveIndexes[0]?.id || "";
   const brandLocations = locationOpts;
+  const activeDepartmentIndex = reportBundle.departmentComparison.indexes.find((index) => index.id === activeExecIndexId)
+    ?? reportBundle.departmentComparison.indexes[0];
+  const activeBrandIndex = reportBundle.locationComparison.indexes.find((index) => index.id === activeExecIndexId)
+    ?? reportBundle.locationComparison.indexes[0];
+
+  useEffect(() => {
+    if (!data.meta.campaigns.includes(current)) {
+      setCurrent(data.meta.currentCampaignLabel);
+    }
+  }, [data.meta.campaigns, data.meta.currentCampaignLabel, current]);
+
+  useEffect(() => {
+    const fallbackPrior = [...data.meta.campaigns].reverse().find((campaign) => campaign !== current) ?? "";
+    if (!prior || prior === current || !data.meta.campaigns.includes(prior)) {
+      setPrior(fallbackPrior);
+    }
+  }, [current, data.meta.campaigns, prior]);
 
   const executiveRail = EXECUTIVE_PERSPECTIVES.has(activePersp) ? (
     <EEExecutiveRail
@@ -1482,6 +1502,35 @@ export function DwsEmployeeExperienceDashboardClient({
       locations={brandLocations}
       location={execLocation}
       onLocation={setExecLocation}
+      extraSections={
+        activePersp === "ee-department-comparison" ? (
+          <RailSection title="Statement">
+            <select
+              value={execDeptStatementId}
+              onChange={(event) => setExecDeptStatementId(event.target.value)}
+              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+            >
+              <option value={COMPARISON_ALL}>Index average (all statements)</option>
+              {activeDepartmentIndex?.statements.map((statement) => (
+                <option key={statement.id} value={statement.id}>{statement.text}</option>
+              ))}
+            </select>
+          </RailSection>
+        ) : activePersp === "ee-location-comparison" ? (
+          <RailSection title="Statement">
+            <select
+              value={execBrandStatementId}
+              onChange={(event) => setExecBrandStatementId(event.target.value)}
+              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+            >
+              <option value={COMPARISON_ALL}>Index average (all statements)</option>
+              {activeBrandIndex?.statements.map((statement) => (
+                <option key={statement.id} value={statement.id}>{statement.text}</option>
+              ))}
+            </select>
+          </RailSection>
+        ) : null
+      }
     />
   ) : null;
 
@@ -1652,6 +1701,8 @@ export function DwsEmployeeExperienceDashboardClient({
             onIndexId={setExecIndexId}
             compId={activeExecCompId}
             onCompId={setExecCompId}
+            statementId={execDeptStatementId}
+            onStatementId={setExecDeptStatementId}
           />
         );
       case "ee-location-comparison":
@@ -1665,6 +1716,8 @@ export function DwsEmployeeExperienceDashboardClient({
             onIndexId={setExecIndexId}
             compId={activeExecCompId}
             onCompId={setExecCompId}
+            statementId={execBrandStatementId}
+            onStatementId={setExecBrandStatementId}
           />
         );
       case "exec-overview":
@@ -1721,7 +1774,7 @@ export function DwsEmployeeExperienceDashboardClient({
         );
       default: return null;
     }
-  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation]);
+  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
 
   return (
     <>
