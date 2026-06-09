@@ -198,6 +198,17 @@ function buildLocations(
     }));
 }
 
+function buildBrands(
+  respondents: EmployeeExperienceRespondent[],
+  currentLabel: string,
+  minimumSegmentSize: number
+) {
+  return buildLocations(respondents, currentLabel, minimumSegmentSize).map((brand) => ({
+    ...brand,
+    location: brand.name,
+  }));
+}
+
 function buildByLocationStatements(
   questions: EmployeeExperienceQuestionDefinition[],
   respondents: EmployeeExperienceRespondent[],
@@ -234,6 +245,47 @@ function buildByLocationStatements(
         id: `${slugify(dimension)}-${index + 1}`,
         text: question.statement,
         byLocation,
+      };
+    }),
+  }));
+}
+
+function buildByBrandStatements(
+  questions: EmployeeExperienceQuestionDefinition[],
+  respondents: EmployeeExperienceRespondent[],
+  campaigns: string[],
+  currentLabel: string,
+  brands: Array<{ id: string; name: string }>
+) {
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return Array.from(groupQuestionsByDimension(questions).entries()).map(([dimension, items]) => ({
+    id: slugify(dimension),
+    name: dimension,
+    statements: items.map((question, index) => {
+      const byDept: Record<string, { current: number; comparisons: Record<string, number> }> = {};
+      brands.forEach((brand) => {
+        const brandRespondents = (campaignLabel: string) =>
+          respondentsForCampaign(respondents, campaignLabel).filter(
+            (respondent) => respondent.location === brand.name
+          );
+
+        byDept[brand.id] = {
+          current: itemDisplayScore(brandRespondents(currentLabel), question.itemId),
+          comparisons: Object.fromEntries(
+            comparisons.map((comparison) => {
+              const priorLabel =
+                campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
+              return [comparison.id, itemDisplayScore(brandRespondents(priorLabel), question.itemId)];
+            })
+          ),
+        };
+      });
+
+      return {
+        id: `${slugify(dimension)}-${index + 1}`,
+        text: question.statement,
+        byDept,
       };
     }),
   }));
@@ -284,6 +336,81 @@ function buildSegments(
           if (currentSlice.length < minimumSegmentSize) return;
 
           byDept[department.id] = {
+            responses: currentSlice.length,
+            current: toDisplayScore(
+              average(
+                currentSlice.flatMap((respondent) =>
+                  Object.values(respondent.scores).filter((value): value is number => value !== null)
+                )
+              )
+            ),
+            comparisons: Object.fromEntries(
+              comparisons.map((comparison) => {
+                const priorLabel =
+                  campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
+                const priorSlice = slice(priorLabel);
+                return [
+                  comparison.id,
+                  priorSlice.length > 0
+                    ? toDisplayScore(
+                        average(
+                          priorSlice.flatMap((respondent) =>
+                            Object.values(respondent.scores).filter((value): value is number => value !== null)
+                          )
+                        )
+                      )
+                    : 0,
+                ];
+              })
+            ),
+          };
+        });
+
+        return { id: groupId, name, byDept };
+      }),
+    };
+  });
+}
+
+function buildBrandSegments(
+  respondents: EmployeeExperienceRespondent[],
+  campaigns: string[],
+  currentLabel: string,
+  brands: Array<{ id: string; name: string }>,
+  minimumSegmentSize: number
+) {
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return SEGMENT_FIELDS.map((dimension) => {
+    const groupNames = Array.from(
+      new Set(
+        respondentsForCampaign(respondents, currentLabel)
+          .map((respondent) => respondent[dimension.field])
+          .filter((value) => value && value !== "Unspecified" && value !== "Unknown Job Title")
+      )
+    ).sort((left, right) => left.localeCompare(right));
+
+    return {
+      id: dimension.id,
+      label: dimension.label,
+      groups: groupNames.map((name) => {
+        const groupId = `${dimension.id}-${slugify(name)}`;
+        const byDept: Record<
+          string,
+          { responses: number; current: number; comparisons: Record<string, number> }
+        > = {};
+
+        brands.forEach((brand) => {
+          const slice = (campaignLabel: string) =>
+            respondentsForCampaign(respondents, campaignLabel).filter(
+              (respondent) =>
+                respondent.location === brand.name && respondent[dimension.field] === name
+            );
+
+          const currentSlice = slice(currentLabel);
+          if (currentSlice.length < minimumSegmentSize) return;
+
+          byDept[brand.id] = {
             responses: currentSlice.length,
             current: toDisplayScore(
               average(
@@ -495,6 +622,47 @@ export function projectDepartmentReportData(
   };
 }
 
+export function projectBrandReportData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = data.meta.campaigns;
+  const brands = buildBrands(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize
+  );
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons,
+    scale: REPORT_SCORE_SCALE,
+    departments: brands,
+    indexes: buildByBrandStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      brands
+    ),
+    segments: buildBrandSegments(
+      data.respondents,
+      campaigns,
+      currentLabel,
+      brands,
+      data.settings.minimumSegmentSize
+    ),
+    segmentMinResponses: data.settings.minimumSegmentSize,
+  };
+}
+
 export function projectSupervisorReportData(
   data: EmployeeExperienceDashboardData,
   options?: ProjectionOptions
@@ -635,6 +803,7 @@ export function buildEmployeeExperienceReportBundle(
     campaignResults: projectCampaignResultsData(data, options),
     departmentComparison: projectDepartmentComparisonData(data, options),
     locationComparison: projectLocationComparisonData(data, options),
+    brandReport: projectBrandReportData(data, options),
     departmentReport: projectDepartmentReportData(data, options),
     supervisorReport: projectSupervisorReportData(data, options),
     historicalReport: projectHistoricalData(data, options),

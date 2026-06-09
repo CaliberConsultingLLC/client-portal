@@ -106,8 +106,9 @@ const GROUPS = [
   },
   {
     id: "department" as const,
-    label: "Department",
+    label: "Brand",
     perspectives: [
+      { id: "ee-brand-report" as const, label: "Brand Report" },
       { id: "ee-department-report" as const, label: "Department Report" },
       { id: "hr-supervisor" as const, label: "Supervisor Reports" },
     ],
@@ -118,7 +119,7 @@ type GroupId = (typeof GROUPS)[number]["id"];
 type PerspectiveId =
   | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
   | "hr-rankings" | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
-  | "dept-scorecard" | "ee-department-report" | "ee-historical-report";
+  | "dept-scorecard" | "ee-brand-report" | "ee-department-report" | "ee-historical-report";
 
 const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
   "exec-overview",
@@ -141,6 +142,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "hr-supervisor": "Supervisor Reports",
   "hr-open-text": "Open Text",
   "dept-scorecard": "Department Scorecard",
+  "ee-brand-report": "Brand Report",
   "ee-department-report": "Department Report",
 };
 
@@ -1548,6 +1550,30 @@ export function DwsEmployeeExperienceDashboardClient({
     );
   }
 
+  function renderCanvasGuidance(perspectiveId: string, filterKey: string) {
+    return (
+      <GuidancePinRail
+        dashboardInstanceId={dashboardInstanceId}
+        perspectiveId={perspectiveId}
+        campaignLabel={current}
+        filterKey={filterKey || "default"}
+        canEdit={canEditGuidance}
+        className="flex flex-col gap-4 p-2"
+        style={{ position: "static", width: "auto", background: "transparent", border: "none", overflow: "visible" }}
+      />
+    );
+  }
+
+  const canvasGuidanceConfig: Record<string, { perspectiveId: string; filterKey: string }> = {
+    "hr-rankings": { perspectiveId: "hr-rankings", filterKey: "default" },
+    "hr-index-dive": { perspectiveId: "hr-index-dive", filterKey: selectedDim || "default" },
+    "hr-open-text": { perspectiveId: "hr-open-text", filterKey: openTextField || "default" },
+    "dept-scorecard": { perspectiveId: "dept-scorecard", filterKey: selectedDept || "default" },
+  };
+  const canvasGuidance = canvasGuidanceConfig[activePersp]
+    ? renderCanvasGuidance(canvasGuidanceConfig[activePersp].perspectiveId, canvasGuidanceConfig[activePersp].filterKey)
+    : undefined;
+
   function onGroupChange(gid: string) {
     const g = GROUPS.find((x) => x.id === gid) ?? GROUPS[0];
     setActiveGroup(g.id);
@@ -1765,6 +1791,17 @@ export function DwsEmployeeExperienceDashboardClient({
         return <HrOpenText data={data} current={current} deptFilter={openTextDept} fieldType={openTextField} />;
       case "dept-scorecard":
         return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
+      case "ee-brand-report":
+        return (
+          <>
+            <EEDepartmentReport
+              data={reportBundle.brandReport}
+              unitLabel="Brand"
+              reportHeading="BRAND REPORT"
+            />
+            {renderGuidance("ee-brand-report", execLocation || "default")}
+          </>
+        );
       case "ee-department-report":
         return (
           <>
@@ -1792,9 +1829,10 @@ export function DwsEmployeeExperienceDashboardClient({
       activePersp === "ee-department-comparison" ||
       activePersp === "ee-location-comparison" ||
       activePersp === "hr-supervisor" ||
+      activePersp === "ee-brand-report" ||
       activePersp === "ee-department-report"
         ? content
-        : <DashboardCanvas leftRail={leftRail}>{content}</DashboardCanvas>}
+        : <DashboardCanvas leftRail={leftRail} rightRail={canvasGuidance}>{content}</DashboardCanvas>}
     </>
   );
 }
