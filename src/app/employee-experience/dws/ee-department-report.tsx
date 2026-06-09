@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toDepartmentReportData } from "./ee-demo-fixture";
 import {
   ClientMark,
@@ -24,6 +24,7 @@ const PREFERRED_CURRENT_CAMPAIGN = "May 2026";
 const PREFERRED_PRIOR_CAMPAIGN = "Aug 2025";
 
 function valueFor(cell, campaign) {
+  if (!cell) return 0;
   return campaign.isCurrent ? cell.current : cell.comparisons[campaign.id] ?? 0;
 }
 
@@ -95,6 +96,12 @@ export function EEDepartmentReport({
     [comparisons, current]
   );
   const timelineRecentFirst = useMemo(() => [...timeline].reverse(), [timeline]);
+
+  useEffect(() => {
+    if (!departments.find((item) => item.id === deptId)) {
+      setDeptId(departments[0]?.id ?? "");
+    }
+  }, [departments, deptId]);
 
   if (!departments.length || !indexes.length) {
     return (

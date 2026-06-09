@@ -89,10 +89,10 @@ const GROUPS = [
     perspectives: [
       { id: "exec-overview" as const, label: "Campaign Overview" },
       { id: "ee-campaign-results" as const, label: "Campaign Results" },
+      { id: "exec-location" as const, label: "Result Heat Maps" },
       { id: "ee-historical-report" as const, label: "Detailed History" },
       { id: "ee-location-comparison" as const, label: "Brand Comparison" },
       { id: "ee-department-comparison" as const, label: "Department Comparison" },
-      { id: "exec-location" as const, label: "Brand Breakdown" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
       { id: "hr-open-text" as const, label: "Open Text" },
     ],
@@ -125,7 +125,7 @@ const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
 
 const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "exec-overview": "Campaign Overview",
-  "exec-location": "Brand Breakdown",
+  "exec-location": "Result Heat Maps",
   "ee-campaign-results": "Campaign Results",
   "ee-department-comparison": "Department Comparison",
   "ee-location-comparison": "Brand Comparison",
@@ -1250,7 +1250,7 @@ function HrOpenText({
   const fieldLabel = OPEN_TEXT_FIELDS.find((f) => f.id === fieldType)?.label ?? fieldType;
 
   const entries = useMemo(() => {
-    return data.respondents
+    const campaignEntries = data.respondents
       .filter((respondent) => {
         if (respondent.campaignLabel !== current) return false;
         if (brandFilter && respondent.location !== brandFilter) return false;
@@ -1263,20 +1263,30 @@ function HrOpenText({
         department: respondent.department,
         location: respondent.location,
       }));
+    if (campaignEntries.length > 0) return campaignEntries;
+
+    return data.respondents
+      .filter((respondent) => {
+        if (brandFilter && respondent.location !== brandFilter) return false;
+        const text = respondent.comments[fieldType];
+        return Boolean(text && text.trim().length > 0);
+      })
+      .map((respondent) => ({
+        id: `${respondent.id}-${fieldType}-${respondent.campaignLabel}`,
+        text: respondent.comments[fieldType].trim(),
+        department: respondent.department,
+        location: respondent.location,
+      }));
   }, [data.respondents, fieldType, current, brandFilter]);
 
   return (
     <div className="space-y-6">
-      <ExecutiveHeader
-        title="Open Text"
-        subtitle={`${fieldLabel} · ${current}`}
-        kpis={[
-          { label: "Responses", value: entries.length.toLocaleString() },
-          { label: "Brand", value: brandFilter || "All" },
-          { label: "Question Type", value: fieldLabel.split(" ")[0] ?? fieldLabel },
-          { label: "Campaign", value: current.split(" ")[0] ?? current },
-        ]}
-      />
+      <div>
+        <SLabel>Open Text · {fieldLabel}</SLabel>
+        <p className="mt-2 text-sm text-text-secondary">
+          {entries.length} response{entries.length !== 1 ? "s" : ""}{brandFilter ? ` from ${brandFilter}` : " across all brands"}.
+        </p>
+      </div>
       {entries.length === 0 ? (
         <Empty message="No responses match the current selection." />
       ) : (
@@ -1618,7 +1628,7 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const perspectiveHowToRead: Record<PerspectiveId, string> = {
     "exec-overview": "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
-    "exec-location": "Heatmap rows are brands, columns are indexes, and row totals summarize each brand. Use this to compare brand strengths and watch areas.",
+    "exec-location": "Heatmap rows are brands and work types, columns are indexes, and row totals summarize each group. Use this to compare strengths and watch areas.",
     "ee-campaign-results": "Use index cards and statement tables to compare campaign scores and deltas. Green indicates positive movement and red indicates decline.",
     "ee-department-comparison": "Each row is a department for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
@@ -1818,9 +1828,9 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <main style={EE_PERSPECTIVE_MAIN_STYLE}>
-              <ExecOverview data={data} current={current} prior={prior} locationFilter={execLocation} />
-            </main>
+            <div style={EE_PERSPECTIVE_MAIN_STYLE}>
+              <EEHistoricalReport data={reportBundle.historicalReport} embedded />
+            </div>
             {fixedInfoRail}
           </div>
         );
@@ -1855,13 +1865,14 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-brand-report":
         return (
           <EEDepartmentReport
+            key="brand-report"
             data={reportBundle.brandReport}
             unitLabel="Brand"
             reportHeading="BRAND REPORT"
           />
         );
       case "ee-department-report":
-        return <EEDepartmentReport data={reportBundle.departmentReport} />;
+        return <EEDepartmentReport key="department-report" data={reportBundle.departmentReport} />;
       default: return null;
     }
   }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
