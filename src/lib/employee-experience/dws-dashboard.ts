@@ -6,6 +6,10 @@ import {
   mergeHiddenDimensionIds,
   normalizeDimensionId,
 } from "@/lib/employee-experience/excluded-dimensions";
+import {
+  BRAND_SEGMENT_COLUMN_ALIASES,
+  UNKNOWN_BRAND_LABEL,
+} from "@/lib/employee-experience/brand-segment";
 import type {
   EmployeeExperienceCommentTheme,
   EmployeeExperienceDashboardData,
@@ -36,14 +40,6 @@ const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string
 const DEMO_DATABASE_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWSDatabase.csv");
 const DEMO_STATEMENTS_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWS 2024 Campaign Statements.csv");
 const DEMO_HIDDEN_DIMENSION_IDS = ["acquisition"];
-
-/** Company / brand segment — CSG uses the Company column; UI labels this "Brand". */
-export const BRAND_SEGMENT_COLUMN_ALIASES = ["Company", "Brand", "Location", "Site"] as const;
-export const UNKNOWN_BRAND_LABEL = "Unknown Brand";
-
-export function isKnownBrandSegment(value: string) {
-  return Boolean(value?.trim()) && value !== UNKNOWN_BRAND_LABEL;
-}
 
 const COMMENT_IDS = {
   strengths: 42,

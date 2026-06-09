@@ -15,7 +15,7 @@ import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
 import { mergeHiddenDimensionIds } from "@/lib/employee-experience/excluded-dimensions";
-import { isKnownBrandSegment } from "@/lib/employee-experience/dws-dashboard";
+import { isKnownBrandSegment } from "@/lib/employee-experience/brand-segment";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
 import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 import { cn } from "@/lib/utils";
