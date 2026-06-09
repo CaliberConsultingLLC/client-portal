@@ -1962,7 +1962,8 @@ export function DwsEmployeeExperienceDashboardClient({
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
             <div style={EE_PERSPECTIVE_MAIN_STYLE}>
-              <EEHistoricalReport data={reportBundle.historicalReport} embedded variant="overview" currentCampaignLabel={current} />
+              <EEHistoricalReport data={reportBundle.historicalReport} embedded variant="overview" currentCampaignLabel={current} selectedIndexId={activeExecIndexId} />
+              
             </div>
             {fixedInfoRail}
           </div>

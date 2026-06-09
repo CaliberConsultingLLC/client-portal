@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toHistoricalData } from "./ee-demo-fixture";
 import {
   ClientMark,
@@ -83,16 +83,18 @@ export function EEHistoricalReport({
   embedded = false,
   variant = "history",
   currentCampaignLabel,
+  selectedIndexId,
 }: {
   data: any;
   embedded?: boolean;
   variant?: "history" | "overview";
   currentCampaignLabel?: string;
+  selectedIndexId?: string;
 }) {
   const { client, scale, departments, campaigns, indexes } = data;
   const scoreColor = makeScoreColor(scale);
   const [deptId, setDeptId] = useState(ALL);
-  const [focus, setFocus] = useState(ALL);
+  const [focus, setFocus] = useState(selectedIndexId ?? ALL);
   const isAll = deptId === ALL;
   const dept = departments.find((item) => item.id === deptId) ?? departments[0];
   const first = campaigns[0];
@@ -133,6 +135,12 @@ export function EEHistoricalReport({
   const title = isAll ? "All Departments" : dept.name;
   const responseCount = isAll ? totalResponses : dept.responses;
   const latestCampaign = activeCampaign;
+
+  useEffect(() => {
+    if (selectedIndexId && selectedIndexId !== focus) {
+      setFocus(selectedIndexId);
+    }
+  }, [selectedIndexId, focus]);
 
   return (
     <div className={`canvas${embedded ? " embedded" : ""}`} style={embedded ? { minHeight: "auto" } : undefined}>
