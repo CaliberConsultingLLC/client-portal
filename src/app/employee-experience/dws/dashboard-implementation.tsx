@@ -1585,8 +1585,10 @@ export function DwsEmployeeExperienceDashboardClient({
   const [execCompId, setExecCompId] = useState("");
   const [execIndexId, setExecIndexId] = useState("");
   const [execLocation, setExecLocation] = useState("");
-  const [execWorkType, setExecWorkType] = useState("");
+  const [execEmployment, setExecEmployment] = useState("");
   const [execGeneration, setExecGeneration] = useState("");
+  const [execDepartment, setExecDepartment] = useState("");
+  const [execJobCategory, setExecJobCategory] = useState("");
   const [execDeptStatementId, setExecDeptStatementId] = useState(COMPARISON_ALL);
   const [execBrandStatementId, setExecBrandStatementId] = useState(COMPARISON_ALL);
 
@@ -1606,9 +1608,11 @@ export function DwsEmployeeExperienceDashboardClient({
     () => uniq(curR, "location", min).filter(isKnownBrandSegment),
     [curR, min]
   );
-  const workTypeOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const employmentOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const workTypeOpts = employmentOpts;
   const generationOpts = useMemo(() => uniq(curR, "generation", min), [curR, min]);
   const deptOpts = useMemo(() => uniq(curR, "department", min), [curR, min]);
+  const jobCategoryOpts = useMemo(() => uniq(curR, "jobTitle", min), [curR, min]);
 
   const supCurFiltered = useMemo(() => filterR(curR, supFilters), [curR, supFilters]);
   const supOpts = useMemo(() => uniq(supCurFiltered, "supervisor", min), [supCurFiltered, min]);
@@ -1630,11 +1634,13 @@ export function DwsEmployeeExperienceDashboardClient({
       respondents: data.respondents.filter(
         (respondent) =>
           (!execLocation || respondent.location === execLocation) &&
-          (!execWorkType || respondent.fieldCategory === execWorkType) &&
-          (!execGeneration || respondent.generation === execGeneration)
+          (!execEmployment || respondent.fieldCategory === execEmployment) &&
+          (!execGeneration || respondent.generation === execGeneration) &&
+          (!execDepartment || respondent.department === execDepartment) &&
+          (!execJobCategory || respondent.jobTitle === execJobCategory)
       ),
     }),
-    [data, execLocation, execWorkType, execGeneration]
+    [data, execLocation, execEmployment, execGeneration, execDepartment, execJobCategory]
   );
   const campaignResultsBundle = useMemo(
     () => buildEmployeeExperienceReportBundle(campaignResultsData, { logoUrl, campaignLabel: current }),
@@ -1703,14 +1709,38 @@ export function DwsEmployeeExperienceDashboardClient({
       extraSections={
         activePersp === "ee-campaign-results" ? (
           <>
-            <RailSection title="Work Type">
+            <RailSection title="Employment">
               <select
-                value={execWorkType}
-                onChange={(event) => setExecWorkType(event.target.value)}
+                value={execEmployment}
+                onChange={(event) => setExecEmployment(event.target.value)}
                 className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
               >
-                <option value="">All work types</option>
-                {workTypeOpts.map((item) => (
+                <option value="">All employment</option>
+                {employmentOpts.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </RailSection>
+            <RailSection title="Department">
+              <select
+                value={execDepartment}
+                onChange={(event) => setExecDepartment(event.target.value)}
+                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+              >
+                <option value="">All departments</option>
+                {deptOpts.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </RailSection>
+            <RailSection title="Job Category">
+              <select
+                value={execJobCategory}
+                onChange={(event) => setExecJobCategory(event.target.value)}
+                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+              >
+                <option value="">All job categories</option>
+                {jobCategoryOpts.map((item) => (
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
