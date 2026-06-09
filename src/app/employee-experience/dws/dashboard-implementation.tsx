@@ -2,13 +2,23 @@
 
 import { useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
+import { EECampaignResults } from "./ee-campaign-results";
+import { EEDepartmentComparison } from "./ee-department-comparison";
+import { EELocationComparison } from "./ee-location-comparison";
+import { EEDepartmentReport } from "./ee-department-report";
+import { EEHistoricalReport } from "./ee-historical-report";
+import { EESupervisorReport } from "./ee-supervisor-report";
+import { EEExecutiveRail, EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
+import { buildEmployeeExperienceReportBundle } from "./ee-live-projections";
+import { defaultComparisonId } from "./ee-report-kit";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
-import { NspRadarChart } from "@/components/charts/nsp-radar-chart";
-import { ColorLegend } from "@/components/collaboration/color-legend";
 import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
+import { mergeHiddenDimensionIds } from "@/lib/employee-experience/excluded-dimensions";
+import { isKnownBrandSegment } from "@/lib/employee-experience/dws-dashboard";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
+import { cn } from "@/lib/utils";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import type {
   EmployeeExperienceDashboardData,
@@ -20,7 +30,57 @@ import type {
 
 const EE = { min: 6, mid: 7.25, max: 8.5, minLabel: "60", maxLabel: "85" } as const;
 
+const EE_PANEL =
+  "overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[7px_9px_20px_rgba(15,23,42,0.09),2px_3px_6px_rgba(15,23,42,0.05)]";
+
+function EEPanel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={cn(EE_PANEL, className)}>{children}</div>;
+}
+
+function EEPanelHeader({
+  title,
+  description,
+  className,
+}: {
+  title: string;
+  description?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1.5 px-6 pb-3 pt-6", className)}>
+      <h3 className="text-lg font-bold leading-none tracking-tight text-text-primary">{title}</h3>
+      {description ? <p className="text-sm text-text-secondary">{description}</p> : null}
+    </div>
+  );
+}
+
+function EEPanelContent({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={cn("px-6 pb-6", className)}>{children}</div>;
+}
+
 const DIM_ORDER = ["Acquisition", "Culture", "Daily Work", "Intent", "Supervisor", "Engage", "Balance"];
+
+function orderedDimensionNames(questions: EmployeeExperienceQuestionDefinition[]) {
+  const present = Array.from(new Set(questions.map((question) => question.dimension)));
+  const preferred = DIM_ORDER.filter((dimension) => present.includes(dimension));
+  const remaining = present
+    .filter((dimension) => !DIM_ORDER.includes(dimension))
+    .sort((left, right) => left.localeCompare(right));
+
+  return [...preferred, ...remaining];
+}
 
 const GROUPS = [
   {
@@ -28,7 +88,11 @@ const GROUPS = [
     label: "Executive",
     perspectives: [
       { id: "exec-overview" as const, label: "Campaign Overview" },
-      { id: "exec-location" as const, label: "Location Breakdown" },
+      { id: "exec-location" as const, label: "Brand Breakdown" },
+      { id: "ee-campaign-results" as const, label: "Campaign Results" },
+      { id: "ee-department-comparison" as const, label: "Department Comparison" },
+      { id: "ee-location-comparison" as const, label: "Brand Comparison" },
+      { id: "ee-historical-report" as const, label: "Detailed History" },
     ],
   },
   {
@@ -37,7 +101,6 @@ const GROUPS = [
     perspectives: [
       { id: "hr-rankings" as const, label: "Department Rankings" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
-      { id: "hr-supervisor" as const, label: "Supervisor Reports" },
       { id: "hr-open-text" as const, label: "Open Text" },
     ],
   },
@@ -45,28 +108,57 @@ const GROUPS = [
     id: "department" as const,
     label: "Department",
     perspectives: [
-      { id: "dept-scorecard" as const, label: "Department Scorecard" },
+      { id: "ee-department-report" as const, label: "Department Report" },
+      { id: "hr-supervisor" as const, label: "Supervisor Reports" },
     ],
   },
 ] as const;
 
 type GroupId = (typeof GROUPS)[number]["id"];
 type PerspectiveId =
-  | "exec-overview" | "exec-location"
+  | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
   | "hr-rankings" | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
-  | "dept-scorecard";
+  | "dept-scorecard" | "ee-department-report" | "ee-historical-report";
+
+const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
+  "exec-overview",
+  "exec-location",
+  "ee-campaign-results",
+  "ee-department-comparison",
+  "ee-location-comparison",
+  "ee-historical-report",
+]);
+
+const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
+  "exec-overview": "Campaign Overview",
+  "exec-location": "Brand Breakdown",
+  "ee-campaign-results": "Campaign Results",
+  "ee-department-comparison": "Department Comparison",
+  "ee-location-comparison": "Brand Comparison",
+  "ee-historical-report": "Detailed History",
+  "hr-rankings": "Department Rankings",
+  "hr-index-dive": "Index Deep Dive",
+  "hr-supervisor": "Supervisor Reports",
+  "hr-open-text": "Open Text",
+  "dept-scorecard": "Department Scorecard",
+  "ee-department-report": "Department Report",
+};
 
 const OPEN_TEXT_FIELDS = [
-  { id: "strengths" as const, label: "Greatest Strengths" },
-  { id: "improvement" as const, label: "Desired Changes" },
-  { id: "supervisor" as const, label: "Supervisor Feedback" },
-  { id: "acquisition" as const, label: "Acquisition Comments" },
+  { id: "strengths" as const, label: "Greatest Strengths", dimensionId: undefined },
+  { id: "improvement" as const, label: "Desired Changes", dimensionId: undefined },
+  { id: "supervisor" as const, label: "Supervisor Feedback", dimensionId: undefined },
+  { id: "acquisition" as const, label: "Acquisition Comments", dimensionId: "acquisition" },
 ];
 type OpenTextField = "strengths" | "improvement" | "supervisor" | "acquisition";
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function r1(v: number) { return Math.round(v * 10) / 10; }
+
+function normalizeDimensionId(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
 
 function avg(vals: number[]) {
   if (vals.length === 0) return 0;
@@ -128,7 +220,7 @@ function buildDims(
     ids.push(q.itemId);
     byDim.set(q.dimension, ids);
   });
-  return DIM_ORDER.filter((d) => byDim.has(d)).map((dim) => {
+  return orderedDimensionNames(questions).filter((d) => byDim.has(d)).map((dim) => {
     const ids = byDim.get(dim)!;
     const score = groupScore(current, ids);
     const prevScore = prior.length > 0 ? groupScore(prior, ids) : null;
@@ -175,9 +267,9 @@ function SLabel({ children }: { children: React.ReactNode }) {
 
 function Empty({ message }: { message: string }) {
   return (
-    <Card className="border-border-strong">
-      <CardContent className="px-6 py-16 text-center text-sm text-text-muted">{message}</CardContent>
-    </Card>
+    <EEPanel>
+      <div className="px-6 py-16 text-center text-sm text-text-muted">{message}</div>
+    </EEPanel>
   );
 }
 
@@ -224,18 +316,18 @@ function CampaignRail({
 }) {
   return (
     <RailSection title="Campaign Selection">
-      <div className="space-y-3">
+      <div className="mx-auto max-w-[220px] space-y-3 text-center">
         <div>
           <span className="text-xs font-medium text-text-secondary">Current</span>
-          <select value={current} onChange={(e) => onCurrent(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none">
-            {campaigns.map((c) => <option key={c} value={c}>{c}</option>)}
+          <select value={current} onChange={(e) => onCurrent(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+            {[...campaigns].reverse().map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
           <span className="text-xs font-medium text-text-secondary">Compare To</span>
-          <select value={prior} onChange={(e) => onPrior(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+          <select value={prior} onChange={(e) => onPrior(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
             <option value="">No comparison</option>
-            {campaigns.filter((c) => c !== current).map((c) => <option key={c} value={c}>{c}</option>)}
+            {[...campaigns].reverse().filter((c) => c !== current).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
       </div>
@@ -252,13 +344,13 @@ function FilterRail({
   const hasActive = filters.some((f) => f.value);
   return (
     <RailSection title="Filters">
-      <div className="space-y-3">
+      <div className="mx-auto max-w-[220px] space-y-3 text-center">
         {filters.map((f) => (
           <div key={f.id}>
             <span className="text-xs font-medium text-text-secondary">{f.label}</span>
             <select
               value={f.value} onChange={(e) => onChange(f.id, e.target.value)}
-              className="mt-1 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+              className="mt-1 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none"
             >
               <option value="">All</option>
               {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -266,7 +358,7 @@ function FilterRail({
           </div>
         ))}
         {hasActive && (
-          <button type="button" onClick={onReset} className="w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-xs font-semibold text-text-secondary transition hover:bg-surface-2">
+          <button type="button" onClick={onReset} className="w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-xs font-semibold text-text-secondary transition hover:bg-surface-2">
             Reset filters
           </button>
         )}
@@ -280,16 +372,22 @@ function FilterRail({
 function DimensionWheel({
   dims,
   orgScore,
+  selectedDimension,
+  onSelectDimension,
 }: {
   dims: DimMetric[];
   orgScore: number;
+  selectedDimension: string;
+  onSelectDimension: (dimension: string) => void;
 }) {
-  const [activeIdx, setActiveIdx] = useState(0);
   const [rotation, setRotation] = useState(0);
   const rotRef = useRef(0);
 
   const n = dims.length;
+  if (n === 0) return <Empty message="No dimensions are available for this campaign." />;
+
   const sliceAngle = 360 / n;
+  const activeIdx = Math.max(0, dims.findIndex((dim) => dim.label === selectedDimension));
 
   function handleNodeClick(i: number) {
     const target = -sliceAngle * i;
@@ -297,7 +395,7 @@ function DimensionWheel({
     const newRot = rotRef.current + delta;
     rotRef.current = newRot;
     setRotation(newRot);
-    setActiveIdx(i);
+    onSelectDimension(dims[i].label);
   }
 
   const W = 480, H = 480;
@@ -474,130 +572,178 @@ function DimensionWheel({
 
 // ─── Executive: Campaign Overview ─────────────────────────────────────────────
 
+function CampaignKpi({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex min-h-[74px] w-[96px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-white/80 px-2.5 py-2 text-center shadow-sm">
+      <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-text-muted">{label}</p>
+      <p className="mt-1 text-xl font-extrabold leading-none text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+type StatementRankingRow = {
+  id: number;
+  name: string;
+  value: number;
+  delta: number | null;
+};
+
+function StatementRankingBars({
+  rows,
+}: {
+  rows: StatementRankingRow[];
+}) {
+  return (
+    <div className="divide-y divide-border-strong/70">
+      {rows.map((row) => (
+        <div key={row.id} className="grid grid-cols-[1fr_auto] items-start gap-4 py-2.5">
+          <p className="text-sm font-medium leading-snug text-text-primary">{row.name}</p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ScoreChip score={row.value} size="sm" />
+            <DeltaChip delta={row.delta} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ExecOverview({
-  data, current, prior,
-}: { data: EmployeeExperienceDashboardData; current: string; prior: string }) {
+  data, current, prior, locationFilter = "",
+}: { data: EmployeeExperienceDashboardData; current: string; prior: string; locationFilter?: string }) {
   const min = data.settings.minimumSegmentSize;
   const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
-  const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
-  const priR = useMemo(() => prior ? data.respondents.filter((r) => r.campaignLabel === prior) : [], [data.respondents, prior]);
+  const curR = useMemo(() => {
+    const rows = data.respondents.filter((r) => r.campaignLabel === current);
+    return locationFilter ? rows.filter((r) => r.location === locationFilter) : rows;
+  }, [data.respondents, current, locationFilter]);
+  const priR = useMemo(() => {
+    if (!prior) return [];
+    const rows = data.respondents.filter((r) => r.campaignLabel === prior);
+    return locationFilter ? rows.filter((r) => r.location === locationFilter) : rows;
+  }, [data.respondents, prior, locationFilter]);
 
   const orgScore = useMemo(() => groupScore(curR, allIds), [curR, allIds]);
   const orgPrior = useMemo(() => priR.length > 0 ? groupScore(priR, allIds) : null, [priR, allIds]);
   const orgDelta = orgPrior !== null ? r1(orgScore - orgPrior) : null;
 
   const dims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
-  const sorted = useMemo(() => [...dims].sort((a, b) => b.score - a.score), [dims]);
-  const best = sorted[0];
-  const focus = sorted[sorted.length - 1];
-  const mostImproved = [...dims].filter((d) => d.delta !== null).sort((a, b) => (b.delta ?? 0) - (a.delta ?? 0))[0];
+  const [selectedOverviewDim, setSelectedOverviewDim] = useState(
+    orderedDimensionNames(data.questions)[0] ?? ""
+  );
+  const activeDim = useMemo(
+    () => dims.find((dim) => dim.label === selectedOverviewDim) ?? dims[0] ?? null,
+    [dims, selectedOverviewDim]
+  );
+  const activeStatements = useMemo(() => {
+    if (!activeDim) return [];
+
+    return data.questions
+      .filter((question) => question.dimension === activeDim.label)
+      .map((question) => {
+        const score = itemScore(curR, question.itemId);
+        const previousScore = priR.length > 0 ? itemScore(priR, question.itemId) : null;
+
+        return {
+          id: question.itemId,
+          name: question.statement,
+          value: score,
+          delta: previousScore === null ? null : r1(score - previousScore),
+        };
+      })
+      .sort((left, right) => right.value - left.value || left.id - right.id);
+  }, [activeDim, data.questions, curR, priR]);
 
   if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Hero */}
-      <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
-        <CardContent className="p-6">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex-1">
+      <EEPanel className="bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
+        <div className="p-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.75fr)_minmax(460px,1.25fr)] lg:items-center">
+            <div className="min-w-0">
               <SLabel>Campaign Overview</SLabel>
-              <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-text-primary sm:text-3xl">{current}</h2>
-              <p className="mt-2 text-sm text-text-secondary">
-                {curR.length} total {curR.length === 1 ? "response" : "responses"} across all dimensions.
-                {prior && orgDelta !== null && ` ${orgDelta > 0 ? "Up" : orgDelta < 0 ? "Down" : "Flat"} ${fmtDelta(orgDelta)} vs ${prior}.`}
-              </p>
+              <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-text-primary">Employee Experience - Demo</h2>
+              <p className="mt-1 text-lg font-semibold text-text-secondary">{current}</p>
             </div>
-            <div className="flex flex-col items-center gap-2">
-              <ScoreChip score={orgScore} size="lg" />
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-text-muted">Overall</span>
-                <DeltaChip delta={orgDelta} />
-              </div>
+            <div className="grid grid-cols-4 justify-items-end gap-2 justify-self-end">
+              <CampaignKpi
+                label="Responses"
+                value={curR.length.toLocaleString()}
+              />
+              <CampaignKpi
+                label="Response Rate"
+                value="—"
+              />
+              <CampaignKpi
+                label="Campaign Average"
+                value={formatScoreForDisplay(orgScore)}
+              />
+              <CampaignKpi
+                label="Change From Previous"
+                value={fmtDelta(orgDelta)}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </EEPanel>
 
-      {/* Constellation */}
-      <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white to-[#EBF1F6]/60">
-        <CardContent className="flex justify-center p-6">
-          <DimensionWheel dims={dims} orgScore={orgScore} />
-        </CardContent>
-      </Card>
-
-      {/* Insight tiles */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {best && (
-          <div className="rounded-2xl px-5 py-4 shadow-sm" style={{ backgroundColor: sColor(best.score), color: sTColor(best.score) }}>
-            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Strongest Index</p>
-            <p className="mt-1 text-xl font-extrabold">{best.label}</p>
-            <p className="text-2xl font-extrabold">{formatScoreForDisplay(best.score)}</p>
-          </div>
-        )}
-        {focus && (
-          <div className="rounded-2xl px-5 py-4 shadow-sm" style={{ backgroundColor: sColor(focus.score), color: sTColor(focus.score) }}>
-            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Area of Focus</p>
-            <p className="mt-1 text-xl font-extrabold">{focus.label}</p>
-            <p className="text-2xl font-extrabold">{formatScoreForDisplay(focus.score)}</p>
-          </div>
-        )}
-        {mostImproved ? (
-          <div className="rounded-2xl border border-border-strong bg-nsp-green-50 px-5 py-4 text-nsp-green-900 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Most Improved</p>
-            <p className="mt-1 text-xl font-extrabold">{mostImproved.label}</p>
-            <p className="text-2xl font-extrabold">{fmtDelta(mostImproved.delta)}</p>
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-border-strong bg-surface-2 px-5 py-4 text-text-muted shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wider">Prior Campaign</p>
-            <p className="mt-1 text-sm">{prior ? "No delta available." : "Select a comparison campaign."}</p>
-          </div>
-        )}
-      </div>
-
-      {/* Bar chart + radar */}
-      <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Index Rankings</CardTitle>
-            <CardDescription>All dimensions ranked by current campaign average.</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <GradientBarChart
-              data={sorted.map((d) => ({ name: d.label, value: d.score }))}
-              average={orgScore}
-              minValue={EE.min} midpoint={EE.mid} maxValue={EE.max}
-              height={260}
+      {/* Dimension wheel + selected statement rankings */}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <EEPanel className="bg-gradient-to-br from-white to-[#EBF1F6]/60">
+          <div className="flex justify-center p-4">
+            <DimensionWheel
+              dims={dims}
+              orgScore={orgScore}
+              selectedDimension={activeDim?.label ?? ""}
+              onSelectDimension={setSelectedOverviewDim}
             />
-          </CardContent>
-        </Card>
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Dimension Profile</CardTitle>
-            <CardDescription>{prior ? `Current (solid) vs ${prior} (outline).` : "Current campaign shape across all dimensions."}</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <NspRadarChart
-              data={dims.map((d) => ({ dimension: d.label, value: d.score, benchmark: d.prevScore ?? d.score }))}
-              maxValue={100} showBenchmark={!!prior} height={280}
-            />
-          </CardContent>
-        </Card>
+          </div>
+        </EEPanel>
+        <EEPanel>
+          <EEPanelHeader
+            className="pb-3"
+            title={activeDim ? `${activeDim.label} Statements` : "Statement Rankings"}
+            description="Individual statements for the selected dimension, ranked by current campaign average."
+          />
+          <EEPanelContent className="pt-0">
+            {activeStatements.length > 0 ? (
+              <StatementRankingBars
+                rows={activeStatements}
+              />
+            ) : (
+              <Empty message="Select a dimension to view statement rankings." />
+            )}
+          </EEPanelContent>
+        </EEPanel>
       </div>
     </div>
   );
 }
 
-// ─── Executive: Location Breakdown ───────────────────────────────────────────
+// ─── Executive: Brand Breakdown ──────────────────────────────────────────────
 
 function ExecLocation({
-  data, current, prior,
-}: { data: EmployeeExperienceDashboardData; current: string; prior: string }) {
+  data, current, prior, locationFilter = "",
+}: { data: EmployeeExperienceDashboardData; current: string; prior: string; locationFilter?: string }) {
   const min = data.settings.minimumSegmentSize;
   const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
-  const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
-  const priR = useMemo(() => prior ? data.respondents.filter((r) => r.campaignLabel === prior) : [], [data.respondents, prior]);
+  const curR = useMemo(() => {
+    const rows = data.respondents.filter((r) => r.campaignLabel === current);
+    return locationFilter ? rows.filter((r) => r.location === locationFilter) : rows;
+  }, [data.respondents, current, locationFilter]);
+  const priR = useMemo(() => {
+    if (!prior) return [];
+    const rows = data.respondents.filter((r) => r.campaignLabel === prior);
+    return locationFilter ? rows.filter((r) => r.location === locationFilter) : rows;
+  }, [data.respondents, prior, locationFilter]);
 
   const dims = useMemo(() => buildDims(data.questions, curR, priR), [data.questions, curR, priR]);
   const dimNames = useMemo(() => dims.map((d) => d.label), [dims]);
@@ -607,7 +753,10 @@ function ExecLocation({
     return m;
   }, [dims]);
 
-  const locations = useMemo(() => uniq(curR, "location", min), [curR, min]);
+  const locations = useMemo(
+    () => uniq(curR, "location", min).filter(isKnownBrandSegment),
+    [curR, min]
+  );
   const locRowTotals = useMemo(() => {
     const m: Record<string, number> = {};
     locations.forEach((loc) => { m[loc] = groupScore(curR.filter((r) => r.location === loc), allIds); });
@@ -648,36 +797,36 @@ function ExecLocation({
   return (
     <div className="space-y-6">
       {sortedLocs.length > 0 ? (
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>By Location</CardTitle>
-            <CardDescription>Score per dimension grouped by region. Overall score in the rightmost column.</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <EEPanel>
+          <EEPanelHeader
+            title="By Brand"
+            description="Score per dimension grouped by company brand. Overall score in the rightmost column."
+          />
+          <EEPanelContent className="pt-0">
             <HeatmapChart
               rows={sortedLocs}
               columns={dimNames}
               data={locHeatData}
               rowTotals={locRowTotals}
               columnTotals={dimColTotals}
-              rowLabelHeader="Location"
+              rowLabelHeader="Brand"
               minValue={EE.min}
               midpoint={EE.mid}
               maxValue={EE.max}
             />
-          </CardContent>
-        </Card>
+          </EEPanelContent>
+        </EEPanel>
       ) : (
-        <Empty message="No locations meet the minimum response threshold." />
+        <Empty message="No brands meet the minimum response threshold." />
       )}
 
       {sortedWts.length > 0 && (
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>By Work Type</CardTitle>
-            <CardDescription>Score per dimension grouped by field category (Field, Office, Shop, etc.).</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <EEPanel>
+          <EEPanelHeader
+            title="By Work Type"
+            description="Score per dimension grouped by field category (Field, Office, Shop, etc.)."
+          />
+          <EEPanelContent className="pt-0">
             <HeatmapChart
               rows={sortedWts}
               columns={dimNames}
@@ -689,8 +838,8 @@ function ExecLocation({
               midpoint={EE.mid}
               maxValue={EE.max}
             />
-          </CardContent>
-        </Card>
+          </EEPanelContent>
+        </EEPanel>
       )}
     </div>
   );
@@ -738,14 +887,12 @@ function HrRankings({
   if (sortedDepts.length === 0) return <Empty message="No departments meet the minimum response threshold under the current filters." />;
 
   return (
-    <Card className="border-border-strong">
-      <CardHeader>
-        <CardTitle>Department Rankings</CardTitle>
-        <CardDescription>
-          {sortedDepts.length} department{sortedDepts.length !== 1 ? "s" : ""} · {current} · sorted by overall score.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
+    <EEPanel>
+      <EEPanelHeader
+        title="Department Rankings"
+        description={`${sortedDepts.length} department${sortedDepts.length !== 1 ? "s" : ""} · ${current} · sorted by overall score.`}
+      />
+      <EEPanelContent className="pt-0">
         <HeatmapChart
           rows={sortedDepts}
           columns={dimNames}
@@ -757,8 +904,8 @@ function HrRankings({
           midpoint={EE.mid}
           maxValue={EE.max}
         />
-      </CardContent>
-    </Card>
+      </EEPanelContent>
+    </EEPanel>
   );
 }
 
@@ -800,48 +947,50 @@ function HrIndexDive({
 
   return (
     <div className="space-y-6">
-      <Card className="border-border-strong">
-        <CardHeader>
-          <CardTitle>{selectedDim} — Statement Detail</CardTitle>
-          <CardDescription>All items ranked highest to lowest. Delta reflects change vs prior campaign.</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <table className="w-full text-sm">
+      <EEPanel>
+        <EEPanelHeader
+          title={`${selectedDim} — Statement Detail`}
+          description="All items ranked highest to lowest. Delta reflects change vs prior campaign."
+        />
+        <EEPanelContent className="pt-0">
+          <div className="overflow-hidden rounded-2xl border border-[#8798AA]">
+          <table className="w-full border-collapse text-[13px]">
             <thead>
-              <tr className="border-b border-border-strong">
-                <th className="py-3 pr-4 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Statement</th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">{current}</th>
-                {prior && <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>}
+              <tr>
+                <th className="bg-[#E2E8EF] py-[11px] pl-[14px] pr-4 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Statement</th>
+                <th className="bg-[#E2E8EF] px-3 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">{current}</th>
+                {prior && <th className="col-group-start bg-[#E2E8EF] px-3 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Δ</th>}
               </tr>
             </thead>
             <tbody>
               {stmts.map((q, i) => (
-                <tr key={q.itemId} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
-                  <td className="py-3 pr-4 text-[13px] leading-relaxed text-text-primary">{q.statement}</td>
+                <tr key={q.itemId} className={`border-t border-[#D3DDE7] ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                  <td className="py-3 pl-[14px] pr-4 text-[13px] leading-relaxed text-text-primary">{q.statement}</td>
                   <td className="px-3 py-3 text-center"><ScoreChip score={q.score} size="sm" /></td>
-                  {prior && <td className="px-3 py-3 text-center"><DeltaChip delta={q.delta} /></td>}
+                  {prior && <td className="col-group-start px-3 py-3 text-center"><DeltaChip delta={q.delta} /></td>}
                 </tr>
               ))}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+          </div>
+        </EEPanelContent>
+      </EEPanel>
 
       {deptBars.length > 0 && (
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>{selectedDim} by Department</CardTitle>
-            <CardDescription>Which departments score highest and lowest on this index.</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <EEPanel>
+          <EEPanelHeader
+            title={`${selectedDim} by Department`}
+            description="Which departments score highest and lowest on this index."
+          />
+          <EEPanelContent className="pt-0">
             <GradientBarChart
               data={deptBars}
               average={dimAvg}
               minValue={EE.min} midpoint={EE.mid} maxValue={EE.max}
               height={Math.max(280, deptBars.length * 34)}
             />
-          </CardContent>
-        </Card>
+          </EEPanelContent>
+        </EEPanel>
       )}
     </div>
   );
@@ -963,69 +1112,71 @@ function HrSupervisor({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Supervisor Item Table</CardTitle>
-            <CardDescription>Team score vs. org average per item. Delta vs prior campaign.</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <table className="w-full text-sm">
+        <EEPanel>
+          <EEPanelHeader
+            title="Supervisor Item Table"
+            description="Team score vs. org average per item. Delta vs prior campaign."
+          />
+          <EEPanelContent className="pt-0">
+            <div className="overflow-hidden rounded-2xl border border-[#8798AA]">
+            <table className="w-full border-collapse text-[13px]">
               <thead>
-                <tr className="border-b border-border-strong">
-                  <th className="py-3 pr-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Statement</th>
-                  <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Score</th>
-                  <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Org Avg</th>
-                  <th className="px-2 py-3 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
+                <tr>
+                  <th className="bg-[#E2E8EF] py-[11px] pl-[14px] pr-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Statement</th>
+                  <th className="bg-[#E2E8EF] px-2 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Score</th>
+                  <th className="bg-[#E2E8EF] px-2 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Org Avg</th>
+                  <th className="col-group-start bg-[#E2E8EF] px-2 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Δ</th>
                 </tr>
               </thead>
               <tbody>
                 {qRows.map((row, i) => (
-                  <tr key={row.id} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
-                    <td className="py-3 pr-3 text-[12px] leading-relaxed text-text-primary">{row.statement}</td>
+                  <tr key={row.id} className={`border-t border-[#D3DDE7] ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                    <td className="py-3 pl-[14px] pr-3 text-[12px] leading-relaxed text-text-primary">{row.statement}</td>
                     <td className="px-2 py-3 text-center"><ScoreChip score={row.score} size="sm" /></td>
                     <td className="px-2 py-3 text-center font-semibold text-text-secondary">{formatScoreForDisplay(row.orgScore)}</td>
-                    <td className="px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
+                    <td className="col-group-start px-2 py-3 text-center"><DeltaChip delta={row.delta} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+            </div>
+          </EEPanelContent>
+        </EEPanel>
 
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Benchmark Comparison</CardTitle>
-            <CardDescription>Bar = supervisor score. Orange dot = organization supervisor average.</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <EEPanel>
+          <EEPanelHeader
+            title="Benchmark Comparison"
+            description="Bar = supervisor score. Orange dot = organization supervisor average."
+          />
+          <EEPanelContent className="pt-0">
             <SupervisorBenchmark rows={qRows} />
-          </CardContent>
-        </Card>
+          </EEPanelContent>
+        </EEPanel>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="border-border-strong">
-          <CardHeader><CardTitle>Strengths to Protect</CardTitle><CardDescription>Highest-scoring supervisor items.</CardDescription></CardHeader>
-          <CardContent className="space-y-3 pt-0">
+        <EEPanel>
+          <EEPanelHeader title="Strengths to Protect" description="Highest-scoring supervisor items." />
+          <EEPanelContent className="space-y-3 pt-0">
             {qRows.slice(0, 3).map((row) => (
               <div key={row.id} className="rounded-xl px-4 py-3" style={{ backgroundColor: sColor(row.score), color: sTColor(row.score) }}>
                 <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Strength · {formatScoreForDisplay(row.score)}</p>
                 <p className="mt-1 text-sm leading-relaxed">{row.statement}</p>
               </div>
             ))}
-          </CardContent>
-        </Card>
-        <Card className="border-border-strong">
-          <CardHeader><CardTitle>Manager Priorities</CardTitle><CardDescription>Lowest-scoring items to address.</CardDescription></CardHeader>
-          <CardContent className="space-y-3 pt-0">
+          </EEPanelContent>
+        </EEPanel>
+        <EEPanel>
+          <EEPanelHeader title="Manager Priorities" description="Lowest-scoring items to address." />
+          <EEPanelContent className="space-y-3 pt-0">
             {[...qRows].sort((a, b) => a.score - b.score).slice(0, 3).map((row) => (
               <div key={row.id} className="rounded-xl px-4 py-3" style={{ backgroundColor: sColor(row.score), color: sTColor(row.score) }}>
                 <p className="text-xs font-semibold uppercase tracking-wide opacity-80">Priority · {formatScoreForDisplay(row.score)}</p>
                 <p className="mt-1 text-sm leading-relaxed">{row.statement}</p>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </EEPanelContent>
+        </EEPanel>
       </div>
     </div>
   );
@@ -1063,7 +1214,7 @@ function HrOpenText({
       ) : (
         <div className="space-y-3">
           {entries.map((entry, i) => (
-            <div key={entry.id} className="rounded-2xl border border-border-strong bg-white px-5 py-4">
+            <div key={entry.id} className="rounded-2xl border border-[#8798AA] bg-white px-5 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-text-muted">{i + 1}</div>
                 <div className="flex-1">
@@ -1115,7 +1266,7 @@ function DeptScorecard({
 
   const demoCuts = useMemo(() => {
     const fields: { id: keyof EmployeeExperienceRespondent; label: string }[] = [
-      { id: "location", label: "Location" },
+      { id: "location", label: "Brand" },
       { id: "fieldCategory", label: "Work Type" },
       { id: "tenure", label: "Tenure" },
       { id: "generation", label: "Generation" },
@@ -1139,36 +1290,38 @@ function DeptScorecard({
 
   function StmtTable({ title, desc, stmts }: { title: string; desc: string; stmts: typeof allStmts }) {
     return (
-      <Card className="border-border-strong">
-        <CardHeader><CardTitle>{title}</CardTitle><CardDescription>{desc}</CardDescription></CardHeader>
-        <CardContent className="pt-0">
-          <table className="w-full text-sm">
+      <EEPanel>
+        <EEPanelHeader title={title} description={desc} />
+        <EEPanelContent className="pt-0">
+          <div className="overflow-hidden rounded-2xl border border-[#8798AA]">
+          <table className="w-full border-collapse text-[13px]">
             <thead>
-              <tr className="border-b border-border-strong">
-                <th className="py-2.5 pr-3 text-left text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Statement</th>
-                <th className="px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Score</th>
-                <th className="px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">Δ</th>
+              <tr>
+                <th className="bg-[#E2E8EF] py-[11px] pl-[14px] pr-3 text-left text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Statement</th>
+                <th className="bg-[#E2E8EF] px-2 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Score</th>
+                <th className="col-group-start bg-[#E2E8EF] px-2 py-[11px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]">Δ</th>
               </tr>
             </thead>
             <tbody>
               {stmts.map((q, i) => (
-                <tr key={q.itemId} className={`border-b border-border-subtle ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
-                  <td className="py-2.5 pr-3 text-[12px] leading-relaxed text-text-primary">{q.statement}</td>
+                <tr key={q.itemId} className={`border-t border-[#D3DDE7] ${i % 2 === 0 ? "bg-white" : "bg-surface-2/40"}`}>
+                  <td className="py-2.5 pl-[14px] pr-3 text-[12px] leading-relaxed text-text-primary">{q.statement}</td>
                   <td className="px-2 py-2.5 text-center"><ScoreChip score={q.score} size="sm" /></td>
-                  <td className="px-2 py-2.5 text-center"><DeltaChip delta={q.delta} /></td>
+                  <td className="col-group-start px-2 py-2.5 text-center"><DeltaChip delta={q.delta} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+          </div>
+        </EEPanelContent>
+      </EEPanel>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Card className="overflow-hidden border-border-strong bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
-        <CardContent className="p-6">
+      <EEPanel className="bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
+        <div className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <SLabel>Department Scorecard · {current}</SLabel>
@@ -1180,13 +1333,13 @@ function DeptScorecard({
               <DeltaChip delta={deptDelta} />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </EEPanel>
 
       {/* Index tiles */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {dims.map((dim) => (
-          <div key={dim.id} className="flex items-center justify-between rounded-2xl border border-border-strong bg-white px-4 py-4 shadow-sm">
+          <div key={dim.id} className="flex items-center justify-between gap-2 rounded-2xl border border-[#8798AA] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{dim.label}</p>
               <p className="mt-0.5 text-2xl font-extrabold text-text-primary">{formatScoreForDisplay(dim.score)}</p>
@@ -1211,9 +1364,9 @@ function DeptScorecard({
           <SLabel>Demographic Cuts</SLabel>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {demoCuts.map((cut) => (
-              <Card key={cut.id} className="border-border-strong">
-                <CardHeader><CardTitle className="text-base">{cut.label}</CardTitle></CardHeader>
-                <CardContent className="space-y-2 pt-0">
+              <EEPanel key={cut.id}>
+                <EEPanelHeader title={cut.label} className="pb-2 pt-5" />
+                <EEPanelContent className="space-y-2 pt-0">
                   {cut.rows.map((row) => (
                     <div key={row.label} className="flex items-center justify-between gap-2">
                       <span className="min-w-0 flex-1 truncate text-sm text-text-secondary">{row.label} ({row.n})</span>
@@ -1223,8 +1376,8 @@ function DeptScorecard({
                       </div>
                     </div>
                   ))}
-                </CardContent>
-              </Card>
+                </EEPanelContent>
+              </EEPanel>
             ))}
           </div>
         </div>
@@ -1235,26 +1388,51 @@ function DeptScorecard({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeExperienceDashboardData }) {
+export function DwsEmployeeExperienceDashboardClient({
+  data,
+  logoUrl,
+  dashboardInstanceId,
+  canEditGuidance = false,
+}: {
+  data: EmployeeExperienceDashboardData;
+  logoUrl?: string;
+  dashboardInstanceId?: string;
+  canEditGuidance?: boolean;
+}) {
   const [activeGroup, setActiveGroup] = useState<GroupId>("executive");
   const [activePersp, setActivePersp] = useState<PerspectiveId>("exec-overview");
   const [current, setCurrent] = useState(data.meta.currentCampaignLabel);
   const [prior, setPrior] = useState(data.meta.priorCampaignLabel ?? "");
 
   const [hrRankFilters, setHrRankFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
-  const [selectedDim, setSelectedDim] = useState(DIM_ORDER.find((d) => data.questions.some((q) => q.dimension === d)) ?? "");
+  const dimensionOptions = useMemo(() => orderedDimensionNames(data.questions), [data.questions]);
+  const [selectedDim, setSelectedDim] = useState(dimensionOptions[0] ?? "");
   const [idxFilters, setIdxFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
   const [supFilters, setSupFilters] = useState<Record<string, string>>({ location: "", department: "" });
   const [selectedSup, setSelectedSup] = useState("");
   const [openTextDept, setOpenTextDept] = useState("");
   const [openTextField, setOpenTextField] = useState<OpenTextField>("strengths");
   const [selectedDept, setSelectedDept] = useState("");
+  const [execCompId, setExecCompId] = useState("");
+  const [execIndexId, setExecIndexId] = useState("");
+  const [execLocation, setExecLocation] = useState("");
 
   const min = data.settings.minimumSegmentSize;
   const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
   const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
+  const hiddenDimensionIds = useMemo(
+    () => new Set(mergeHiddenDimensionIds(data.settings.hiddenDimensionIds ?? [])),
+    [data.settings.hiddenDimensionIds]
+  );
+  const openTextFields = useMemo(
+    () => OPEN_TEXT_FIELDS.filter((field) => !field.dimensionId || !hiddenDimensionIds.has(field.dimensionId)),
+    [hiddenDimensionIds]
+  );
 
-  const locationOpts = useMemo(() => uniq(curR, "location", min), [curR, min]);
+  const locationOpts = useMemo(
+    () => uniq(curR, "location", min).filter(isKnownBrandSegment),
+    [curR, min]
+  );
   const workTypeOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
   const deptOpts = useMemo(() => uniq(curR, "department", min), [curR, min]);
 
@@ -1272,6 +1450,54 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
   }, [supOpts, supCurFiltered, allIds]);
 
   const groupDef = GROUPS.find((g) => g.id === activeGroup) ?? GROUPS[0];
+  const reportBundle = useMemo(
+    () => buildEmployeeExperienceReportBundle(data, { logoUrl, campaignLabel: current }),
+    [data, logoUrl, current]
+  );
+  const executiveIndexes = useMemo(
+    () => reportBundle.campaignResults.indexes.map((index) => ({ id: index.id, name: index.name })),
+    [reportBundle]
+  );
+  const executiveComparisons = reportBundle.campaignResults.comparisons;
+  const activeExecCompId = execCompId || defaultComparisonId(executiveComparisons);
+  const activeExecIndexId = execIndexId || executiveIndexes[0]?.id || "";
+  const brandLocations = locationOpts;
+
+  const executiveRail = EXECUTIVE_PERSPECTIVES.has(activePersp) ? (
+    <EEExecutiveRail
+      logoUrl={logoUrl}
+      clientName={data.meta.organizationName}
+      perspectiveTitle={EXECUTIVE_PERSPECTIVE_TITLES[activePersp]}
+      campaigns={data.meta.campaigns}
+      current={current}
+      prior={prior}
+      onCurrent={setCurrent}
+      onPrior={setPrior}
+      comparisons={executiveComparisons}
+      compId={activeExecCompId}
+      onCompId={setExecCompId}
+      indexes={executiveIndexes}
+      indexId={activeExecIndexId}
+      onIndexId={setExecIndexId}
+      locations={brandLocations}
+      location={execLocation}
+      onLocation={setExecLocation}
+    />
+  ) : null;
+
+  function renderGuidance(perspectiveId: string, filterKey: string) {
+    return (
+      <GuidancePinRail
+        dashboardInstanceId={dashboardInstanceId}
+        perspectiveId={perspectiveId}
+        campaignLabel={current}
+        filterKey={filterKey || "default"}
+        canEdit={canEditGuidance}
+        className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6"
+        style={EE_GUIDANCE_RAIL_STYLE}
+      />
+    );
+  }
 
   function onGroupChange(gid: string) {
     const g = GROUPS.find((x) => x.id === gid) ?? GROUPS[0];
@@ -1295,7 +1521,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {(activePersp === "hr-rankings") && (
         <FilterRail
           filters={[
-            { id: "location", label: "Location", value: hrRankFilters.location, options: locationOpts },
+            { id: "location", label: "Brand", value: hrRankFilters.location, options: locationOpts },
             { id: "fieldCategory", label: "Work Type", value: hrRankFilters.fieldCategory, options: workTypeOpts },
           ]}
           onChange={(id, v) => setHrRankFilters((f) => ({ ...f, [id]: v }))}
@@ -1305,7 +1531,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {(activePersp === "hr-index-dive") && (
         <FilterRail
           filters={[
-            { id: "location", label: "Location", value: idxFilters.location, options: locationOpts },
+            { id: "location", label: "Brand", value: idxFilters.location, options: locationOpts },
             { id: "fieldCategory", label: "Work Type", value: idxFilters.fieldCategory, options: workTypeOpts },
           ]}
           onChange={(id, v) => setIdxFilters((f) => ({ ...f, [id]: v }))}
@@ -1315,7 +1541,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {(activePersp === "hr-supervisor") && (
         <FilterRail
           filters={[
-            { id: "location", label: "Location", value: supFilters.location, options: locationOpts },
+            { id: "location", label: "Brand", value: supFilters.location, options: locationOpts },
             { id: "department", label: "Department", value: supFilters.department, options: deptOpts },
           ]}
           onChange={(id, v) => setSupFilters((f) => ({ ...f, [id]: v }))}
@@ -1327,7 +1553,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
       {activePersp === "hr-index-dive" && (
         <RailSection title="Dimension">
           <div className="space-y-0.5">
-            {DIM_ORDER.filter((d) => data.questions.some((q) => q.dimension === d)).map((d) => (
+            {dimensionOptions.map((d) => (
               <button
                 key={d} type="button" onClick={() => setSelectedDim(d)}
                 className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition
@@ -1368,7 +1594,7 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
                 onChange={(e) => setOpenTextField(e.target.value as OpenTextField)}
                 className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
               >
-                {OPEN_TEXT_FIELDS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                {openTextFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
             </div>
             <div>
@@ -1402,21 +1628,100 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
 
   const content = useMemo(() => {
     switch (activePersp) {
-      case "exec-overview": return <ExecOverview data={data} current={current} prior={prior} />;
-      case "exec-location": return <ExecLocation data={data} current={current} prior={prior} />;
+      case "ee-campaign-results":
+        return (
+          <EECampaignResults
+            data={reportBundle.campaignResults}
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+          />
+        );
+      case "ee-department-comparison":
+        return (
+          <EEDepartmentComparison
+            data={reportBundle.departmentComparison}
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+          />
+        );
+      case "ee-location-comparison":
+        return (
+          <EELocationComparison
+            data={reportBundle.locationComparison}
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+          />
+        );
+      case "exec-overview":
+        return (
+          <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+            {executiveRail}
+            <main style={EE_PERSPECTIVE_MAIN_STYLE}>
+              <ExecOverview data={data} current={current} prior={prior} locationFilter={execLocation} />
+            </main>
+            {renderGuidance("exec-overview", activeExecIndexId)}
+          </div>
+        );
+      case "exec-location":
+        return (
+          <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+            {executiveRail}
+            <main style={EE_PERSPECTIVE_MAIN_STYLE}>
+              <ExecLocation data={data} current={current} prior={prior} locationFilter={execLocation} />
+            </main>
+            {renderGuidance("exec-location", activeExecIndexId)}
+          </div>
+        );
+      case "ee-historical-report":
+        return (
+          <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+            {executiveRail}
+            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+              <EEHistoricalReport data={reportBundle.historicalReport} embedded />
+            </div>
+            {renderGuidance("ee-historical-report", activeExecIndexId)}
+          </div>
+        );
       case "hr-rankings":
         return <HrRankings data={data} current={current} prior={prior} filters={hrRankFilters} />;
       case "hr-index-dive":
         return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
       case "hr-supervisor":
-        return <HrSupervisor data={data} current={current} prior={prior} filters={supFilters} selectedSup={selectedSup || supOpts[0] || ""} onSelectSup={setSelectedSup} />;
+        return (
+          <>
+            <EESupervisorReport data={reportBundle.supervisorReport} />
+            {renderGuidance("hr-supervisor", "default")}
+          </>
+        );
       case "hr-open-text":
         return <HrOpenText data={data} current={current} deptFilter={openTextDept} fieldType={openTextField} />;
       case "dept-scorecard":
         return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
+      case "ee-department-report":
+        return (
+          <>
+            <EEDepartmentReport data={reportBundle.departmentReport} />
+            {renderGuidance("ee-department-report", "default")}
+          </>
+        );
       default: return null;
     }
-  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts]);
+  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation]);
 
   return (
     <>
@@ -1428,9 +1733,15 @@ export function DwsEmployeeExperienceDashboardClient({ data }: { data: EmployeeE
         perspectives={groupDef.perspectives.map((p) => ({ id: p.id, label: p.label }))}
         activePerspectiveId={activePersp}
         onPerspectiveChange={(id) => setActivePersp(id as PerspectiveId)}
-        legend={<ColorLegend minLabel={EE.minLabel} maxLabel={EE.maxLabel} />}
       />
-      <DashboardCanvas leftRail={leftRail}>{content}</DashboardCanvas>
+      {EXECUTIVE_PERSPECTIVES.has(activePersp) ||
+      activePersp === "ee-campaign-results" ||
+      activePersp === "ee-department-comparison" ||
+      activePersp === "ee-location-comparison" ||
+      activePersp === "hr-supervisor" ||
+      activePersp === "ee-department-report"
+        ? content
+        : <DashboardCanvas leftRail={leftRail}>{content}</DashboardCanvas>}
     </>
   );
 }

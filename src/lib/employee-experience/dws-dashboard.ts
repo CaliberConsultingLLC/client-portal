@@ -1,4 +1,11 @@
 import { readFileSync } from "fs";
+import path from "path";
+import { getFirebaseAdminStorage } from "@/lib/firebase/admin";
+import {
+  filterExcludedDefinitions,
+  mergeHiddenDimensionIds,
+  normalizeDimensionId,
+} from "@/lib/employee-experience/excluded-dimensions";
 import type {
   EmployeeExperienceCommentTheme,
   EmployeeExperienceDashboardData,
@@ -13,9 +20,30 @@ import type {
   EmployeeExperienceVoiceEntry,
 } from "@/types/employee-experience";
 
-const DATABASE_PATH = "C:\\Users\\dusti\\OneDrive\\Client Data\\DWS\\Power BI\\DWSDatabase.csv";
-const STATEMENTS_PATH =
-  "C:\\Users\\dusti\\OneDrive\\Client Data\\DWS\\Power BI\\DWS 2024 Campaign Statements.csv";
+const DATABASE_FILE_NAME = "DWSDatabase.csv";
+const STATEMENTS_FILE_NAME = "DWS 2024 Campaign Statements.csv";
+const DEFAULT_SOURCE_CLIENT_ID = "dws";
+const SOURCE_CLIENT_LABELS: Record<string, string> = {
+  csg: "Canopy Services Group",
+  dws: "Deep Well Services",
+};
+const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string }> = {
+  csg: {
+    database: "Canopy Services Database.csv",
+    statements: "Canopy Services Campaign Statements.csv",
+  },
+};
+const DEMO_DATABASE_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWSDatabase.csv");
+const DEMO_STATEMENTS_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWS 2024 Campaign Statements.csv");
+const DEMO_HIDDEN_DIMENSION_IDS = ["acquisition"];
+
+/** Company / brand segment — CSG uses the Company column; UI labels this "Brand". */
+export const BRAND_SEGMENT_COLUMN_ALIASES = ["Company", "Brand", "Location", "Site"] as const;
+export const UNKNOWN_BRAND_LABEL = "Unknown Brand";
+
+export function isKnownBrandSegment(value: string) {
+  return Boolean(value?.trim()) && value !== UNKNOWN_BRAND_LABEL;
+}
 
 const COMMENT_IDS = {
   strengths: 42,
@@ -87,6 +115,239 @@ type StatementDefinition = EmployeeExperienceQuestionDefinition;
 type Respondent = EmployeeExperienceRespondent;
 
 const MINIMUM_SEGMENT_SIZE = 3;
+
+function filterHiddenDefinitions(
+  definitions: StatementDefinition[],
+  hiddenDimensionIds: string[] = []
+) {
+  return filterExcludedDefinitions(definitions, hiddenDimensionIds);
+}
+
+const SYNTHETIC_DEMO_QUESTIONS: StatementDefinition[] = [
+  { itemId: 101, dimension: "Communication", statement: "Leadership keeps employees informed about major changes that affect daily work." },
+  { itemId: 102, dimension: "Communication", statement: "Teams receive clear follow-through after important updates or decisions are shared." },
+  { itemId: 103, dimension: "Resources", statement: "Employees have the tools and support they need to do quality work consistently." },
+  { itemId: 104, dimension: "Resources", statement: "Workload and staffing levels are managed in a way that feels sustainable." },
+  { itemId: 105, dimension: "Growth", statement: "Employees understand how they can grow, contribute, and build a future here." },
+  { itemId: 106, dimension: "Growth", statement: "The organization is creating a culture people want to stay part of over time." },
+  { itemId: 107, dimension: "Supervisor", statement: "My direct supervisor gives useful feedback and follows through when concerns are raised." },
+  { itemId: 108, dimension: "Supervisor", statement: "My supervisor treats people fairly and supports day-to-day success." },
+];
+
+type SyntheticDemoProfile = {
+  id: string;
+  department: string;
+  location: string;
+  division: string;
+  supervisor: string;
+  jobTitle: string;
+  fieldCategory: string;
+  leadership: string;
+  generation: string;
+  rateType: string;
+  tenure: string;
+  rating: string;
+  scoreOffset: number;
+};
+
+const SYNTHETIC_DEMO_PROFILES: SyntheticDemoProfile[] = [
+  {
+    id: "atlas-fo-01",
+    department: "Field Operations",
+    location: "Odessa",
+    division: "Field",
+    supervisor: "Maria Patel",
+    jobTitle: "Field Lead",
+    fieldCategory: "Operations",
+    leadership: "Frontline",
+    generation: "Millennial",
+    rateType: "Salary",
+    tenure: "2-5 Years",
+    rating: "Strong",
+    scoreOffset: 0.1,
+  },
+  {
+    id: "atlas-fo-02",
+    department: "Field Operations",
+    location: "Odessa",
+    division: "Field",
+    supervisor: "Maria Patel",
+    jobTitle: "Operator",
+    fieldCategory: "Operations",
+    leadership: "Frontline",
+    generation: "Gen X",
+    rateType: "Hourly",
+    tenure: "1-2 Years",
+    rating: "Steady",
+    scoreOffset: -0.1,
+  },
+  {
+    id: "atlas-fo-03",
+    department: "Field Operations",
+    location: "Odessa",
+    division: "Field",
+    supervisor: "Maria Patel",
+    jobTitle: "Operator",
+    fieldCategory: "Operations",
+    leadership: "Frontline",
+    generation: "Millennial",
+    rateType: "Hourly",
+    tenure: "5-10 Years",
+    rating: "Strong",
+    scoreOffset: 0.05,
+  },
+  {
+    id: "atlas-fo-04",
+    department: "Field Operations",
+    location: "Odessa",
+    division: "Field",
+    supervisor: "Maria Patel",
+    jobTitle: "Coordinator",
+    fieldCategory: "Operations",
+    leadership: "Frontline",
+    generation: "Gen Z",
+    rateType: "Salary",
+    tenure: "0-1 Years",
+    rating: "Developing",
+    scoreOffset: -0.05,
+  },
+  {
+    id: "atlas-mx-01",
+    department: "Maintenance",
+    location: "Midland",
+    division: "Field",
+    supervisor: "James Carter",
+    jobTitle: "Maintenance Lead",
+    fieldCategory: "Service",
+    leadership: "Frontline",
+    generation: "Gen X",
+    rateType: "Salary",
+    tenure: "5-10 Years",
+    rating: "Strong",
+    scoreOffset: 0.08,
+  },
+  {
+    id: "atlas-mx-02",
+    department: "Maintenance",
+    location: "Midland",
+    division: "Field",
+    supervisor: "James Carter",
+    jobTitle: "Technician",
+    fieldCategory: "Service",
+    leadership: "Frontline",
+    generation: "Millennial",
+    rateType: "Hourly",
+    tenure: "2-5 Years",
+    rating: "Steady",
+    scoreOffset: -0.06,
+  },
+  {
+    id: "atlas-mx-03",
+    department: "Maintenance",
+    location: "Midland",
+    division: "Field",
+    supervisor: "James Carter",
+    jobTitle: "Technician",
+    fieldCategory: "Service",
+    leadership: "Frontline",
+    generation: "Gen Z",
+    rateType: "Hourly",
+    tenure: "1-2 Years",
+    rating: "Developing",
+    scoreOffset: -0.12,
+  },
+  {
+    id: "atlas-mx-04",
+    department: "Maintenance",
+    location: "Midland",
+    division: "Field",
+    supervisor: "James Carter",
+    jobTitle: "Planner",
+    fieldCategory: "Service",
+    leadership: "Frontline",
+    generation: "Millennial",
+    rateType: "Salary",
+    tenure: "2-5 Years",
+    rating: "Strong",
+    scoreOffset: 0.04,
+  },
+  {
+    id: "atlas-cs-01",
+    department: "Corporate Services",
+    location: "Remote",
+    division: "Corporate",
+    supervisor: "Elena Brooks",
+    jobTitle: "HR Business Partner",
+    fieldCategory: "Support",
+    leadership: "Corporate",
+    generation: "Millennial",
+    rateType: "Salary",
+    tenure: "2-5 Years",
+    rating: "Strong",
+    scoreOffset: 0.12,
+  },
+  {
+    id: "atlas-cs-02",
+    department: "Corporate Services",
+    location: "Remote",
+    division: "Corporate",
+    supervisor: "Elena Brooks",
+    jobTitle: "People Operations Analyst",
+    fieldCategory: "Support",
+    leadership: "Corporate",
+    generation: "Gen X",
+    rateType: "Salary",
+    tenure: "5-10 Years",
+    rating: "Strong",
+    scoreOffset: 0.02,
+  },
+  {
+    id: "atlas-cs-03",
+    department: "Corporate Services",
+    location: "Remote",
+    division: "Corporate",
+    supervisor: "Elena Brooks",
+    jobTitle: "Finance Associate",
+    fieldCategory: "Support",
+    leadership: "Corporate",
+    generation: "Millennial",
+    rateType: "Salary",
+    tenure: "1-2 Years",
+    rating: "Steady",
+    scoreOffset: -0.04,
+  },
+  {
+    id: "atlas-cs-04",
+    department: "Corporate Services",
+    location: "Remote",
+    division: "Corporate",
+    supervisor: "Elena Brooks",
+    jobTitle: "Recruiter",
+    fieldCategory: "Support",
+    leadership: "Corporate",
+    generation: "Gen Z",
+    rateType: "Salary",
+    tenure: "0-1 Years",
+    rating: "Developing",
+    scoreOffset: -0.08,
+  },
+];
+
+const SYNTHETIC_DEMO_BASE_SCORES: Record<string, number[]> = {
+  "Field Operations": [6.7, 6.6, 6.9, 6.6, 6.8, 6.9, 6.7, 6.8],
+  Maintenance: [6.5, 6.4, 6.6, 6.3, 6.5, 6.6, 6.4, 6.5],
+  "Corporate Services": [7.0, 6.9, 7.1, 6.8, 7.0, 7.1, 7.2, 7.1],
+};
+
+async function readCsvFromStorage(storagePath: string) {
+  const bucket = getFirebaseAdminStorage().bucket();
+  const [buffer] = await bucket.file(storagePath).download();
+  return buffer.toString("utf8").replace(/^\uFEFF/, "");
+}
+
+function readCsvFromDemoFile(filePath: string) {
+  return readFileSync(filePath, "utf8").replace(/^\uFEFF/, "");
+}
 
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
@@ -168,21 +429,70 @@ function normalizeScore(rawValue: string | undefined): number | null {
   return Number.isFinite(parsed) ? Math.round(parsed) / 10 : null;
 }
 
-function parseCampaignDate(rawValue: string) {
-  const [monthText, dayText, yearText] = rawValue.split("/");
-  const month = Number.parseInt(monthText ?? "", 10) - 1;
-  const day = Number.parseInt(dayText ?? "", 10);
-  const year = Number.parseInt(yearText ?? "", 10);
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
 
-  if (!Number.isFinite(month) || !Number.isFinite(day) || !Number.isFinite(year)) {
-    return { time: 0, label: rawValue || "Unknown Campaign" };
+function parseCampaignDate(rawValue: string) {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return { time: 0, label: "Unknown Campaign" };
   }
 
-  const date = new Date(year, month, day);
-  return {
-    time: date.getTime(),
-    label: date.toLocaleString("en-US", { month: "short", year: "numeric" }),
-  };
+  if (trimmed.includes("/")) {
+    const [monthText, dayText, yearText] = trimmed.split("/");
+    const month = Number.parseInt(monthText ?? "", 10) - 1;
+    const day = Number.parseInt(dayText ?? "", 10);
+    const year = Number.parseInt(yearText ?? "", 10);
+
+    if (Number.isFinite(month) && Number.isFinite(day) && Number.isFinite(year)) {
+      const date = new Date(year, month, day);
+      return {
+        time: date.getTime(),
+        label: trimmed,
+      };
+    }
+  }
+
+  const monYear = trimmed.match(/^([A-Za-z]+)-(\d{2})$/);
+  if (monYear) {
+    const month = MONTH_INDEX[monYear[1].slice(0, 3).toLowerCase()];
+    const year = 2000 + Number.parseInt(monYear[2], 10);
+    if (month !== undefined) {
+      return { time: new Date(year, month, 1).getTime(), label: trimmed };
+    }
+  }
+
+  const yearMonth = trimmed.match(/^(\d{2})-([A-Za-z]{3})$/);
+  if (yearMonth) {
+    const year = 2000 + Number.parseInt(yearMonth[1], 10);
+    const month = MONTH_INDEX[yearMonth[2].toLowerCase()];
+    if (month !== undefined) {
+      return { time: new Date(year, month, 1).getTime(), label: trimmed };
+    }
+  }
+
+  return { time: 0, label: trimmed };
+}
+
+function getRespondentScore(row: string[], itemId: number, getValue: (row: string[], field: string) => string) {
+  const prefixed = getValue(row, `item:${itemId}`);
+  if (prefixed) {
+    return normalizeScore(prefixed);
+  }
+
+  return normalizeScore(getValue(row, String(itemId)));
 }
 
 function isUsableComment(value: string) {
@@ -556,15 +866,24 @@ function buildCommentThemes(entries: EmployeeExperienceVoiceEntry[]): EmployeeEx
     .slice(0, 6);
 }
 
-function parseStatements() {
-  const rows = parseCSV(readFileSync(STATEMENTS_PATH, "utf8").replace(/^\uFEFF/, ""));
+function parseStatements(statementsCsvText: string) {
+  const rows = parseCSV(statementsCsvText);
+  const headers = rows[0] ?? [];
+  const headerIndex = new Map(headers.map((header, index) => [header.trim().toLowerCase(), index]));
+  const getValue = (row: string[], names: string[], fallbackIndex: number) => {
+    const index = names
+      .map((name) => headerIndex.get(name.toLowerCase()))
+      .find((candidate): candidate is number => typeof candidate === "number");
+
+    return row[index ?? fallbackIndex] ?? "";
+  };
 
   return rows
     .slice(1)
     .map((row) => ({
-      itemId: Number.parseInt(row[0] ?? "", 10),
-      dimension: normalizeLabel(row[1], "Uncategorized"),
-      statement: normalizeLabel(row[2], "Untitled statement"),
+      itemId: Number.parseInt(getValue(row, ["item", "item id", "itemId", "id"], 0), 10),
+      dimension: normalizeLabel(getValue(row, ["index", "dimension"], 1), "Uncategorized"),
+      statement: normalizeLabel(getValue(row, ["statement", "question", "item text"], 2), "Untitled statement"),
     }))
     .filter(
       (row) =>
@@ -575,8 +894,8 @@ function parseStatements() {
     );
 }
 
-function parseRespondents(definitions: StatementDefinition[]) {
-  const rows = parseCSV(readFileSync(DATABASE_PATH, "utf8").replace(/^\uFEFF/, ""));
+function parseRespondents(definitions: StatementDefinition[], databaseCsvText: string) {
+  const rows = parseCSV(databaseCsvText);
   const headers = rows[0] ?? [];
   const records = rows.slice(1);
   const headerIndex = new Map(headers.map((header, index) => [header, index]));
@@ -587,21 +906,42 @@ function parseRespondents(definitions: StatementDefinition[]) {
     return typeof index === "number" ? row[index] ?? "" : "";
   };
 
+  const resolveHeaderIndex = (names: string[]) => {
+    for (const name of names) {
+      const direct = headerIndex.get(name);
+      if (typeof direct === "number") return direct;
+      const lower = name.toLowerCase();
+      for (const [header, index] of headerIndex.entries()) {
+        if (header.toLowerCase() === lower) return index;
+      }
+    }
+    return undefined;
+  };
+
+  const getAliasedValue = (row: string[], names: string[]) => {
+    const index = resolveHeaderIndex(names);
+    return typeof index === "number" ? row[index] ?? "" : "";
+  };
+
   return records
-    .filter((row) => getValue(row, "Status").trim().toLowerCase() === "complete")
+    .filter((row) => {
+      const status = getAliasedValue(row, ["Status"]).trim().toLowerCase();
+      if (!status) return true;
+      return status === "complete";
+    })
     .map((row) => {
-      const campaignRaw = normalizeLabel(getValue(row, "Campaign"), "Unknown Campaign");
+      const campaignRaw = normalizeLabel(getAliasedValue(row, ["Campaign"]), "Unknown Campaign");
       const campaign = parseCampaignDate(campaignRaw);
       const scores = Object.fromEntries(
-        questionIds.map((itemId) => [itemId, normalizeScore(getValue(row, `item:${itemId}`))])
+        questionIds.map((itemId) => [itemId, getRespondentScore(row, itemId, getValue)])
       ) as Record<number, number | null>;
 
       return {
-        id: normalizeLabel(getValue(row, "ID"), `row-${Math.random().toString(36).slice(2, 8)}`),
+        id: normalizeLabel(getAliasedValue(row, ["ID"]), `row-${Math.random().toString(36).slice(2, 8)}`),
         campaignRaw,
         campaignLabel: campaign.label,
         campaignTime: campaign.time,
-        location: normalizeLabel(getValue(row, "Location"), "Unknown Location"),
+        location: normalizeLabel(getAliasedValue(row, [...BRAND_SEGMENT_COLUMN_ALIASES]), UNKNOWN_BRAND_LABEL),
         department: normalizeLabel(getValue(row, "Department"), "Unknown Department"),
         division: normalizeLabel(getValue(row, "Division"), "Unknown Division"),
         supervisor: normalizeLabel(getValue(row, "Supervisor"), "Unknown Supervisor"),
@@ -625,29 +965,120 @@ function parseRespondents(definitions: StatementDefinition[]) {
     .sort((left, right) => left.campaignTime - right.campaignTime || left.id.localeCompare(right.id));
 }
 
-function buildAssessment(score: number) {
-  if (score < 55) return "Employee experience is under visible strain.";
-  if (score < 67) return "Employee experience is workable, but fragile in key places.";
-  if (score < 78) return "Employee experience is broadly positive with clear pressure pockets.";
-  return "Employee experience is landing strongly overall.";
+function clampSyntheticScore(value: number) {
+  return round2(Math.max(6.1, Math.min(8.4, value)));
 }
 
-function buildSummary(
-  dimensions: EmployeeExperienceDimensionMetric[],
-  strongestQuestion: EmployeeExperienceQuestionMetric | undefined,
-  weakestQuestion: EmployeeExperienceQuestionMetric | undefined
+function buildSyntheticComment(
+  profile: SyntheticDemoProfile,
+  campaignIndex: number,
+  kind: keyof Respondent["comments"]
 ) {
-  const topDimension = dimensions[0];
-  const bottomDimension = dimensions[dimensions.length - 1];
+  const improvementPhrase =
+    campaignIndex === 0
+      ? "We need clearer communication and more consistent leadership visibility during the transition."
+      : "Communication is improving, but clearer updates and faster follow through would still help.";
+  const supportPhrase =
+    campaignIndex === 0
+      ? "The team needs more tools, staffing support, and better workload planning."
+      : "Support is stronger now, though schedule planning and resources can keep improving.";
 
-  return `${topDimension?.label ?? "The strongest dimension"} is currently the warmest part of the story, while ${bottomDimension?.label ?? "the coldest dimension"} remains the main drag. At the statement level, ${strongestQuestion?.statement.toLowerCase() ?? "the strongest signal"} is holding up better than ${weakestQuestion?.statement.toLowerCase() ?? "the weakest signal"}, which gives leaders a clearer path for where to protect momentum versus where to intervene.`;
+  switch (kind) {
+    case "strengths":
+      if (profile.department === "Corporate Services") {
+        return "The culture feels more supportive, leadership is visible, and the team is working together well.";
+      }
+      return "People appreciate the teamwork, stronger support, and the clearer direction from leadership.";
+    case "improvement":
+      return `${improvementPhrase} ${supportPhrase}`;
+    case "supervisor":
+      return campaignIndex === 0
+        ? `${profile.supervisor} is respected, but employees want more coaching, clearer expectations, and better follow through.`
+        : `${profile.supervisor} is showing stronger communication and support, and the team wants that consistency to continue.`;
+    case "acquisition":
+      return campaignIndex === 0
+        ? "The integration process created confusion at first, but employees see opportunity if communication and trust keep improving."
+        : "The change process feels more organized now, and employees are more confident about the future and growth opportunities.";
+    default:
+      return "";
+  }
 }
 
-export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDashboardData {
-  const definitions = parseStatements();
-  const respondents = parseRespondents(definitions);
-  const itemIds = definitions.map((definition) => definition.itemId);
+function buildSyntheticDemoRespondents(): Respondent[] {
+  const campaigns = [
+    { raw: "3/15/2025", departmentShift: 0, scoreShift: 0 },
+    { raw: "9/15/2025", departmentShift: 0.18, scoreShift: 0.22 },
+  ];
 
+  return campaigns.flatMap((campaign, campaignIndex) => {
+    const campaignInfo = parseCampaignDate(campaign.raw);
+
+    return SYNTHETIC_DEMO_PROFILES.map((profile, profileIndex) => {
+      const departmentScores = SYNTHETIC_DEMO_BASE_SCORES[profile.department] ?? SYNTHETIC_DEMO_BASE_SCORES["Field Operations"];
+      const questionScores = Object.fromEntries(
+        SYNTHETIC_DEMO_QUESTIONS.map((question, questionIndex) => {
+          const questionBias =
+            question.dimension === "Supervisor"
+              ? 0.1
+              : question.dimension === "Resources"
+                ? -0.05
+                : 0;
+          const score =
+            departmentScores[questionIndex] +
+            campaign.scoreShift +
+            (question.dimension === "Communication" ? campaign.departmentShift / 2 : campaign.departmentShift) +
+            profile.scoreOffset +
+            ((profileIndex % 3) - 1) * 0.03 +
+            questionBias;
+
+          return [question.itemId, clampSyntheticScore(score)];
+        })
+      ) as Record<number, number | null>;
+
+      return {
+        id: `${profile.id}-${campaignIndex + 1}`,
+        campaignRaw: campaign.raw,
+        campaignLabel: campaignInfo.label,
+        campaignTime: campaignInfo.time,
+        location: profile.location,
+        department: profile.department,
+        division: profile.division,
+        supervisor: profile.supervisor,
+        jobTitle: profile.jobTitle,
+        fieldCategory: profile.fieldCategory,
+        leadership: profile.leadership,
+        generation: profile.generation,
+        rateType: profile.rateType,
+        tenure: profile.tenure,
+        rating: profile.rating,
+        scores: questionScores,
+        comments: {
+          strengths: buildSyntheticComment(profile, campaignIndex, "strengths"),
+          improvement: buildSyntheticComment(profile, campaignIndex, "improvement"),
+          supervisor: buildSyntheticComment(profile, campaignIndex, "supervisor"),
+          acquisition: buildSyntheticComment(profile, campaignIndex, "acquisition"),
+        },
+      } satisfies Respondent;
+    });
+  });
+}
+
+function buildEmployeeExperienceDashboardData({
+  organizationName,
+  dataSourceLabel,
+  definitions,
+  respondents,
+  hiddenDimensionIds = [],
+}: {
+  organizationName: string;
+  dataSourceLabel: string;
+  definitions: StatementDefinition[];
+  respondents: Respondent[];
+  hiddenDimensionIds?: string[];
+}): EmployeeExperienceDashboardData {
+  const effectiveHiddenDimensionIds = mergeHiddenDimensionIds(hiddenDimensionIds);
+  const visibleDefinitions = filterHiddenDefinitions(definitions, hiddenDimensionIds);
+  const itemIds = visibleDefinitions.map((definition) => definition.itemId);
   const campaigns = Array.from(
     new Map(
       respondents.map((respondent) => [respondent.campaignLabel, respondent.campaignTime])
@@ -668,8 +1099,8 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
 
   const overviewScore = overallScore(currentRespondents, itemIds);
   const previousScore = priorRespondents.length > 0 ? overallScore(priorRespondents, itemIds) : null;
-  const questionMetrics = buildQuestionMetrics(definitions, currentRespondents, priorRespondents);
-  const dimensionMetrics = buildDimensionMetrics(definitions, currentRespondents, priorRespondents);
+  const questionMetrics = buildQuestionMetrics(visibleDefinitions, currentRespondents, priorRespondents);
+  const dimensionMetrics = buildDimensionMetrics(visibleDefinitions, currentRespondents, priorRespondents);
 
   const campaignMetrics = campaigns.map((campaignLabel, index) => {
     const campaignRespondents = respondents.filter(
@@ -697,7 +1128,7 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
     };
 
     dimensionMetrics.forEach((dimension) => {
-      const dimensionItemIds = definitions
+      const dimensionItemIds = visibleDefinitions
         .filter((definition) => definition.dimension === dimension.label)
         .map((definition) => definition.itemId);
 
@@ -751,28 +1182,28 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
   );
 
   const departmentReports = buildSegmentReports(
-    definitions,
+    visibleDefinitions,
     currentRespondents,
     priorRespondents,
     (respondent) => respondent.department,
     MINIMUM_SEGMENT_SIZE
   );
   const supervisorReports = buildSegmentReports(
-    definitions,
+    visibleDefinitions,
     currentRespondents,
     priorRespondents,
     (respondent) => respondent.supervisor,
     MINIMUM_SEGMENT_SIZE
   );
   const fieldUnitReports = buildSegmentReports(
-    definitions,
+    visibleDefinitions,
     currentRespondents.filter((respondent) => respondent.division === "Field"),
     priorRespondents.filter((respondent) => respondent.division === "Field"),
     (respondent) => respondent.department,
     MINIMUM_SEGMENT_SIZE
   );
   const divisionReports = buildSegmentReports(
-    definitions,
+    visibleDefinitions,
     currentRespondents,
     priorRespondents,
     (respondent) => respondent.division,
@@ -791,7 +1222,7 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
 
   return {
     meta: {
-      organizationName: "Deep Well Services",
+      organizationName,
       currentCampaignLabel,
       priorCampaignLabel,
       totalResponses: currentRespondents.length,
@@ -799,12 +1230,13 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
       totalDepartments: new Set(currentRespondents.map((respondent) => respondent.department)).size,
       totalSupervisors: new Set(currentRespondents.map((respondent) => respondent.supervisor)).size,
       campaigns,
-      dataSourceLabel: "DWS employee experience CSV workspace",
+      dataSourceLabel,
     },
     settings: {
       minimumSegmentSize: MINIMUM_SEGMENT_SIZE,
+      hiddenDimensionIds: effectiveHiddenDimensionIds,
     },
-    questions: definitions,
+    questions: visibleDefinitions,
     respondents,
     overview: {
       experienceIndex: overviewScore,
@@ -826,31 +1258,31 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
     divisionMetrics,
     leadershipMetrics,
     heatmaps: {
-      campaigns: buildCampaignHeatmap(dimensionMetrics, definitions, respondents, campaigns),
+      campaigns: buildCampaignHeatmap(dimensionMetrics, visibleDefinitions, respondents, campaigns),
       departments: buildHeatmapForGroups(
         dimensionMetrics,
-        definitions,
+        visibleDefinitions,
         currentRespondents,
         (respondent) => respondent.department,
         MINIMUM_SEGMENT_SIZE
       ),
       supervisors: buildHeatmapForGroups(
         dimensionMetrics,
-        definitions,
+        visibleDefinitions,
         currentRespondents,
         (respondent) => respondent.supervisor,
         MINIMUM_SEGMENT_SIZE
       ),
       locations: buildHeatmapForGroups(
         dimensionMetrics,
-        definitions,
+        visibleDefinitions,
         currentRespondents,
         (respondent) => respondent.location,
         3
       ),
       fieldUnits: buildHeatmapForGroups(
         dimensionMetrics,
-        definitions,
+        visibleDefinitions,
         currentRespondents.filter((respondent) => respondent.division === "Field"),
         (respondent) => respondent.department,
         MINIMUM_SEGMENT_SIZE
@@ -873,4 +1305,69 @@ export function loadDwsEmployeeExperienceDashboardData(): EmployeeExperienceDash
       acquisition,
     },
   };
+}
+
+function buildAssessment(score: number) {
+  if (score < 55) return "Employee experience is under visible strain.";
+  if (score < 67) return "Employee experience is workable, but fragile in key places.";
+  if (score < 78) return "Employee experience is broadly positive with clear pressure pockets.";
+  return "Employee experience is landing strongly overall.";
+}
+
+function buildSummary(
+  dimensions: EmployeeExperienceDimensionMetric[],
+  strongestQuestion: EmployeeExperienceQuestionMetric | undefined,
+  weakestQuestion: EmployeeExperienceQuestionMetric | undefined
+) {
+  const topDimension = dimensions[0];
+  const bottomDimension = dimensions[dimensions.length - 1];
+
+  return `${topDimension?.label ?? "The strongest dimension"} is currently the warmest part of the story, while ${bottomDimension?.label ?? "the coldest dimension"} remains the main drag. At the statement level, ${strongestQuestion?.statement.toLowerCase() ?? "the strongest signal"} is holding up better than ${weakestQuestion?.statement.toLowerCase() ?? "the weakest signal"}, which gives leaders a clearer path for where to protect momentum versus where to intervene.`;
+}
+
+export async function loadDwsEmployeeExperienceDashboardData({
+  demo = false,
+  hiddenDimensionIds,
+  sourceClientId = DEFAULT_SOURCE_CLIENT_ID,
+}: { demo?: boolean; hiddenDimensionIds?: string[]; sourceClientId?: string } = {}): Promise<EmployeeExperienceDashboardData> {
+  const safeSourceClientId = sourceClientId.trim() || DEFAULT_SOURCE_CLIENT_ID;
+  const organizationName = SOURCE_CLIENT_LABELS[safeSourceClientId] ?? safeSourceClientId;
+  const sourceFiles = SOURCE_CLIENT_FILES[safeSourceClientId] ?? {
+    database: DATABASE_FILE_NAME,
+    statements: STATEMENTS_FILE_NAME,
+  };
+  const databaseStoragePath = `clients/${safeSourceClientId}/data/${sourceFiles.database}`;
+  const statementsStoragePath = `clients/${safeSourceClientId}/data/${sourceFiles.statements}`;
+  const [databaseCsvText, statementsCsvText] = demo
+    ? [readCsvFromDemoFile(DEMO_DATABASE_PATH), readCsvFromDemoFile(DEMO_STATEMENTS_PATH)]
+    : await Promise.all([
+      readCsvFromStorage(databaseStoragePath),
+      readCsvFromStorage(statementsStoragePath),
+    ]);
+
+  const definitions = parseStatements(statementsCsvText);
+  const respondents = parseRespondents(definitions, databaseCsvText);
+  return buildEmployeeExperienceDashboardData({
+    organizationName,
+    dataSourceLabel: demo
+      ? "DWS employee experience demo CSV template"
+      : `${organizationName} employee experience Firebase CSV workspace`,
+    definitions,
+    respondents,
+    hiddenDimensionIds: mergeHiddenDimensionIds(
+      hiddenDimensionIds ?? (demo ? DEMO_HIDDEN_DIMENSION_IDS : [])
+    ),
+  });
+}
+
+export async function loadEmployeeExperienceSyntheticDemoData({
+  hiddenDimensionIds = [],
+}: { hiddenDimensionIds?: string[] } = {}): Promise<EmployeeExperienceDashboardData> {
+  return buildEmployeeExperienceDashboardData({
+    organizationName: "North Star Demo Group",
+    dataSourceLabel: "Synthetic employee experience demo dataset",
+    definitions: SYNTHETIC_DEMO_QUESTIONS,
+    respondents: buildSyntheticDemoRespondents(),
+    hiddenDimensionIds,
+  });
 }
