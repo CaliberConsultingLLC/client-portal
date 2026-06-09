@@ -328,30 +328,37 @@ export function EELocationComparison({
   }, [data.display?.barAxis, scale.min, scale.max]);
 
   const rows = useMemo(() => locations.map(d => {
-    let cur: number, prev: number;
+    let cur: number, prev: number | null;
     if (activeStatement) {
       const cell = activeStatement.byLocation[d.id];
       cur = cell.current;
-      prev = cell.comparisons[compId] ?? 0;
+      prev = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
     } else {
       const curs = idx.statements.map(s => s.byLocation[d.id].current);
-      const prevs = idx.statements.map(s => s.byLocation[d.id].comparisons[compId] ?? 0);
+      const prevs = idx.statements
+        .map((statement) => {
+          const prior = statement.byLocation[d.id].comparisons[compId];
+          return Object.prototype.hasOwnProperty.call(statement.byLocation[d.id].comparisons, compId) ? prior : null;
+        })
+        .filter((value): value is number => value != null);
       cur = r1(mean(curs));
-      prev = r1(mean(prevs));
+      prev = prevs.length > 0 ? r1(mean(prevs)) : null;
     }
-    return { id: d.id, name: d.name, value: cur, prev, delta: r1(cur - prev) };
+    return { id: d.id, name: d.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
   }), [locations, idx, activeStatement, compId]);
 
   const deltaAxis = useMemo(() => {
     const fallback = data.display?.deltaAxis
       ? { ...data.display.deltaAxis, ticks: data.display.deltaAxis.ticks ?? [-10, 0, 10] }
       : { min: -10, max: 10, ticks: [-10, 0, 10] };
-    return computeDeltaAxis(rows.map((row) => ({ delta: row.delta })), fallback);
+    const validRows = rows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
+    return computeDeltaAxis(validRows, fallback);
   }, [data.display?.deltaAxis, rows]);
 
   const overallAvg = r1(mean(rows.map(r => r.value)));
-  const overallPrev = r1(mean(rows.map(r => r.prev)));
-  const overallDelta = r1(overallAvg - overallPrev);
+  const priorRows = rows.filter((row) => row.prev != null).map((row) => row.prev as number);
+  const overallPrev = priorRows.length > 0 ? r1(mean(priorRows)) : null;
+  const overallDelta = overallPrev == null ? null : r1(overallAvg - overallPrev);
 
   const rrPct = current.responseRate != null ? `${Math.round(current.responseRate * 100)}%` : "—";
   const avgColor = readableText(sc(overallAvg)) === "#fff" ? sc(overallAvg) : "#152238";
@@ -380,7 +387,7 @@ export function EELocationComparison({
               <div className="flex shrink-0 gap-3">
                 {([
                   ["Company Avg",   overallAvg.toFixed(1), avgColor],
-                  ["Change YoY",    f1(overallDelta),      overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6"],
+                  ["Change YoY",    overallDelta == null ? "—" : f1(overallDelta),      overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6"],
                   ["Response Rate", rrPct,                 "#152238"],
                 ] as [string, string, string][]).map(([label, value, color]) => (
                   <div key={label} className="flex min-h-[76px] min-w-[104px] flex-col items-center justify-center gap-1 rounded-2xl px-4 py-2" style={{ border: "1px solid #8798AA", background: "rgba(255,255,255,.85)" }}>
@@ -410,7 +417,7 @@ export function EELocationComparison({
                 <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by brand vs {comp.label} · gains in green, declines in red.</p>
               </div>
               <div className="px-6 py-5">
-                <DeptDeltaChart rows={rows.map(r => ({ name: r.name, delta: r.delta }))} axis={deltaAxis} />
+                <DeptDeltaChart rows={rows.filter((row) => row.delta != null).map(r => ({ name: r.name, delta: r.delta as number }))} axis={deltaAxis} />
               </div>
             </div>
           </div>

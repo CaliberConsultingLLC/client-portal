@@ -108,6 +108,14 @@ function dStyle(d: number) {
   return { bg: "#E2E8EF", fg: "#3B4B63" };
 }
 
+function readableText(hex: string) {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150 ? "#1C252A" : "#fff";
+}
+
 // ─── RailSection ──────────────────────────────────────────────────────────────
 
 function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -235,6 +243,7 @@ export function EECampaignResults({
   const sc = (v: number) => scoreScaleColor(v, scale.min, scale.mid, scale.max);
   const [localIndexId, setLocalIndexId] = useState(indexes[0]?.id ?? "");
   const [localCompId, setLocalCompId] = useState(() => defaultComparisonId(comparisons));
+  const [openIndexId, setOpenIndexId] = useState(indexes[0]?.id ?? "");
   const indexId = controlledIndexId ?? localIndexId;
   const setIndexId = onIndexId ?? setLocalIndexId;
   const compId = controlledCompId ?? localCompId;
@@ -248,23 +257,21 @@ export function EECampaignResults({
     return { min: a.min, max: a.max, ticks: a.ticks ?? tensWithin(a.min, a.max) };
   }, [data.display?.barAxis, scale.min, scale.max]);
 
-  const rows = useMemo(() => (idx?.statements ?? []).map(s => ({
-    t: s.text,
-    v: s.current,
-    prev: s.comparisons[compId] ?? 0,
-    delta: r1(s.current - (s.comparisons[compId] ?? 0)),
-  })), [idx, compId]);
+  const rows = useMemo(() => (idx?.statements ?? []).map(s => {
+    const prev = Object.prototype.hasOwnProperty.call(s.comparisons, compId) ? s.comparisons[compId] : null;
+    return {
+      t: s.text,
+      v: s.current,
+      prev,
+      delta: prev == null ? null : r1(s.current - prev),
+    };
+  }), [idx, compId]);
 
-  const deltaAxis = useMemo(() => {
-    const fallback = data.display?.deltaAxis
-      ? { ...data.display.deltaAxis, ticks: data.display.deltaAxis.ticks ?? [0, 5] }
-      : { min: -5, max: 10, ticks: [0, 5] };
-    return computeDeltaAxis(rows.map((row) => ({ delta: row.delta })), fallback);
-  }, [data.display?.deltaAxis, rows]);
+  const validDeltaRows = useMemo(() => rows.filter((row) => row.delta != null), [rows]);
 
   const curAvg  = useMemo(() => r1(mean(rows.map(r => r.v))),    [rows]);
-  const prevAvg = useMemo(() => r1(mean(rows.map(r => r.prev))), [rows]);
-  const yoy     = r1(curAvg - prevAvg);
+  const prevAvg = useMemo(() => validDeltaRows.length > 0 ? r1(mean(validDeltaRows.map(r => r.prev as number))) : null, [validDeltaRows]);
+  const yoy     = prevAvg == null ? null : r1(curAvg - prevAvg);
 
   const rrPct = current.responseRate != null ? `${Math.round(current.responseRate * 100)}%` : "—";  const avgColor = sc(curAvg);
 
@@ -330,14 +337,14 @@ export function EECampaignResults({
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="font-bold uppercase" style={{ fontSize: 11, letterSpacing: "0.2em", color: "#6E7E96" }}>Detailed Results · {idx.name}</p>
+                <p className="font-bold uppercase" style={{ fontSize: 11, letterSpacing: "0.2em", color: "#6E7E96" }}>Detailed Results</p>
                 <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Detailed Results</h2>
-                <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{idx.name} index · {current.labelLong} · compared to {comp.label}</p>
+                <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong} · compared to {comp.label}</p>
               </div>
               <div className="flex shrink-0 gap-3">
                 {([
                   ["Index Average", curAvg.toFixed(1),  avgColor],
-                  ["Change YoY",    f1(yoy),             yoy >= 0 ? "#9CB2A8" : "#C8B9B6"],
+                  ["Change YoY",    yoy == null ? "—" : f1(yoy),             yoy == null ? "#6E7E96" : yoy >= 0 ? "#9CB2A8" : "#C8B9B6"],
                   ["Response Rate", rrPct,               "#152238"],
                 ] as [string, string, string][]).map(([label, value, color]) => (
                   <div key={label} className="flex min-h-[76px] min-w-[104px] flex-col items-center justify-center gap-1 rounded-2xl px-4 py-2" style={{ border: "1px solid #8798AA", background: "rgba(255,255,255,.85)" }}>
@@ -349,25 +356,60 @@ export function EECampaignResults({
             </div>
           </div>
 
-          {/* Current Campaign */}
           <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
             <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
-              <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign</h3>
-              <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Favorability index per statement · {current.labelLong} · ranked high to low.</p>
+              <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Statement Results</h3>
+              <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Expand one index at a time to review statement-level scores for {current.label} and change vs {comp.label}.</p>
             </div>
             <div className="px-6 py-5">
-              <FavChart rows={[...rows].sort((a, b) => b.v - a.v).map(r => ({ t: r.t, v: r.v }))} avg={curAvg} axis={barAxis} color={sc} />
-            </div>
-          </div>
-
-          {/* Point Difference */}
-          <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
-            <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
-              <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Point Difference (YoY)</h3>
-              <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in index points vs {comp.label} · gains in green, declines in red.</p>
-            </div>
-            <div className="px-6 py-5">
-              <DeltaChart rows={rows.map(r => ({ t: r.t, delta: r.delta }))} axis={deltaAxis} />
+              <div className="stmt-wrap">
+                <table className="stmt-table">
+                  <thead>
+                    <tr>
+                      <th>Expand an index for statements</th>
+                      <th className="num col-group-end">{current.label}</th>
+                      <th className="num col-group-start">Delta</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {indexes.map((index) => {
+                      const open = openIndexId === index.id;
+                      const statementRows = index.statements.map((statement) => {
+                        const prev = Object.prototype.hasOwnProperty.call(statement.comparisons, compId) ? statement.comparisons[compId] : null;
+                        return {
+                          id: statement.text,
+                          text: statement.text,
+                          current: statement.current,
+                          delta: prev == null ? null : r1(statement.current - prev),
+                        };
+                      });
+                      const indexCurrent = r1(mean(statementRows.map((row) => row.current)));
+                      const deltaValues = statementRows.map((row) => row.delta).filter((value): value is number => value != null);
+                      const indexDelta = deltaValues.length > 0 ? r1(mean(deltaValues)) : null;
+                      const currentColor = sc(indexCurrent);
+                      return (
+                        <>
+                          <tr className={`acc-head${open ? " acc-open" : ""}`} onClick={() => setOpenIndexId(open ? "" : index.id)}>
+                            <td><div className="acc-name"><span className="acc-chev"><ChevronRight className="h-4 w-4" /></span><span className="acc-title">{index.name}</span></div></td>
+                            <td className="cell col-group-end" style={{ background: currentColor, color: readableText(currentColor) }}>{indexCurrent.toFixed(1)}</td>
+                            <td className="cell col-group-start" style={indexDelta == null ? { color: "#6E7E96" } : { background: dStyle(indexDelta).bg, color: dStyle(indexDelta).fg }}>{indexDelta == null ? "—" : f1(indexDelta)}</td>
+                          </tr>
+                          {open && statementRows.map((row) => {
+                            const color = sc(row.current);
+                            return (
+                              <tr key={`${index.id}-${row.id}`} className="stmt-row">
+                                <td className="stmt-sub">{row.text}</td>
+                                <td className="cell col-group-end" style={{ background: color, color: readableText(color) }}>{row.current.toFixed(1)}</td>
+                                <td className="cell col-group-start" style={row.delta == null ? { color: "#6E7E96" } : { background: dStyle(row.delta).bg, color: dStyle(row.delta).fg }}>{row.delta == null ? "—" : f1(row.delta)}</td>
+                              </tr>
+                            );
+                          })}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -376,7 +418,7 @@ export function EECampaignResults({
 
       <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
         <div className="p-6">
-          <EEContextRail howToRead="Current Campaign ranks statement favorability for the selected index. Point Difference (YoY) shows gains and declines against the comparison campaign." />
+          <EEContextRail howToRead="Detailed Results lets you expand one index at a time and review statement-level current scores with delta vs the selected comparison campaign." />
         </div>
       </aside>
     </div>
