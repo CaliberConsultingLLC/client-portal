@@ -16,6 +16,7 @@ import {
   mean,
   round1,
 } from "./ee-report-kit";
+import { EEContextRail } from "./ee-context-rail";
 
 const REPORT_DATA = toHistoricalData();
 const ALL = "all";
@@ -189,7 +190,11 @@ export function EEHistoricalReport({ data, embedded = false }: { data: any; embe
         </div>
       </main>
 
-      {!embedded ? <aside className="rail right" /> : null}
+      {!embedded ? (
+        <aside className="rail right">
+          <EEContextRail howToRead="Use the table and trend to compare score movement over time. Delta Last compares the latest survey to the prior survey; Delta All compares the first survey to the latest survey." />
+        </aside>
+      ) : null}
     </div>
   );
 }

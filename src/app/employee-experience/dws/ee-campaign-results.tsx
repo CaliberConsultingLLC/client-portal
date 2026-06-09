@@ -3,9 +3,9 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
-import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 import { EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-report-kit";
+import { EEContextRail } from "./ee-context-rail";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Statement { text: string; current: number; comparisons: Record<string, number> }
@@ -374,15 +374,11 @@ export function EECampaignResults({
         </div>
       </main>
 
-      <GuidancePinRail
-        dashboardInstanceId={dashboardInstanceId}
-        perspectiveId="ee-campaign-results"
-        campaignLabel={current.label}
-        filterKey={indexId}
-        canEdit={canEditGuidance}
-        className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6"
-        style={EE_GUIDANCE_RAIL_STYLE}
-      />
+      <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
+        <div className="p-6">
+          <EEContextRail howToRead="Current Campaign ranks statement favorability for the selected index. Point Difference (YoY) shows gains and declines against the comparison campaign." />
+        </div>
+      </aside>
     </div>
   );
 }

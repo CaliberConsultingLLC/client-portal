@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
-import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 import { EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-report-kit";
+import { EEContextRail } from "./ee-context-rail";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -477,15 +477,7 @@ export function EEDepartmentComparison({
       </main>
 
       <aside className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6" style={EE_GUIDANCE_RAIL_STYLE}>
-        <GuidancePinRail
-          dashboardInstanceId={dashboardInstanceId}
-          perspectiveId="ee-department-comparison"
-          campaignLabel={current.label}
-          filterKey={indexId}
-          canEdit={canEditGuidance}
-          className="flex flex-col gap-4"
-          style={{ position: "static", width: "auto", background: "transparent", border: "none", overflow: "visible" }}
-        />
+        <EEContextRail howToRead="Each row is a department for the selected index or statement. Dashed line marks company average, and Point Difference shows movement vs compared campaign." />
       </aside>
 
     </div>

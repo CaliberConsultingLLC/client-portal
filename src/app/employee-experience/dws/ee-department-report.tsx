@@ -16,6 +16,7 @@ import {
   mean,
   round1,
 } from "./ee-report-kit";
+import { EEContextRail } from "./ee-context-rail";
 
 const REPORT_DATA = toDepartmentReportData();
 const ALL = "all";
@@ -93,6 +94,7 @@ export function EEDepartmentReport({
     () => [...comparisons.map((item) => ({ ...item, isCurrent: false })), { ...current, isCurrent: true }],
     [comparisons, current]
   );
+  const timelineRecentFirst = useMemo(() => [...timeline].reverse(), [timeline]);
 
   if (!departments.length || !indexes.length) {
     return (
@@ -108,7 +110,6 @@ export function EEDepartmentReport({
   }
 
   const dept = departments.find((item) => item.id === deptId) ?? departments[0];
-  const timelineRecentFirst = useMemo(() => [...timeline].reverse(), [timeline]);
   const curCamp = timeline.find((item) => item.id === currentCampaignId) ?? current;
   const previous = timeline.find((item) => item.id === priorCampaignId) ?? comparisons[comparisons.length - 1] ?? null;
   const campaigns = previous ? [previous, curCamp] : [curCamp];
@@ -213,7 +214,11 @@ export function EEDepartmentReport({
         </div>
       </main>
 
-      <aside className="rail right" />
+      <aside className="rail right">
+        <EEContextRail
+          howToRead={`Cells are favorability points. Delta compares the selected survey to the prior survey; vs Org compares this ${unitLabel.toLowerCase()} to the company average.`}
+        />
+      </aside>
     </div>
   );
 }

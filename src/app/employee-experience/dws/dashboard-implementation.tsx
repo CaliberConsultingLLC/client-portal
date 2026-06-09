@@ -10,14 +10,14 @@ import { EEHistoricalReport } from "./ee-historical-report";
 import { EESupervisorReport } from "./ee-supervisor-report";
 import { EEExecutiveRail, EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { buildEmployeeExperienceReportBundle } from "./ee-live-projections";
-import { defaultComparisonId } from "./ee-report-kit";
+import { ClientMark, defaultComparisonId } from "./ee-report-kit";
+import { EEContextRail } from "./ee-context-rail";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
 import { mergeHiddenDimensionIds } from "@/lib/employee-experience/excluded-dimensions";
 import { isKnownBrandSegment } from "@/lib/employee-experience/brand-segment";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
-import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 import { cn } from "@/lib/utils";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import type {
@@ -588,6 +588,35 @@ function CampaignKpi({
   );
 }
 
+function ExecutiveHeader({
+  title,
+  subtitle,
+  kpis,
+}: {
+  title: string;
+  subtitle: string;
+  kpis: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <EEPanel className="bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
+      <div className="p-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.75fr)_minmax(460px,1.25fr)] lg:items-center">
+          <div className="min-w-0">
+            <SLabel>{title}</SLabel>
+            <h2 className="mt-1 text-2xl font-extrabold tracking-tight text-text-primary">{title}</h2>
+            <p className="mt-1 text-lg font-semibold text-text-secondary">{subtitle}</p>
+          </div>
+          <div className="grid grid-cols-4 justify-items-end gap-2 justify-self-end">
+            {kpis.map((kpi) => (
+              <CampaignKpi key={kpi.label} label={kpi.label} value={kpi.value} />
+            ))}
+          </div>
+        </div>
+      </div>
+    </EEPanel>
+  );
+}
+
 type StatementRankingRow = {
   id: number;
   name: string;
@@ -795,8 +824,22 @@ function ExecLocation({
 
   if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
 
+  const overallScore = groupScore(curR, allIds);
+  const priorScore = priR.length > 0 ? groupScore(priR, allIds) : null;
+  const overallDelta = priorScore !== null ? r1(overallScore - priorScore) : null;
+
   return (
     <div className="space-y-6">
+      <ExecutiveHeader
+        title="Brand Breakdown"
+        subtitle={`${current}${prior ? ` vs ${prior}` : ""}`}
+        kpis={[
+          { label: "Responses", value: curR.length.toLocaleString() },
+          { label: "Brands", value: sortedLocs.length.toString() },
+          { label: "Campaign Average", value: formatScoreForDisplay(overallScore) },
+          { label: "Change From Previous", value: fmtDelta(overallDelta) },
+        ]}
+      />
       {sortedLocs.length > 0 ? (
         <EEPanel>
           <EEPanelHeader
@@ -935,19 +978,32 @@ function HrIndexDive({
     [dimQs, curR, priR, min]
   );
 
-  const depts = useMemo(() => uniq(curR, "department", min), [curR, min]);
-  const deptBars = useMemo(() =>
-    depts.map((dept) => {
-      const dc = curR.filter((r) => r.department === dept);
-      return { name: dept, value: groupScore(dc, dimIds) };
+  const brands = useMemo(
+    () => uniq(curR, "location", min).filter(isKnownBrandSegment),
+    [curR, min]
+  );
+  const brandBars = useMemo(() =>
+    brands.map((brand) => {
+      const bc = curR.filter((r) => r.location === brand);
+      return { name: brand, value: groupScore(bc, dimIds) };
     }).sort((a, b) => b.value - a.value),
-    [depts, curR, dimIds]
+    [brands, curR, dimIds]
   );
 
   if (!selectedDim || dimQs.length === 0) return <Empty message="Select a dimension from the left rail." />;
 
   return (
     <div className="space-y-6">
+      <ExecutiveHeader
+        title="Index Deep Dive"
+        subtitle={`${selectedDim} · ${current}${prior ? ` vs ${prior}` : ""}`}
+        kpis={[
+          { label: "Responses", value: curR.length.toLocaleString() },
+          { label: "Brands", value: brands.length.toString() },
+          { label: "Index Average", value: formatScoreForDisplay(dimAvg) },
+          { label: "Statements", value: stmts.length.toString() },
+        ]}
+      />
       <EEPanel>
         <EEPanelHeader
           title={`${selectedDim} — Statement Detail`}
@@ -977,18 +1033,18 @@ function HrIndexDive({
         </EEPanelContent>
       </EEPanel>
 
-      {deptBars.length > 0 && (
+      {brandBars.length > 0 && (
         <EEPanel>
           <EEPanelHeader
-            title={`${selectedDim} by Department`}
-            description="Which departments score highest and lowest on this index."
+            title={`${selectedDim} by Brand`}
+            description="Which brands score highest and lowest on this index."
           />
           <EEPanelContent className="pt-0">
             <GradientBarChart
-              data={deptBars}
+              data={brandBars}
               average={dimAvg}
               minValue={EE.min} midpoint={EE.mid} maxValue={EE.max}
-              height={Math.max(280, deptBars.length * 34)}
+              height={Math.max(280, brandBars.length * 34)}
             />
           </EEPanelContent>
         </EEPanel>
@@ -1186,30 +1242,41 @@ function HrSupervisor({
 // ─── HR: Open Text ────────────────────────────────────────────────────────────
 
 function HrOpenText({
-  data, current, deptFilter, fieldType,
+  data, current, brandFilter, fieldType,
 }: {
   data: EmployeeExperienceDashboardData; current: string;
-  deptFilter: string; fieldType: OpenTextField;
+  brandFilter: string; fieldType: OpenTextField;
 }) {
   const fieldLabel = OPEN_TEXT_FIELDS.find((f) => f.id === fieldType)?.label ?? fieldType;
 
-  const entries = useMemo(() =>
-    data.voice[fieldType].filter((e) => {
-      if (e.campaign !== current) return false;
-      if (deptFilter && e.department !== deptFilter) return false;
-      return e.text && e.text.trim().length > 0;
-    }),
-    [data.voice, fieldType, current, deptFilter]
-  );
+  const entries = useMemo(() => {
+    return data.respondents
+      .filter((respondent) => {
+        if (respondent.campaignLabel !== current) return false;
+        if (brandFilter && respondent.location !== brandFilter) return false;
+        const text = respondent.comments[fieldType];
+        return Boolean(text && text.trim().length > 0);
+      })
+      .map((respondent) => ({
+        id: `${respondent.id}-${fieldType}`,
+        text: respondent.comments[fieldType].trim(),
+        department: respondent.department,
+        location: respondent.location,
+      }));
+  }, [data.respondents, fieldType, current, brandFilter]);
 
   return (
     <div className="space-y-6">
-      <div>
-        <SLabel>Open Text · {fieldLabel}</SLabel>
-        <p className="mt-2 text-sm text-text-secondary">
-          {entries.length} response{entries.length !== 1 ? "s" : ""}{deptFilter ? ` from ${deptFilter}` : " across all departments"} · {current}
-        </p>
-      </div>
+      <ExecutiveHeader
+        title="Open Text"
+        subtitle={`${fieldLabel} · ${current}`}
+        kpis={[
+          { label: "Responses", value: entries.length.toLocaleString() },
+          { label: "Brand", value: brandFilter || "All" },
+          { label: "Question Type", value: fieldLabel.split(" ")[0] ?? fieldLabel },
+          { label: "Campaign", value: current.split(" ")[0] ?? current },
+        ]}
+      />
       {entries.length === 0 ? (
         <Empty message="No responses match the current selection." />
       ) : (
@@ -1220,7 +1287,7 @@ function HrOpenText({
                 <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-text-muted">{i + 1}</div>
                 <div className="flex-1">
                   <p className="text-sm leading-relaxed text-text-primary">{entry.text}</p>
-                  {entry.department && <p className="mt-1.5 text-xs text-text-muted">{entry.department}{entry.location ? ` · ${entry.location}` : ""}</p>}
+                  {entry.location && <p className="mt-1.5 text-xs text-text-muted">{entry.location}{entry.department ? ` · ${entry.department}` : ""}</p>}
                 </div>
               </div>
             </div>
@@ -1415,7 +1482,7 @@ export function DwsEmployeeExperienceDashboardClient({
   const [idxFilters, setIdxFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
   const [supFilters, setSupFilters] = useState<Record<string, string>>({ location: "", department: "" });
   const [selectedSup, setSelectedSup] = useState("");
-  const [openTextDept, setOpenTextDept] = useState("");
+  const [openTextBrand, setOpenTextBrand] = useState("");
   const [openTextField, setOpenTextField] = useState<OpenTextField>("strengths");
   const [selectedDept, setSelectedDept] = useState("");
   const [execCompId, setExecCompId] = useState("");
@@ -1549,43 +1616,34 @@ export function DwsEmployeeExperienceDashboardClient({
     />
   ) : null;
 
-  function renderGuidance(perspectiveId: string, filterKey: string) {
-    return (
-      <GuidancePinRail
-        dashboardInstanceId={dashboardInstanceId}
-        perspectiveId={perspectiveId}
-        campaignLabel={current}
-        filterKey={filterKey || "default"}
-        canEdit={canEditGuidance}
-        className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6"
-        style={EE_GUIDANCE_RAIL_STYLE}
-      />
-    );
-  }
-
-  function renderCanvasGuidance(perspectiveId: string, filterKey: string) {
-    return (
-      <GuidancePinRail
-        dashboardInstanceId={dashboardInstanceId}
-        perspectiveId={perspectiveId}
-        campaignLabel={current}
-        filterKey={filterKey || "default"}
-        canEdit={canEditGuidance}
-        className="flex flex-col gap-4 p-2"
-        style={{ position: "static", width: "auto", background: "transparent", border: "none", overflow: "visible" }}
-      />
-    );
-  }
-
-  const canvasGuidanceConfig: Record<string, { perspectiveId: string; filterKey: string }> = {
-    "hr-rankings": { perspectiveId: "hr-rankings", filterKey: "default" },
-    "hr-index-dive": { perspectiveId: "hr-index-dive", filterKey: selectedDim || "default" },
-    "hr-open-text": { perspectiveId: "hr-open-text", filterKey: openTextField || "default" },
-    "dept-scorecard": { perspectiveId: "dept-scorecard", filterKey: selectedDept || "default" },
+  const perspectiveHowToRead: Record<PerspectiveId, string> = {
+    "exec-overview": "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
+    "exec-location": "Heatmap rows are brands, columns are indexes, and row totals summarize each brand. Use this to compare brand strengths and watch areas.",
+    "ee-campaign-results": "Use index cards and statement tables to compare campaign scores and deltas. Green indicates positive movement and red indicates decline.",
+    "ee-department-comparison": "Each row is a department for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-historical-report": "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
+    "hr-index-dive": "Select an index to inspect statement-level scores and brand distribution. Use filters to isolate brand and work-type patterns.",
+    "hr-supervisor": "Bars show supervisor scores by statement. The org marker indicates company average for each statement.",
+    "hr-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
+    "dept-scorecard": "Scorecards summarize department performance, statement strengths, and focus areas with demographic cuts.",
+    "ee-brand-report": "This report compares each brand to organization averages by statement and index across selected campaigns.",
+    "ee-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
   };
-  const canvasGuidance = canvasGuidanceConfig[activePersp]
-    ? renderCanvasGuidance(canvasGuidanceConfig[activePersp].perspectiveId, canvasGuidanceConfig[activePersp].filterKey)
-    : undefined;
+
+  const fixedInfoRail = (
+    <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
+      <div className="p-6">
+        <EEContextRail howToRead={perspectiveHowToRead[activePersp]} />
+      </div>
+    </aside>
+  );
+
+  const canvasInfoRail = (
+    <div className="flex flex-col gap-4 p-2">
+      <EEContextRail howToRead={perspectiveHowToRead[activePersp]} compact />
+    </div>
+  );
 
   function onGroupChange(gid: string) {
     const g = GROUPS.find((x) => x.id === gid) ?? GROUPS[0];
@@ -1597,6 +1655,13 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const leftRail = (
     <LRail>
+      <div className="rounded-[18px] bg-white p-4 text-center shadow-[0_2px_8px_rgba(15,23,42,.07)]" style={{ border: "1px solid #8798AA" }}>
+        <ClientMark client={{ name: data.meta.organizationName, logoUrl }} />
+        <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>
+          {EXECUTIVE_PERSPECTIVE_TITLES[activePersp]}
+        </div>
+      </div>
+
       <CampaignRail
         campaigns={data.meta.campaigns}
         current={current}
@@ -1670,16 +1735,16 @@ export function DwsEmployeeExperienceDashboardClient({
               <select
                 value={openTextField}
                 onChange={(e) => setOpenTextField(e.target.value as OpenTextField)}
-                className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
               >
                 {openTextFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
               </select>
             </div>
             <div>
-              <span className="text-xs font-medium text-text-secondary">Department</span>
-              <select value={openTextDept} onChange={(e) => setOpenTextDept(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
-                <option value="">All Departments</option>
-                {deptOpts.map((d) => <option key={d} value={d}>{d}</option>)}
+              <span className="text-xs font-medium text-text-secondary">Brand</span>
+              <select value={openTextBrand} onChange={(e) => setOpenTextBrand(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
+                <option value="">All Brands</option>
+                {locationOpts.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
               </select>
             </div>
           </div>
@@ -1756,7 +1821,7 @@ export function DwsEmployeeExperienceDashboardClient({
             <main style={EE_PERSPECTIVE_MAIN_STYLE}>
               <ExecOverview data={data} current={current} prior={prior} locationFilter={execLocation} />
             </main>
-            {renderGuidance("exec-overview", activeExecIndexId)}
+            {fixedInfoRail}
           </div>
         );
       case "exec-location":
@@ -1766,7 +1831,7 @@ export function DwsEmployeeExperienceDashboardClient({
             <main style={EE_PERSPECTIVE_MAIN_STYLE}>
               <ExecLocation data={data} current={current} prior={prior} locationFilter={execLocation} />
             </main>
-            {renderGuidance("exec-location", activeExecIndexId)}
+            {fixedInfoRail}
           </div>
         );
       case "ee-historical-report":
@@ -1776,43 +1841,30 @@ export function DwsEmployeeExperienceDashboardClient({
             <div style={EE_PERSPECTIVE_MAIN_STYLE}>
               <EEHistoricalReport data={reportBundle.historicalReport} embedded />
             </div>
-            {renderGuidance("ee-historical-report", activeExecIndexId)}
+            {fixedInfoRail}
           </div>
         );
       case "hr-index-dive":
         return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
       case "hr-supervisor":
-        return (
-          <>
-            <EESupervisorReport data={reportBundle.supervisorReport} />
-            {renderGuidance("hr-supervisor", "default")}
-          </>
-        );
+        return <EESupervisorReport data={reportBundle.supervisorReport} />;
       case "hr-open-text":
-        return <HrOpenText data={data} current={current} deptFilter={openTextDept} fieldType={openTextField} />;
+        return <HrOpenText data={data} current={current} brandFilter={openTextBrand} fieldType={openTextField} />;
       case "dept-scorecard":
         return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
       case "ee-brand-report":
         return (
-          <>
-            <EEDepartmentReport
-              data={reportBundle.brandReport}
-              unitLabel="Brand"
-              reportHeading="BRAND REPORT"
-            />
-            {renderGuidance("ee-brand-report", execLocation || "default")}
-          </>
+          <EEDepartmentReport
+            data={reportBundle.brandReport}
+            unitLabel="Brand"
+            reportHeading="BRAND REPORT"
+          />
         );
       case "ee-department-report":
-        return (
-          <>
-            <EEDepartmentReport data={reportBundle.departmentReport} />
-            {renderGuidance("ee-department-report", "default")}
-          </>
-        );
+        return <EEDepartmentReport data={reportBundle.departmentReport} />;
       default: return null;
     }
-  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextDept, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
+  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, selectedDept, deptOpts, reportBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
 
   return (
     <>
@@ -1833,7 +1885,7 @@ export function DwsEmployeeExperienceDashboardClient({
       activePersp === "ee-brand-report" ||
       activePersp === "ee-department-report"
         ? content
-        : <DashboardCanvas leftRail={leftRail} rightRail={canvasGuidance}>{content}</DashboardCanvas>}
+        : <DashboardCanvas leftRail={leftRail} rightRail={canvasInfoRail}>{content}</DashboardCanvas>}
     </>
   );
 }
