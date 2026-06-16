@@ -42,11 +42,11 @@ const DEMO_DATABASE_PATH = path.join(process.cwd(), "src/lib/employee-experience
 const DEMO_STATEMENTS_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWS 2024 Campaign Statements.csv");
 const DEMO_HIDDEN_DIMENSION_IDS = ["acquisition"];
 
-const COMMENT_IDS = {
-  strengths: 42,
-  improvement: 43,
-  supervisor: 62,
-  acquisition: 80,
+const COMMENT_ID_CANDIDATES = {
+  strengths: [47, 42],
+  improvement: [48, 43],
+  supervisor: [49, 62],
+  acquisition: [80],
 } as const;
 
 const COMMENT_THEME_DEFINITIONS = [
@@ -492,6 +492,20 @@ function getRespondentScore(row: string[], itemId: number, getValue: (row: strin
   return normalizeScore(getValue(row, String(itemId)));
 }
 
+function getRespondentComment(
+  row: string[],
+  itemIds: readonly number[],
+  getValue: (row: string[], field: string) => string
+) {
+  for (const itemId of itemIds) {
+    const prefixed = getValue(row, `item:${itemId}`);
+    const unprefixed = getValue(row, String(itemId));
+    const value = normalizeLabel(prefixed || unprefixed, "");
+    if (value) return value;
+  }
+  return "";
+}
+
 function isUsableComment(value: string) {
   const normalized = value.trim().toLowerCase();
   return normalized.length > 0 && !IGNORED_COMMENT_VALUES.has(normalized);
@@ -825,7 +839,7 @@ function buildSegmentReports(
 
 function buildVoiceEntries(
   respondents: Respondent[],
-  key: keyof typeof COMMENT_IDS
+  key: keyof typeof COMMENT_ID_CANDIDATES
 ): EmployeeExperienceVoiceEntry[] {
   return respondents
     .map((respondent) => {
@@ -951,10 +965,10 @@ function parseRespondents(definitions: StatementDefinition[], databaseCsvText: s
         rating: normalizeLabel(getAliasedValue(row, ["Rating", "Performance Rating"]), "Unspecified"),
         scores,
         comments: {
-          strengths: normalizeLabel(getValue(row, `item:${COMMENT_IDS.strengths}`), ""),
-          improvement: normalizeLabel(getValue(row, `item:${COMMENT_IDS.improvement}`), ""),
-          supervisor: normalizeLabel(getValue(row, `item:${COMMENT_IDS.supervisor}`), ""),
-          acquisition: normalizeLabel(getValue(row, `item:${COMMENT_IDS.acquisition}`), ""),
+          strengths: getRespondentComment(row, COMMENT_ID_CANDIDATES.strengths, getValue),
+          improvement: getRespondentComment(row, COMMENT_ID_CANDIDATES.improvement, getValue),
+          supervisor: getRespondentComment(row, COMMENT_ID_CANDIDATES.supervisor, getValue),
+          acquisition: getRespondentComment(row, COMMENT_ID_CANDIDATES.acquisition, getValue),
         },
       };
     })
