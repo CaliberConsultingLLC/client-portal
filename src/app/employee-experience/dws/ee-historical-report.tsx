@@ -25,6 +25,11 @@ function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
 }
 
+function clampInsight(text: string, max = 200) {
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
+}
+
 function buildSmoothPath(points: Array<{ x: number; y: number }>) {
   if (points.length === 0) return "";
   if (points.length === 1) return `M${points[0].x},${points[0].y}`;
@@ -243,6 +248,73 @@ export function EEHistoricalReport({
     ? totalResponsesByCampaign[activeCampaign.id] ?? 0
     : Number(dept.responsesByCampaign?.[activeCampaign.id] ?? dept.responses ?? 0);
   const latestCampaign = activeCampaign;
+  const indexSnapshots = useMemo(
+    () =>
+      indexes.map((index) => {
+        const current = avgAt(index.statements, activeCampaign.id);
+        const previous = previousCampaign ? avgAt(index.statements, previousCampaign.id) : null;
+        return {
+          id: index.id,
+          name: index.name,
+          current,
+          delta: previous == null ? null : round1(current - previous),
+        };
+      }),
+    [indexes, activeCampaign.id, previousCampaign?.id]
+  );
+  const overallInsight = useMemo(() => {
+    if (indexSnapshots.length === 0) {
+      return "Organization snapshot: campaign results are available, but index-level trend detail is still loading.";
+    }
+    const sortedByCurrent = [...indexSnapshots].sort((left, right) => right.current - left.current);
+    const strongest = sortedByCurrent[0];
+    const watch = sortedByCurrent[sortedByCurrent.length - 1];
+    const gainers = indexSnapshots
+      .filter((index) => index.delta != null && index.delta > 0)
+      .sort((left, right) => (right.delta ?? 0) - (left.delta ?? 0));
+    const leadGainer = gainers[0];
+    const text = leadGainer
+      ? `Org trend: ${strongest.name} leads at ${strongest.current.toFixed(1)} while ${watch.name} trails at ${watch.current.toFixed(1)}; biggest upward shift comes from ${leadGainer.name} (${f1(leadGainer.delta ?? 0)}), signaling where focus should tighten next cycle.`
+      : `Org trend: ${strongest.name} leads at ${strongest.current.toFixed(1)} and ${watch.name} is lowest at ${watch.current.toFixed(1)}; close that spread while preserving momentum in stronger indexes next cycle.`;
+    return clampInsight(text, 200);
+  }, [indexSnapshots]);
+  const brandInsights = useMemo(() => {
+    const scoreForStatement = (statement, departmentId, campaignId) => {
+      const value = statement.byDept?.[departmentId]?.[campaignId];
+      return typeof value === "number" ? value : null;
+    };
+    const scoreForIndex = (index, departmentId, campaignId) => {
+      const values = index.statements
+        .map((statement) => scoreForStatement(statement, departmentId, campaignId))
+        .filter((value): value is number => value != null);
+      return values.length > 0 ? round1(mean(values)) : null;
+    };
+
+    return departments.map((department) => {
+      const overallValues = allStatements
+        .map((statement) => scoreForStatement(statement, department.id, activeCampaign.id))
+        .filter((value): value is number => value != null);
+      const currentOverall = overallValues.length > 0 ? round1(mean(overallValues)) : null;
+      const sortedIndexes = indexes
+        .map((index) => ({
+          name: index.name,
+          score: scoreForIndex(index, department.id, activeCampaign.id),
+        }))
+        .filter((index): index is { name: string; score: number } => index.score != null)
+        .sort((left, right) => right.score - left.score);
+      const topIndex = sortedIndexes[0];
+      const watchIndex = sortedIndexes[sortedIndexes.length - 1];
+      const text =
+        currentOverall == null || !topIndex || !watchIndex
+          ? `${department.name} snapshot: current results are available, but not enough index detail exists yet to generate a full insight.`
+          : `${department.name} snapshot: overall ${currentOverall.toFixed(1)}. Strongest index is ${topIndex.name} (${topIndex.score.toFixed(1)}), while ${watchIndex.name} is lowest (${watchIndex.score.toFixed(1)}); prioritize targeted follow-up there next cycle.`;
+      return {
+        id: department.id,
+        name: department.name,
+        insight: clampInsight(text, 200),
+      };
+    });
+  }, [departments, allStatements, indexes, activeCampaign.id]);
 
   useEffect(() => {
     if (selectedIndexId && selectedIndexId !== focus) {
@@ -283,6 +355,15 @@ export function EEHistoricalReport({
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{responseCount}</div></div>
             </div>
           </div>
+
+          {variant === "overview" ? (
+            <div className="card" style={{ marginBottom: 18 }}>
+              <div className="card-head"><h3 className="card-title">Organization Insight</h3></div>
+              <div className="card-body">
+                <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{overallInsight}</p>
+              </div>
+            </div>
+          ) : null}
 
           {variant === "overview" ? (
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]" style={{ marginBottom: 18 }}>
@@ -328,6 +409,19 @@ export function EEHistoricalReport({
               <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} yDomain={fixedYDomain} /></div>
             </div>
           )}
+
+          {variant === "overview" ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" style={{ marginBottom: 18 }}>
+              {brandInsights.map((item) => (
+                <div key={item.id} className="card">
+                  <div className="card-head"><h3 className="card-title">{item.name}</h3></div>
+                  <div className="card-body">
+                    <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{item.insight}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {variant !== "overview" ? (
             <>
