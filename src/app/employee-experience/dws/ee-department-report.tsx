@@ -72,6 +72,68 @@ function SegmentCard({ segment, deptId, minN, companyAvg, scoreColor }) {
   );
 }
 
+function BrandComparisonChart({ rows, avg, axis, scoreColor }) {
+  const pct = (value) => ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
+  return (
+    <div className="chart" style={{ "--label-col": "280px", "--gap-col": "140px" }}>
+      <style>{`
+        .br-track{height:24px;background:#F1F4F7;border-radius:0 7px 7px 0;position:relative}
+        .br-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
+        .br-chip{position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
+        .br-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
+        .br-org-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:999px;background:#152238;border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
+        .br-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
+        .br-gap-col-head{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6E7E96;text-align:center;line-height:1.25}
+        .br-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
+      `}</style>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col)",
+          alignItems: "end",
+          columnGap: 16,
+          marginBottom: 6,
+        }}
+      >
+        <div />
+        <div />
+        <div className="br-gap-col">
+          <div className="br-gap-col-head">Comparison to CSG</div>
+        </div>
+      </div>
+      <div className="plot">
+        <div className="grid-overlay" style={{ right: "var(--gap-col)" }}>
+          {axis.ticks.map((tick) => <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />)}
+        </div>
+        {rows.map((row) => {
+          const color = scoreColor(row.value);
+          const gapTone = row.delta >= 0
+            ? { bg: "#DCEFE2", fg: "#2F6A45", border: "#9BC6A9" }
+            : { bg: "#F4DEDD", fg: "#8A3D3A", border: "#D5A3A0" };
+          return (
+            <div className="bar-row" key={row.id}>
+              <div className="bar-label" title={row.name} style={{ whiteSpace: "normal" }}>{row.name}</div>
+              <div className="br-track">
+                <div className="br-bar" style={{ width: `${pct(row.value)}%`, background: color }}>
+                  <div className="br-chip">{row.value.toFixed(1)}</div>
+                </div>
+                <div className="br-org" style={{ left: `${pct(avg)}%` }} />
+                <div className="br-org-dot" style={{ left: `${pct(avg)}%` }} />
+              </div>
+              <div className="br-gap-col">
+                <div className="br-gap-pill" style={{ background: gapTone.bg, color: gapTone.fg, borderColor: gapTone.border }}>
+                  {f1(row.delta)}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="bar-row" style={{ padding: 0 }}><div /><div className="axis">{axis.ticks.map((tick) => <div key={tick} className="tick" style={{ left: `${pct(tick)}%` }}>{tick}</div>)}</div><div /></div>
+    </div>
+  );
+}
+
 export function EEDepartmentReport({
   data,
   unitLabel = "Department",
@@ -135,6 +197,7 @@ export function EEDepartmentReport({
   );
 
   const deptIndex = (index, campaign) => round1(mean(index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign))));
+  const unitIndex = (index, campaign, unitId) => round1(mean(index.statements.map((statement) => valueFor(statement.byDept[unitId], campaign))));
   const deptTotal = (campaign) => round1(mean(indexes.flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign)))));
   const companyStatement = (statement, campaign) => {
     let num = 0;
@@ -147,6 +210,34 @@ export function EEDepartmentReport({
   };
   const companyIndex = (index, campaign) => round1(mean(index.statements.map((statement) => companyStatement(statement, campaign))));
   const companyOverall = (campaign) => round1(mean(indexes.flatMap((index) => index.statements.map((statement) => companyStatement(statement, campaign)))));
+  const activeIndex = focus === ALL ? null : indexes.find((index) => index.id === focus) ?? null;
+  const brandChartRows = useMemo(() => {
+    const getValue = (item) => {
+      if (activeIndex) return unitIndex(activeIndex, curCamp, item.id);
+      return round1(mean(indexes.flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[item.id], curCamp)))));
+    };
+    const avgValue = activeIndex ? companyIndex(activeIndex, curCamp) : companyOverall(curCamp);
+    return departments
+      .map((item) => {
+        const value = getValue(item);
+        return {
+          id: item.id,
+          name: item.name,
+          value,
+          delta: round1(value - avgValue),
+        };
+      })
+      .sort((left, right) => right.value - left.value);
+  }, [activeIndex, curCamp, departments, indexes]);
+  const brandChartAverage = activeIndex ? companyIndex(activeIndex, curCamp) : companyOverall(curCamp);
+  const brandChartAxis = useMemo(() => {
+    const allValues = [...brandChartRows.map((row) => row.value), brandChartAverage];
+    const min = Math.floor((Math.min(...allValues) - 2) / 5) * 5;
+    const max = Math.ceil((Math.max(...allValues) + 2) / 5) * 5;
+    const ticks = [];
+    for (let tick = min; tick <= max; tick += 5) ticks.push(tick);
+    return { min, max, ticks };
+  }, [brandChartRows, brandChartAverage]);
 
   const total = deptTotal(curCamp);
   const totalDelta = previous ? round1(total - deptTotal(previous)) : null;
@@ -195,6 +286,17 @@ export function EEDepartmentReport({
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{dept.responses}</div></div>
             </div>
           </div>
+
+          {unitLabel === "Brand" ? (
+            <div className="card" style={{ marginBottom: 18 }}>
+              <div className="card-head">
+                <h3 className="card-title">Brand Comparison</h3>
+              </div>
+              <div className="card-body">
+                <BrandComparisonChart rows={brandChartRows} avg={brandChartAverage} axis={brandChartAxis} scoreColor={scoreColor} />
+              </div>
+            </div>
+          ) : null}
 
           <p className="slabel" style={{ marginBottom: 8 }}>Statement Results</p>
           <div className="stmt-wrap" style={{ marginBottom: 18 }}>
