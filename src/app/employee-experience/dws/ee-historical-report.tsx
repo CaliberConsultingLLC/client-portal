@@ -51,12 +51,14 @@ function HistoryChart({
   values,
   orgValues,
   backdropSeries = [],
+  yDomain,
   compact = false,
 }: {
   campaigns: any[];
   values: number[];
   orgValues?: number[] | null;
   backdropSeries?: Array<{ id: string; values: number[] }>;
+  yDomain?: { min: number; max: number };
   compact?: boolean;
 }) {
   const width = compact ? 640 : 940;
@@ -69,8 +71,8 @@ function HistoryChart({
     ...(orgValues ?? []),
     ...backdropSeries.flatMap((series) => series.values),
   ];
-  const min = Math.floor((Math.min(...domain) - 2.5) / 2) * 2;
-  const max = Math.ceil((Math.max(...domain) + 2.5) / 2) * 2;
+  const min = yDomain?.min ?? Math.floor((Math.min(...domain) - 2.5) / 2) * 2;
+  const max = yDomain?.max ?? Math.ceil((Math.max(...domain) + 2.5) / 2) * 2;
   const xFor = (month) => pad.left + (month / maxMonth) * (width - pad.left - pad.right);
   const yFor = (value) => pad.top + (1 - (value - min) / (max - min)) * (height - pad.top - pad.bottom);
   const points = campaigns.map((campaign, index) => ({ x: xFor(campaign.month), y: yFor(values[index]), value: values[index] }));
@@ -182,14 +184,35 @@ export function EEHistoricalReport({
   const avgAt = (statements, campaignId) => round1(mean(statements.map((statement) => statementValue(statement, campaignId))));
   const orgAvgAt = (statements, campaignId) => round1(mean(statements.map((statement) => orgStatementValue(statement, campaignId))));
 
-  const series = campaigns.map((campaign) => avgAt(scopeStatements, campaign.id));
+  const allIndexBackdropSeries = useMemo(
+    () =>
+      indexes.slice(0, 5).map((index) => ({
+        id: index.id,
+        values: campaigns.map((campaign) => avgAt(index.statements, campaign.id)),
+      })),
+    [campaigns, indexes]
+  );
+  const overallSeries = useMemo(
+    () => campaigns.map((campaign) => avgAt(allStatements, campaign.id)),
+    [allStatements, campaigns]
+  );
+  const series = focusIndex
+    ? campaigns.map((campaign) => avgAt(focusIndex.statements, campaign.id))
+    : overallSeries;
   const backdropSeries = useMemo(() => {
-    if (focusIndex) return [];
-    return indexes.slice(0, 5).map((index) => ({
-      id: index.id,
-      values: campaigns.map((campaign) => avgAt(index.statements, campaign.id)),
-    }));
-  }, [campaigns, focusIndex, indexes]);
+    return allIndexBackdropSeries
+      .filter((indexSeries) => !focusIndex || indexSeries.id !== focusIndex.id)
+      .map((indexSeries) => ({
+        id: indexSeries.id,
+        values: indexSeries.values,
+      }));
+  }, [allIndexBackdropSeries, focusIndex]);
+  const fixedYDomain = useMemo(() => {
+    const stableValues = [...overallSeries, ...allIndexBackdropSeries.flatMap((seriesItem) => seriesItem.values)];
+    const min = Math.floor((Math.min(...stableValues) - 2.5) / 2) * 2;
+    const max = Math.ceil((Math.max(...stableValues) + 2.5) / 2) * 2;
+    return { min, max };
+  }, [allIndexBackdropSeries, overallSeries]);
   const orgSeries = isAll ? null : campaigns.map((campaign) => orgAvgAt(scopeStatements, campaign.id));
   const activeCampaignIndex = Math.max(
     0,
@@ -296,13 +319,13 @@ export function EEHistoricalReport({
               </div>
               <div className="card">
                 <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} compact /></div>
+                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} yDomain={fixedYDomain} compact /></div>
               </div>
             </div>
           ) : (
             <div className="card" style={{ marginBottom: 18 }}>
               <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} /></div>
+              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} yDomain={fixedYDomain} /></div>
             </div>
           )}
 
