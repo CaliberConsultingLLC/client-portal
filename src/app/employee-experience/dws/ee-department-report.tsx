@@ -251,6 +251,16 @@ export function EEDepartmentReport({
   const total = deptTotal(curCamp);
   const previousTotal = previous ? deptTotal(previous) : null;
   const totalDelta = total == null || previousTotal == null ? null : round1(total - previousTotal);
+  const enpsForCampaign = (campaign) => {
+    const cell = data.enpsByDept?.[deptId];
+    if (!cell || !campaign) return null;
+    return campaign.isCurrent ? cell.current ?? null : cell.comparisons?.[campaign.id] ?? null;
+  };
+  const brandEnpsCurrent = unitLabel === "Brand" ? enpsForCampaign(curCamp) : null;
+  const brandEnpsPrevious =
+    unitLabel === "Brand" && previous ? enpsForCampaign(previous) : null;
+  const brandEnpsDelta =
+    brandEnpsCurrent == null || brandEnpsPrevious == null ? null : round1(brandEnpsCurrent - brandEnpsPrevious);
   return (
     <div className="canvas">
       <EEReportStyles />
@@ -293,6 +303,14 @@ export function EEDepartmentReport({
               <div className="kpi"><div className="k-label">Total Index</div><div className="k-value">{total == null ? "N/A" : total.toFixed(1)}</div></div>
               <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: totalDelta == null ? "#6E7E96" : totalDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{totalDelta == null ? "—" : f1(totalDelta)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{dept.responses}</div></div>
+              {unitLabel === "Brand" ? (
+                <div className="kpi">
+                  <div className="k-label">ENPS</div>
+                  <div className="k-value" style={{ color: brandEnpsDelta == null ? "#152238" : brandEnpsDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>
+                    {brandEnpsCurrent == null ? "N/A" : brandEnpsCurrent.toFixed(1)}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

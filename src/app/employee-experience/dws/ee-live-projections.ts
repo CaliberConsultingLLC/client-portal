@@ -750,6 +750,33 @@ export function projectBrandReportData(
     data.settings.minimumSegmentSize
   );
   const comparisons = buildComparisons(campaigns, currentLabel);
+  const enpsItemIds = (data.enpsDefinitions ?? []).map((definition) => definition.itemId);
+  const enpsByDept: Record<string, { current: number | null; comparisons: Record<string, number | null> }> =
+    Object.fromEntries(
+      brands.map((brand) => {
+        const scoreFor = (campaignLabel: string) => {
+          const scores = respondentsForCampaign(data.respondents, campaignLabel)
+            .filter((respondent) => respondent.location === brand.name)
+            .map((respondent) => enpsResponseScore(respondent, enpsItemIds))
+            .filter((value): value is number => value != null);
+          return scores.length > 0 ? round1(average(scores)) : null;
+        };
+
+        return [
+          brand.id,
+          {
+            current: scoreFor(currentLabel),
+            comparisons: Object.fromEntries(
+              comparisons.map((comparison) => {
+                const priorLabel =
+                  campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
+                return [comparison.id, scoreFor(priorLabel)];
+              })
+            ) as Record<string, number | null>,
+          },
+        ];
+      })
+    );
 
   return {
     client: buildClient(data, options),
@@ -775,6 +802,7 @@ export function projectBrandReportData(
       brands,
       data.settings.minimumSegmentSize
     ),
+    enpsByDept,
     segmentMinResponses: data.settings.minimumSegmentSize,
   };
 }
