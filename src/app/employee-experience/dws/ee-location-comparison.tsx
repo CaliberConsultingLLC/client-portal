@@ -192,41 +192,64 @@ function RailSection({ title, children }: { title: string; children: React.React
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
 
-function DeptFavChart({ rows, avg, axis, color }: {
-  rows: { name: string; value: number }[];
-  avg: number;
+function OrgComparisonBarChart({ rows, axis, color }: {
+  rows: { id: string; name: string; value: number; org: number; delta: number }[];
   axis: { min: number; max: number; ticks: number[] };
   color: (v: number) => string;
 }) {
-  const ROW_HEIGHT = 34;
-  const pct = (v: number) => `${((clamp(v, axis.min, axis.max) - axis.min) / (axis.max - axis.min)) * 100}%`;
+  const pct = (value: number) =>
+    ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
   return (
-    <div>
-      <div style={{ position: "relative" }}>
-        <div style={{ position: "absolute", left: "44%", right: 0, top: 0, bottom: 0, pointerEvents: "none", zIndex: 1 }}>
-          {axis.ticks.map(t => <div key={t} style={{ position: "absolute", top: 0, bottom: 0, left: pct(t), borderLeft: "1px dashed #D3DDE7" }} />)}
+    <div className="chart" style={{ "--label-col": "300px", "--gap-col": "140px" }}>
+      <style>{`
+        .cmp-track{height:24px;background:#F1F4F7;border-radius:0 7px 7px 0;position:relative}
+        .cmp-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
+        .cmp-chip{position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
+        .cmp-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
+        .cmp-org-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:999px;background:#152238;border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
+        .cmp-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}
+        .cmp-axis-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;padding:0}
+        .cmp-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
+        .cmp-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
+      `}</style>
+      <div className="plot">
+        <div className="grid-overlay" style={{ right: "var(--gap-col)" }}>
+          {axis.ticks.map((tick) => (
+            <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />
+          ))}
         </div>
-        {rows.map((r, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 44%) minmax(0, 1fr)", minHeight: ROW_HEIGHT, alignItems: "center", position: "relative" }}>
-          <div title={r.name} style={{ padding: "3px 12px 3px 0", alignSelf: "center", fontSize: 12.5, lineHeight: 1.18, fontWeight: 500, color: "#152238", zIndex: 2 }}>{r.name}</div>
-          <div style={{ position: "relative", height: 24, alignSelf: "center", zIndex: 2 }}>
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pct(r.value), background: color(r.value), borderRadius: 3, transition: "width .55s cubic-bezier(.34,1.1,.64,1)" }}>
-              <div style={{ position: "absolute", left: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(255,255,255,.88)", color: "#152238", fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{r.value.toFixed(1)}</div>
+        {rows.map((row) => {
+          const gapTone =
+            row.delta >= 0
+              ? { bg: "#DCEFE2", fg: "#2F6A45", border: "#9BC6A9" }
+              : { bg: "#F4DEDD", fg: "#8A3D3A", border: "#D5A3A0" };
+          return (
+            <div key={row.id} className="cmp-row">
+              <div className="bar-label" title={row.name} style={{ whiteSpace: "normal" }}>{row.name}</div>
+              <div className="cmp-track">
+                <div className="cmp-bar" style={{ width: `${pct(row.value)}%`, background: color(row.value) }}>
+                  <div className="cmp-chip">{row.value.toFixed(1)}</div>
+                </div>
+                <div className="cmp-org" style={{ left: `${pct(row.org)}%` }} />
+                <div className="cmp-org-dot" style={{ left: `${pct(row.org)}%` }} />
+              </div>
+              <div className="cmp-gap-col">
+                <div className="cmp-gap-pill" style={{ background: gapTone.bg, color: gapTone.fg, borderColor: gapTone.border }}>
+                  {f1(row.delta)}
+                </div>
+              </div>
             </div>
-          </div>
-          </div>
-        ))}
-        <div style={{ position: "absolute", left: "44%", right: 0, top: 0, bottom: 0, pointerEvents: "none", zIndex: 3 }}>
-          <div style={{ position: "absolute", left: pct(avg), top: 0, bottom: 0, borderLeft: "2px dashed #8798AA" }}>
-            <div style={{ position: "absolute", top: 4, left: "50%", transform: "translateX(-50%)", background: "#E8ECE9", border: "1px solid #D4DAD6", borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#152238", whiteSpace: "nowrap" }}>Dept avg {avg.toFixed(1)}</div>
-          </div>
-        </div>
+          );
+        })}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(150px, 44%) minmax(0, 1fr)", marginTop: 4 }}>
+      <div className="cmp-axis-row">
         <div />
-        <div style={{ position: "relative", height: 20 }}>
-          {axis.ticks.map(t => <div key={t} style={{ position: "absolute", left: pct(t), transform: "translateX(-50%)", fontSize: 11, color: "#152238" }}>{t}</div>)}
+        <div className="axis">
+          {axis.ticks.map((tick) => (
+            <div key={tick} className="tick" style={{ left: `${pct(tick)}%` }}>{tick}</div>
+          ))}
         </div>
+        <div />
       </div>
     </div>
   );
@@ -427,15 +450,14 @@ export function EELocationComparison({
             </div>
           </div>
 
-          {/* Chart pair */}
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="flex flex-col gap-4">
             <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
-              <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
+              <div className="px-6 py-4 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
                 <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign</h3>
-                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Favorability by brand · {scopeDetail} · dashed line marks the company average.</p>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
               </div>
               <div className="px-6 py-5">
-                <DeptFavChart rows={rowsByValueDesc.map(r => ({ name: r.name, value: r.value }))} avg={overallAvg} axis={barAxis} color={sc} />
+                <OrgComparisonBarChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} color={sc} />
               </div>
             </div>
 
