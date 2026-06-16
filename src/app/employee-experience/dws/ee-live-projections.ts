@@ -776,11 +776,36 @@ export function projectHistoricalData(
 ) {
   const campaigns = sortedCampaigns(data.meta.campaigns);
   const currentLabel = resolveCampaignLabel(data, options);
-  const departments = buildDepartments(
-    data.respondents,
-    currentLabel,
-    data.settings.minimumSegmentSize
-  );
+  const departmentStats = new Map<
+    string,
+    { location: string; byCampaign: Record<string, number>; maxResponses: number }
+  >();
+  data.respondents.forEach((respondent) => {
+    const existing = departmentStats.get(respondent.department) ?? {
+      location: respondent.location,
+      byCampaign: {},
+      maxResponses: 0,
+    };
+    const next = (existing.byCampaign[respondent.campaignLabel] ?? 0) + 1;
+    existing.byCampaign[respondent.campaignLabel] = next;
+    existing.maxResponses = Math.max(existing.maxResponses, next);
+    if (!existing.location && respondent.location) {
+      existing.location = respondent.location;
+    }
+    departmentStats.set(respondent.department, existing);
+  });
+  const departments = Array.from(departmentStats.entries())
+    .filter(([, stats]) => stats.maxResponses >= data.settings.minimumSegmentSize)
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([name, stats]) => ({
+      id: slugify(name),
+      name,
+      location: stats.location,
+      responses: stats.byCampaign[currentLabel] ?? 0,
+      responsesByCampaign: Object.fromEntries(
+        campaigns.map((campaignLabel) => [campaignId(campaignLabel), stats.byCampaign[campaignLabel] ?? 0])
+      ) as Record<string, number>,
+    }));
 
   const historyCampaigns = campaigns.map((label, index) => ({
     id: campaignId(label),

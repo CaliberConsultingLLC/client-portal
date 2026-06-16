@@ -102,16 +102,30 @@ export function EEHistoricalReport({
   const allStatements = useMemo(() => indexes.flatMap((index) => index.statements), [indexes]);
   const focusIndex = focus === ALL ? null : indexes.find((index) => index.id === focus);
   const scopeStatements = focusIndex ? focusIndex.statements : allStatements;
-  const totalResponses = departments.reduce((sum, item) => sum + item.responses, 0);
+  const totalResponsesByCampaign = useMemo(
+    () =>
+      Object.fromEntries(
+        campaigns.map((campaign) => [
+          campaign.id,
+          departments.reduce(
+            (sum, item) => sum + Number(item.responsesByCampaign?.[campaign.id] ?? item.responses ?? 0),
+            0
+          ),
+        ])
+      ) as Record<string, number>,
+    [campaigns, departments]
+  );
 
   const orgStatementValue = (statement, campaignId) => {
     let num = 0;
     let den = 0;
     departments.forEach((item) => {
-      num += statement.byDept[item.id][campaignId] * item.responses;
-      den += item.responses;
+      const responses = Number(item.responsesByCampaign?.[campaignId] ?? item.responses ?? 0);
+      if (responses <= 0) return;
+      num += statement.byDept[item.id][campaignId] * responses;
+      den += responses;
     });
-    return num / den;
+    return den > 0 ? num / den : 0;
   };
   const statementValue = (statement, campaignId) => round1(isAll ? orgStatementValue(statement, campaignId) : statement.byDept[deptId][campaignId]);
   const avgAt = (statements, campaignId) => round1(mean(statements.map((statement) => statementValue(statement, campaignId))));
@@ -133,7 +147,9 @@ export function EEHistoricalReport({
   const peakIndex = series.reduce((best, value, index) => value > series[best] ? index : best, 0);
   const scopeLabel = focusIndex ? `${focusIndex.name} index` : "Overall (all indexes)";
   const title = embedded && variant === "history" ? "Detailed History" : isAll ? "All Departments" : dept.name;
-  const responseCount = isAll ? totalResponses : dept.responses;
+  const responseCount = isAll
+    ? totalResponsesByCampaign[activeCampaign.id] ?? 0
+    : Number(dept.responsesByCampaign?.[activeCampaign.id] ?? dept.responses ?? 0);
   const latestCampaign = activeCampaign;
 
   useEffect(() => {
