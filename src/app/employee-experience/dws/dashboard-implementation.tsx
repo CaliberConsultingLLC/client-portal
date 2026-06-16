@@ -1351,59 +1351,97 @@ function HrOpenText({
   data: EmployeeExperienceDashboardData; current: string;
   brandFilter: string; fieldType: OpenTextField;
 }) {
-  const fieldLabel = OPEN_TEXT_FIELDS.find((f) => f.id === fieldType)?.label ?? fieldType;
+  const questionGroups = useMemo(() => {
+    const orderedFields = [
+      fieldType,
+      ...OPEN_TEXT_FIELDS.map((field) => field.id).filter((id) => id !== fieldType),
+    ] as OpenTextField[];
 
-  const entries = useMemo(() => {
-    const campaignEntries = data.respondents
-      .filter((respondent) => {
-        if (respondent.campaignLabel !== current) return false;
-        if (brandFilter && respondent.location !== brandFilter) return false;
-        const text = respondent.comments[fieldType];
-        return Boolean(text && text.trim().length > 0);
-      })
-      .map((respondent) => ({
-        id: `${respondent.id}-${fieldType}`,
-        text: respondent.comments[fieldType].trim(),
-        department: respondent.department,
-        location: respondent.location,
-      }));
-    if (campaignEntries.length > 0) return campaignEntries;
+    return orderedFields.map((questionId) => {
+      const label = OPEN_TEXT_FIELDS.find((field) => field.id === questionId)?.label ?? questionId;
+      const inCampaign = data.respondents
+        .filter((respondent) => {
+          if (respondent.campaignLabel !== current) return false;
+          if (brandFilter && respondent.location !== brandFilter) return false;
+          const text = respondent.comments[questionId];
+          return Boolean(text && text.trim().length > 0);
+        });
 
-    return data.respondents
-      .filter((respondent) => {
-        if (brandFilter && respondent.location !== brandFilter) return false;
-        const text = respondent.comments[fieldType];
-        return Boolean(text && text.trim().length > 0);
-      })
-      .map((respondent) => ({
-        id: `${respondent.id}-${fieldType}-${respondent.campaignLabel}`,
-        text: respondent.comments[fieldType].trim(),
-        department: respondent.department,
-        location: respondent.location,
-      }));
+      const scoped = inCampaign.length > 0
+        ? inCampaign
+        : data.respondents.filter((respondent) => {
+            if (brandFilter && respondent.location !== brandFilter) return false;
+            const text = respondent.comments[questionId];
+            return Boolean(text && text.trim().length > 0);
+          });
+
+      const grouped = new Map<string, Array<{ id: string; text: string; department: string }>>();
+      scoped.forEach((respondent) => {
+        const brand = respondent.location || "Unknown Brand";
+        if (!grouped.has(brand)) grouped.set(brand, []);
+        grouped.get(brand)?.push({
+          id: `${respondent.id}-${questionId}-${respondent.campaignLabel}`,
+          text: respondent.comments[questionId].trim(),
+          department: respondent.department,
+        });
+      });
+
+      const brands = Array.from(grouped.entries())
+        .map(([brand, entries]) => ({ brand, entries }))
+        .sort((left, right) => left.brand.localeCompare(right.brand));
+
+      return {
+        id: questionId,
+        label,
+        responseCount: scoped.length,
+        brands,
+      };
+    });
   }, [data.respondents, fieldType, current, brandFilter]);
+
+  const totalResponses = questionGroups.reduce((sum, group) => sum + group.responseCount, 0);
 
   return (
     <div className="space-y-6">
       <div>
-        <SLabel>Open Text · {fieldLabel}</SLabel>
+        <SLabel>Open Text Insights</SLabel>
         <p className="mt-2 text-sm text-text-secondary">
-          {entries.length} response{entries.length !== 1 ? "s" : ""}{brandFilter ? ` from ${brandFilter}` : " across all brands"}.
+          {totalResponses} response{totalResponses !== 1 ? "s" : ""}{brandFilter ? ` from ${brandFilter}` : " across all brands"} grouped by question and brand.
         </p>
       </div>
-      {entries.length === 0 ? (
+      {totalResponses === 0 ? (
         <Empty message="No responses match the current selection." />
       ) : (
         <div className="space-y-3">
-          {entries.map((entry, i) => (
-            <div key={entry.id} className="rounded-2xl border border-[#8798AA] bg-white px-5 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-3 text-xs font-bold text-text-muted">{i + 1}</div>
-                <div className="flex-1">
-                  <p className="text-sm leading-relaxed text-text-primary">{entry.text}</p>
-                  {entry.location && <p className="mt-1.5 text-xs text-text-muted">{entry.location}{entry.department ? ` · ${entry.department}` : ""}</p>}
-                </div>
+          {questionGroups.map((group) => (
+            <div key={group.id} className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
+              <div className="border-b border-[#D3DDE7] bg-[#F1F4F7] px-5 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6E7E96]">Question</p>
+                <p className="mt-1 text-sm font-semibold text-[#152238]">{group.label}</p>
+                <p className="mt-1 text-xs text-[#6E7E96]">{group.responseCount} response{group.responseCount !== 1 ? "s" : ""}</p>
               </div>
+              {group.responseCount === 0 ? (
+                <div className="px-5 py-4 text-sm text-[#6E7E96]">No responses for this question in the selected scope.</div>
+              ) : (
+                <div className="divide-y divide-[#E2E8EF]">
+                  {group.brands.map((brandGroup) => (
+                    <details key={`${group.id}-${brandGroup.brand}`} className="group">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold text-[#152238]">
+                        <span>{brandGroup.brand}</span>
+                        <span className="text-xs font-medium text-[#6E7E96]">{brandGroup.entries.length} response{brandGroup.entries.length !== 1 ? "s" : ""}</span>
+                      </summary>
+                      <div className="space-y-2 px-5 pb-4 pt-1">
+                        {brandGroup.entries.map((entry, index) => (
+                          <div key={entry.id} className="rounded-xl border border-[#D3DDE7] bg-[#FAFCFD] px-3 py-2.5">
+                            <p className="text-sm leading-relaxed text-[#152238]">{entry.text}</p>
+                            <p className="mt-1 text-xs text-[#6E7E96]">#{index + 1}{entry.department ? ` · ${entry.department}` : ""}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
