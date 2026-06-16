@@ -86,13 +86,56 @@ export function clampDeltaVisual(delta, axis) {
 }
 
 const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_LOOKUP: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
 
 export function campMonthYear(campaign) {
   const source = String(campaign?.labelLong || campaign?.label || campaign?.short || "");
-  const lowered = source.toLowerCase();
-  const mon = MONTHS_3.find((month) => lowered.includes(month.toLowerCase())) ?? "";
-  const y4 = source.match(/(?:19|20)\d{2}/);
-  const y2 = source.match(/[-\/ ](\d{2})\b/);
+  const trimmed = source.trim();
+  const lowered = trimmed.toLowerCase();
+
+  // Numeric date formats like 3/15/2025.
+  const slash = trimmed.match(/^(\d{1,2})\/\d{1,2}\/((?:19|20)?\d{2})$/);
+  if (slash) {
+    const monthIndex = Math.max(0, Math.min(11, Number(slash[1]) - 1));
+    const rawYear = slash[2];
+    const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+    return { mon: MONTHS_3[monthIndex], year };
+  }
+
+  // Formats like Aug-24, August-24.
+  const monthYear = lowered.match(/^([a-z]+)-((?:19|20)?\d{2})$/);
+  if (monthYear && MONTH_LOOKUP[monthYear[1]] != null) {
+    const rawYear = monthYear[2];
+    const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+    return { mon: MONTHS_3[MONTH_LOOKUP[monthYear[1]]], year };
+  }
+
+  // Formats like 24-Aug or 24-August.
+  const yearMonth = lowered.match(/^((?:19|20)?\d{2})-([a-z]+)$/);
+  if (yearMonth && MONTH_LOOKUP[yearMonth[2]] != null) {
+    const rawYear = yearMonth[1];
+    const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+    return { mon: MONTHS_3[MONTH_LOOKUP[yearMonth[2]]], year };
+  }
+
+  const monMatch = lowered.match(/\b([a-z]+)\b/);
+  const monthIndex = monMatch ? MONTH_LOOKUP[monMatch[1]] : undefined;
+  const mon = monthIndex != null ? MONTHS_3[monthIndex] : "";
+  const y4 = trimmed.match(/\b(?:19|20)\d{2}\b/);
+  const y2 = trimmed.match(/\b(\d{2})\b/);
   return { mon, year: y4?.[0] ?? (y2 ? `20${y2[1]}` : "") };
 }
 

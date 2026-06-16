@@ -441,6 +441,7 @@ const MONTH_INDEX: Record<string, number> = {
   nov: 10,
   dec: 11,
 };
+const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 function parseCampaignDate(rawValue: string) {
   const trimmed = rawValue.trim();
@@ -458,7 +459,7 @@ function parseCampaignDate(rawValue: string) {
       const date = new Date(year, month, day);
       return {
         time: date.getTime(),
-        label: trimmed,
+        label: `${MONTHS_3[month]} ${year}`,
       };
     }
   }
@@ -468,16 +469,16 @@ function parseCampaignDate(rawValue: string) {
     const month = MONTH_INDEX[monYear[1].slice(0, 3).toLowerCase()];
     const year = 2000 + Number.parseInt(monYear[2], 10);
     if (month !== undefined) {
-      return { time: new Date(year, month, 1).getTime(), label: trimmed };
+      return { time: new Date(year, month, 1).getTime(), label: `${MONTHS_3[month]} ${year}` };
     }
   }
 
-  const yearMonth = trimmed.match(/^(\d{2})-([A-Za-z]{3})$/);
+  const yearMonth = trimmed.match(/^(\d{2})-([A-Za-z]+)$/);
   if (yearMonth) {
     const year = 2000 + Number.parseInt(yearMonth[1], 10);
-    const month = MONTH_INDEX[yearMonth[2].toLowerCase()];
+    const month = MONTH_INDEX[yearMonth[2].slice(0, 3).toLowerCase()];
     if (month !== undefined) {
-      return { time: new Date(year, month, 1).getTime(), label: trimmed };
+      return { time: new Date(year, month, 1).getTime(), label: `${MONTHS_3[month]} ${year}` };
     }
   }
 
