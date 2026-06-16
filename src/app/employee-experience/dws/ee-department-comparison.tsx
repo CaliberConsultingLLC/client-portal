@@ -6,6 +6,7 @@ import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
 import { EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
+import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -534,6 +535,15 @@ export function EEDepartmentComparison({
 
       <aside className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6" style={EE_GUIDANCE_RAIL_STYLE}>
         <EEContextRail howToRead="Each row is a department for the selected index or statement. Dashed line marks company average, and Point Difference shows movement vs compared campaign." />
+        {dashboardInstanceId ? (
+          <GuidancePinRail
+            dashboardInstanceId={dashboardInstanceId}
+            perspectiveId="ee-department-comparison"
+            campaignLabel={current.label}
+            filterKey={`${indexId || "all-indexes"}|${compId || "default-comp"}|${statementId || ALL}`}
+            canEdit={canEditGuidance}
+          />
+        ) : null}
       </aside>
 
     </div>

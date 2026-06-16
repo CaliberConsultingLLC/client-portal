@@ -6,6 +6,7 @@ import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
 import { EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
+import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Statement { text: string; current: number; comparisons: Record<string, number> }
@@ -418,8 +419,17 @@ export function EECampaignResults({
       </main>
 
       <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
-        <div className="p-6">
+        <div className="flex h-full flex-col gap-4 p-6">
           <EEContextRail howToRead="Detailed Results lets you expand one index at a time and review statement-level current scores with delta vs the selected comparison campaign." />
+          {dashboardInstanceId ? (
+            <GuidancePinRail
+              dashboardInstanceId={dashboardInstanceId}
+              perspectiveId="ee-campaign-results"
+              campaignLabel={current.label}
+              filterKey={`${indexId || idx.id}|${compId || comp.id}`}
+              canEdit={canEditGuidance}
+            />
+          ) : null}
         </div>
       </aside>
     </div>

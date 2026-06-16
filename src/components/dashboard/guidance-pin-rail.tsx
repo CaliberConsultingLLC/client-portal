@@ -163,8 +163,7 @@ export function GuidancePinRail({
       }
 
       const payload = (await response.json()) as { scope?: { pins?: DashboardGuidancePin[] } };
-      void payload;
-      const nextPins: DashboardGuidancePin[] = [];
+      const nextPins = [...(payload.scope?.pins ?? [])].sort((a, b) => a.order - b.order);
       setPins(nextPins);
       setDraftPins(nextPins);
     } catch (loadError) {

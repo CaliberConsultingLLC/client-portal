@@ -13,6 +13,7 @@ import { EEExecutiveRail, EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, E
 import { buildEmployeeExperienceReportBundle } from "./ee-live-projections";
 import { ClientMark, defaultComparisonId } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
+import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
@@ -1843,8 +1844,23 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const fixedInfoRail = (
     <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
-      <div className="p-6">
+      <div className="flex h-full flex-col gap-4 p-6">
         <EEContextRail howToRead={perspectiveHowToRead[activePersp]} />
+        {dashboardInstanceId ? (
+          <GuidancePinRail
+            dashboardInstanceId={dashboardInstanceId}
+            perspectiveId={activePersp}
+            campaignLabel={current}
+            filterKey={[
+              activeExecIndexId || "all-indexes",
+              activeExecCompId || "default-comp",
+              execLocation || "all-brands",
+              execDeptStatementId || COMPARISON_ALL,
+              execBrandStatementId || COMPARISON_ALL,
+            ].join("|")}
+            canEdit={canEditGuidance}
+          />
+        ) : null}
       </div>
     </aside>
   );
@@ -1852,6 +1868,21 @@ export function DwsEmployeeExperienceDashboardClient({
   const canvasInfoRail = (
     <div className="flex flex-col gap-4 p-2">
       <EEContextRail howToRead={perspectiveHowToRead[activePersp]} compact />
+      {dashboardInstanceId ? (
+        <GuidancePinRail
+          dashboardInstanceId={dashboardInstanceId}
+          perspectiveId={activePersp}
+          campaignLabel={current}
+          filterKey={[
+            activeExecIndexId || "all-indexes",
+            activeExecCompId || "default-comp",
+            execLocation || "all-brands",
+            execDeptStatementId || COMPARISON_ALL,
+            execBrandStatementId || COMPARISON_ALL,
+          ].join("|")}
+          canEdit={canEditGuidance}
+        />
+      ) : null}
     </div>
   );
 
