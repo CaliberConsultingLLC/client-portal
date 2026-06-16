@@ -200,7 +200,7 @@ function OrgComparisonBarChart({ rows, axis, color }: {
   const pct = (value: number) =>
     ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
   return (
-    <div className="chart" style={{ "--label-col": "300px", "--gap-col": "140px" }}>
+    <div className="chart" style={{ ["--label-col" as any]: "300px", ["--gap-col" as any]: "140px" }}>
       <style>{`
         .cmp-track{height:24px;background:#F1F4F7;border-radius:0 7px 7px 0;position:relative}
         .cmp-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
