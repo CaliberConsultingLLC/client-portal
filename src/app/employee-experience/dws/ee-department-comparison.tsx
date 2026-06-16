@@ -191,8 +191,6 @@ function RailSection({ title, children }: { title: string; children: React.React
 
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
-// Department rows preserve their dataset order (NOT sorted) so the left bar
-// chart and the right delta chart line up department-for-department.
 
 function DeptFavChart({ rows, avg, axis, color }: {
   rows: { name: string; value: number }[];
@@ -307,7 +305,7 @@ export function EEDepartmentComparison({
   const { client, current, comparisons, scale, indexes, departments } = data;
   const sc = (v: number) => scoreScaleColor(v, scale.min, scale.mid, scale.max);
 
-  const [localIndexId, setLocalIndexId] = useState(indexes[0]?.id ?? "");
+  const [localIndexId, setLocalIndexId] = useState("");
   const [localCompId, setLocalCompId] = useState(() => defaultComparisonId(comparisons));
   const indexId = controlledIndexId ?? localIndexId;
   const setIndexId = onIndexId ?? setLocalIndexId;
@@ -317,13 +315,20 @@ export function EEDepartmentComparison({
   const statementId = controlledStatementId ?? localStatementId;
   const setStatementId = onStatementId ?? setLocalStatementId;
 
-  const idx = indexes.find(i => i.id === indexId) ?? indexes[0];
+  const selectedIndexes = useMemo(() => {
+    if (!indexId) return indexes;
+    const selected = indexes.find((item) => item.id === indexId);
+    return selected ? [selected] : indexes;
+  }, [indexes, indexId]);
+  const idx = selectedIndexes[0] ?? indexes[0];
   const comp = comparisons.find(c => c.id === compId) ?? comparisons[0];
 
   // changing index falls back to the index-average view
-  useEffect(() => { setStatementId(ALL); }, [indexId]);
+  useEffect(() => { setStatementId(ALL); }, [indexId, setStatementId]);
 
-  const activeStatement = statementId === ALL ? null : idx.statements.find(s => s.id === statementId) ?? null;
+  const activeStatement = statementId === ALL || selectedIndexes.length !== 1
+    ? null
+    : idx.statements.find((statement) => statement.id === statementId) ?? null;
 
   const barAxis = useMemo(() => {
     const a = data.display?.barAxis ?? { min: scale.min - 4, max: scale.max - 5 };
@@ -338,8 +343,9 @@ export function EEDepartmentComparison({
       const prior = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
       prev = prior != null && prior > 0 ? prior : null;
     } else {
-      const curs = idx.statements.map(s => s.byDept[d.id].current);
-      const prevs = idx.statements
+      const statements = selectedIndexes.flatMap((index) => index.statements);
+      const curs = statements.map((statement) => statement.byDept[d.id].current);
+      const prevs = statements
         .map((statement) => {
           const prior = statement.byDept[d.id].comparisons[compId];
           return Object.prototype.hasOwnProperty.call(statement.byDept[d.id].comparisons, compId) && prior > 0 ? prior : null;
@@ -349,7 +355,7 @@ export function EEDepartmentComparison({
       prev = prevs.length > 0 ? r1(mean(prevs)) : null;
     }
     return { id: d.id, name: d.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
-  }), [departments, idx, activeStatement, compId]);
+  }), [departments, selectedIndexes, activeStatement, compId]);
 
   const deltaAxis = useMemo(() => {
     const fallback = data.display?.deltaAxis
@@ -363,12 +369,30 @@ export function EEDepartmentComparison({
   const priorRows = rows.filter((row) => row.prev != null).map((row) => row.prev as number);
   const overallPrev = priorRows.length > 0 ? r1(mean(priorRows)) : null;
   const overallDelta = overallPrev == null ? null : r1(overallAvg - overallPrev);
+  const rowsByValueDesc = useMemo(
+    () => [...rows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
+    [rows]
+  );
+  const rowsByDeltaDesc = useMemo(
+    () =>
+      rows
+        .filter((row) => row.delta != null)
+        .sort(
+          (left, right) =>
+            (right.delta as number) - (left.delta as number) || left.name.localeCompare(right.name)
+        ) as Array<{ id: string; name: string; value: number; prev: number | null; delta: number }>,
+    [rows]
+  );
 
   const rrPct = current.responseRate != null ? `${Math.round(current.responseRate * 100)}%` : "—";
   const avgColor = readableText(sc(overallAvg)) === "#fff" ? sc(overallAvg) : "#152238";
 
-  const scopeLabel = activeStatement ? "Statement view" : `${idx.name} index average`;
-  const scopeDetail = activeStatement ? `“${activeStatement.text}”` : `${idx.name} index average across all statements`;
+  const scopeLabel = activeStatement ? "Statement view" : indexId ? `${idx.name} index average` : "All indexes average";
+  const scopeDetail = activeStatement
+    ? `“${activeStatement.text}”`
+    : indexId
+      ? `${idx.name} index average across all statements`
+      : "All indexes averaged across all statements";
 
   return (
     <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
@@ -409,6 +433,14 @@ export function EEDepartmentComparison({
 
         <RailSection title="Index Selection">
           <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setIndexId("")}
+              className="w-full rounded-[11px] px-3 py-2.5 text-center text-sm font-semibold transition-colors"
+              style={!indexId ? { background: "#2B2B2B", color: "#fff", border: "1px solid #2B2B2B" } : { background: "#fff", color: "#3B4B63", border: "1px solid #D4DAD6" }}
+            >
+              All indexes
+            </button>
             {indexes.map(ix => {
               const active = indexId === ix.id;
               return (
@@ -469,7 +501,7 @@ export function EEDepartmentComparison({
                 <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Favorability by department · {scopeDetail} · dashed line marks the company average.</p>
               </div>
               <div className="px-6 py-5">
-                <DeptFavChart rows={rows.map(r => ({ name: r.name, value: r.value }))} avg={overallAvg} axis={barAxis} color={sc} />
+                <DeptFavChart rows={rowsByValueDesc.map(r => ({ name: r.name, value: r.value }))} avg={overallAvg} axis={barAxis} color={sc} />
               </div>
             </div>
 
@@ -479,7 +511,7 @@ export function EEDepartmentComparison({
                 <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by department vs {comp.label} · gains in green, declines in red.</p>
               </div>
               <div className="px-6 py-5">
-                <DeptDeltaChart rows={rows.filter((row) => row.delta != null).map(r => ({ name: r.name, delta: r.delta as number }))} axis={deltaAxis} />
+                <DeptDeltaChart rows={rowsByDeltaDesc.map(r => ({ name: r.name, delta: r.delta }))} axis={deltaAxis} />
               </div>
             </div>
           </div>
