@@ -20,6 +20,26 @@ import { EEContextRail } from "./ee-context-rail";
 
 const REPORT_DATA = toHistoricalData();
 const ALL = "all";
+const BRAND_ORDER = [
+  "ABR",
+  "Larson",
+  "Elite",
+  "Keeney",
+  "Batterby",
+  "Canopy Service Group",
+  "LKHS",
+] as const;
+const BRAND_ALIASES: Record<string, string> = {
+  abr: "ABR",
+  avr: "ABR",
+  larson: "Larson",
+  elite: "Elite",
+  keeney: "Keeney",
+  batterby: "Batterby",
+  "canopy service group": "Canopy Service Group",
+  csg: "Canopy Service Group",
+  lkhs: "LKHS",
+};
 
 function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
@@ -269,52 +289,103 @@ export function EEHistoricalReport({
     const sortedByCurrent = [...indexSnapshots].sort((left, right) => right.current - left.current);
     const strongest = sortedByCurrent[0];
     const watch = sortedByCurrent[sortedByCurrent.length - 1];
-    const gainers = indexSnapshots
-      .filter((index) => index.delta != null && index.delta > 0)
-      .sort((left, right) => (right.delta ?? 0) - (left.delta ?? 0));
-    const leadGainer = gainers[0];
-    const text = leadGainer
-      ? `Org trend: ${strongest.name} leads at ${strongest.current.toFixed(1)} while ${watch.name} trails at ${watch.current.toFixed(1)}; biggest upward shift comes from ${leadGainer.name} (${f1(leadGainer.delta ?? 0)}), signaling where focus should tighten next cycle.`
-      : `Org trend: ${strongest.name} leads at ${strongest.current.toFixed(1)} and ${watch.name} is lowest at ${watch.current.toFixed(1)}; close that spread while preserving momentum in stronger indexes next cycle.`;
+    const spread = round1(strongest.current - watch.current);
+    const deltas = indexSnapshots
+      .map((index) => index.delta)
+      .filter((value): value is number => value != null);
+    const avgDelta = deltas.length > 0 ? round1(mean(deltas)) : 0;
+    const positiveShare = deltas.length > 0
+      ? deltas.filter((value) => value > 0).length / deltas.length
+      : 0;
+
+    const text =
+      spread >= 6
+        ? `Org insight: momentum is uneven across indexes, suggesting stronger practices are not scaling consistently. Prioritize manager routines that transfer ${strongest.name} behaviors into ${watch.name}.`
+        : avgDelta >= 1.2 && positiveShare >= 0.7
+          ? `Org insight: results suggest broad adoption momentum rather than isolated gains. Lock in this lift by reinforcing cadence and accountability before the next campaign cycle.`
+          : avgDelta <= -0.8
+            ? `Org insight: patterns indicate early fatigue across core experience signals. Re-anchor team expectations now to prevent further softening in the next campaign window.`
+            : `Org insight: results are relatively stable but change is concentrated in pockets. Focus next actions on consistency so gains convert into system-wide movement.`;
     return clampInsight(text, 200);
   }, [indexSnapshots]);
   const brandInsights = useMemo(() => {
+    const normalizeBrand = (value: string) => {
+      const cleaned = String(value || "").trim().toLowerCase();
+      return BRAND_ALIASES[cleaned] ?? value;
+    };
     const scoreForStatement = (statement, departmentId, campaignId) => {
       const value = statement.byDept?.[departmentId]?.[campaignId];
       return typeof value === "number" ? value : null;
     };
-    const scoreForIndex = (index, departmentId, campaignId) => {
-      const values = index.statements
-        .map((statement) => scoreForStatement(statement, departmentId, campaignId))
+    const weightedIndexScore = (index, deptItems, campaignId) => {
+      const statementScores = index.statements
+        .map((statement) => {
+          let num = 0;
+          let den = 0;
+          deptItems.forEach((department) => {
+            const value = scoreForStatement(statement, department.id, campaignId);
+            const weight = Number(department.responsesByCampaign?.[campaignId] ?? department.responses ?? 0);
+            if (value == null || weight <= 0) return;
+            num += value * weight;
+            den += weight;
+          });
+          return den > 0 ? num / den : null;
+        })
         .filter((value): value is number => value != null);
-      return values.length > 0 ? round1(mean(values)) : null;
+      return statementScores.length > 0 ? round1(mean(statementScores)) : null;
     };
 
-    return departments.map((department) => {
-      const overallValues = allStatements
-        .map((statement) => scoreForStatement(statement, department.id, activeCampaign.id))
-        .filter((value): value is number => value != null);
-      const currentOverall = overallValues.length > 0 ? round1(mean(overallValues)) : null;
+    const grouped = new Map<string, any[]>();
+    departments.forEach((department) => {
+      const source = department.location || department.name;
+      const brand = normalizeBrand(source);
+      if (!grouped.has(brand)) grouped.set(brand, []);
+      grouped.get(brand)?.push(department);
+    });
+
+    const orderedBrands = [
+      ...BRAND_ORDER.filter((brand) => grouped.has(brand)),
+      ...Array.from(grouped.keys()).filter((brand) => !BRAND_ORDER.includes(brand as any)).sort((left, right) => left.localeCompare(right)),
+    ];
+
+    return orderedBrands.map((brand) => {
+      const deptItems = grouped.get(brand) ?? [];
       const sortedIndexes = indexes
         .map((index) => ({
           name: index.name,
-          score: scoreForIndex(index, department.id, activeCampaign.id),
+          current: weightedIndexScore(index, deptItems, activeCampaign.id),
+          previous: previousCampaign ? weightedIndexScore(index, deptItems, previousCampaign.id) : null,
         }))
-        .filter((index): index is { name: string; score: number } => index.score != null)
-        .sort((left, right) => right.score - left.score);
+        .filter((index): index is { name: string; current: number; previous: number | null } => index.current != null)
+        .map((index) => ({
+          ...index,
+          delta: index.previous == null ? null : round1(index.current - index.previous),
+        }))
+        .sort((left, right) => right.current - left.current);
       const topIndex = sortedIndexes[0];
       const watchIndex = sortedIndexes[sortedIndexes.length - 1];
+      const deltas = sortedIndexes
+        .map((index) => index.delta)
+        .filter((value): value is number => value != null);
+      const avgDelta = deltas.length > 0 ? round1(mean(deltas)) : 0;
+      const spread = topIndex && watchIndex ? round1(topIndex.current - watchIndex.current) : 0;
       const text =
-        currentOverall == null || !topIndex || !watchIndex
-          ? `${department.name} snapshot: current results are available, but not enough index detail exists yet to generate a full insight.`
-          : `${department.name} snapshot: overall ${currentOverall.toFixed(1)}. Strongest index is ${topIndex.name} (${topIndex.score.toFixed(1)}), while ${watchIndex.name} is lowest (${watchIndex.score.toFixed(1)}); prioritize targeted follow-up there next cycle.`;
+        !topIndex || !watchIndex
+          ? `${brand} insight: current results are available, but index signals are too sparse for a reliable directional interpretation yet.`
+          : spread >= 6
+            ? `${brand} insight: performance appears fragmented across indexes, which points to inconsistent local execution. Focus next-cycle coaching on lifting ${watchIndex.name} without losing ${topIndex.name} momentum.`
+            : avgDelta >= 1
+              ? `${brand} insight: improvement is broad enough to suggest adoption is taking hold. Reinforce current manager habits now so this momentum compounds into the next campaign.`
+              : avgDelta <= -0.8
+                ? `${brand} insight: patterns suggest early pressure on engagement quality. Prioritize fast corrective check-ins to stabilize sentiment before declines become structural.`
+                : `${brand} insight: results are steady but mostly flat, indicating limited conversion from effort to movement. Target one or two high-leverage behaviors for clearer lift next cycle.`;
       return {
-        id: department.id,
-        name: department.name,
+        id: brand,
+        name: brand,
         insight: clampInsight(text, 200),
       };
     });
-  }, [departments, allStatements, indexes, activeCampaign.id]);
+  }, [departments, indexes, activeCampaign.id, previousCampaign?.id]);
 
   useEffect(() => {
     if (selectedIndexId && selectedIndexId !== focus) {
