@@ -130,7 +130,6 @@ const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
 const EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER = new Set<PerspectiveId>([
   "exec-overview",
   "ee-campaign-results",
-  "ee-historical-report",
   "exec-location",
   "ee-enps",
 ]);
@@ -2068,7 +2067,12 @@ export function DwsEmployeeExperienceDashboardClient({
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
             <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
-              <EEHistoricalReport data={historyFilteredBundle.historicalReport} embedded currentCampaignLabel={current} />
+              <EEHistoricalReport
+                data={historyFilteredBundle.historicalReport}
+                embedded
+                currentCampaignLabel={current}
+                selectedIndexId={activeExecIndexId || undefined}
+              />
             </div>
             {fixedInfoRail}
           </div>
