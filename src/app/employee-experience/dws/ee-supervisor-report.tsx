@@ -41,6 +41,8 @@ function SupBarChart({ rows, axis, scoreColor }) {
         .sr-chip{position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
         .sr-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
         .sr-org-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:999px;background:${ORG_MARKER};border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
+        .sr-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}
+        .sr-axis-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;padding:0}
         .sr-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
         .sr-gap-col-head{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6E7E96;text-align:center;line-height:1.25}
         .sr-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
@@ -75,7 +77,7 @@ function SupBarChart({ rows, axis, scoreColor }) {
             ? { bg: "#DCEFE2", fg: "#2F6A45", border: "#9BC6A9" }
             : { bg: "#F4DEDD", fg: "#8A3D3A", border: "#D5A3A0" };
           return (
-            <div className="bar-row" key={row.id}>
+            <div className="sr-row" key={row.id}>
               <div className="bar-label" title={row.text} style={{ whiteSpace: "normal" }}>{row.text}</div>
               <div className="sr-track">
                 <div className="sr-bar" style={{ width: `${pct(row.value)}%`, background: color }}><div className="sr-chip">{row.value.toFixed(1)}</div></div>
@@ -91,7 +93,7 @@ function SupBarChart({ rows, axis, scoreColor }) {
           );
         })}
       </div>
-      <div className="bar-row" style={{ padding: 0 }}><div /><div className="axis">{axis.ticks.map((tick) => <div key={tick} className="tick" style={{ left: `${pct(tick)}%` }}>{tick}</div>)}</div><div /></div>
+      <div className="sr-axis-row"><div /><div className="axis">{axis.ticks.map((tick) => <div key={tick} className="tick" style={{ left: `${pct(tick)}%` }}>{tick}</div>)}</div><div /></div>
     </div>
   );
 }
