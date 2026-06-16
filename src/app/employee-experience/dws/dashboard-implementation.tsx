@@ -1667,6 +1667,19 @@ export function DwsEmployeeExperienceDashboardClient({
     () => buildEmployeeExperienceReportBundle(data, { logoUrl, campaignLabel: current }),
     [data, logoUrl, current]
   );
+  const historyFilteredBundle = useMemo(
+    () =>
+      buildEmployeeExperienceReportBundle(
+        {
+          ...data,
+          respondents: data.respondents.filter(
+            (respondent) => !execLocation || respondent.location === execLocation
+          ),
+        },
+        { logoUrl, campaignLabel: current }
+      ),
+    [data, logoUrl, current, execLocation]
+  );
   const executiveIndexes = useMemo(
     () => reportBundle.campaignResults.indexes.map((index) => ({ id: index.id, name: index.name })),
     [reportBundle]
@@ -2055,7 +2068,7 @@ export function DwsEmployeeExperienceDashboardClient({
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
             <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
-              <EEHistoricalReport data={reportBundle.historicalReport} embedded currentCampaignLabel={current} />
+              <EEHistoricalReport data={historyFilteredBundle.historicalReport} embedded currentCampaignLabel={current} />
             </div>
             {fixedInfoRail}
           </div>
