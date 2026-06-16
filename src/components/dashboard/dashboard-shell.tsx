@@ -38,6 +38,8 @@ interface DashboardRibbonProps {
 
   onPerspectiveChange: (id: string) => void;
 
+  forcePerspectiveSelect?: boolean;
+
   legend?: React.ReactNode;
 
   toolbar?: React.ReactNode;
@@ -280,6 +282,8 @@ export function DashboardRibbon({
 
   onPerspectiveChange,
 
+  forcePerspectiveSelect = false,
+
   legend,
 
   toolbar,
@@ -356,19 +360,28 @@ export function DashboardRibbon({
 
               <div className="flex min-w-0 items-center gap-2 xl:px-3">
                 <span className="shrink-0 text-sm font-semibold text-[#59675C]">Reports:</span>
-                <ResponsiveOptionGroup
-
-                  label="Perspectives"
-
-                  options={visiblePerspectiveOptions}
-
-                  activeId={activePerspectiveId}
-
-                  onChange={onPerspectiveChange}
-
-                  className="min-w-0"
-
-                />
+                {forcePerspectiveSelect ? (
+                  <Select
+                    aria-label="Perspectives"
+                    value={activePerspectiveId}
+                    onChange={(event) => onPerspectiveChange(event.target.value)}
+                    className="h-11 w-auto min-w-[240px] rounded-2xl border-[#D7DDD4] bg-white text-sm font-semibold text-[#2B2B2B] shadow-sm"
+                  >
+                    {visiblePerspectiveOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <ResponsiveOptionGroup
+                    label="Perspectives"
+                    options={visiblePerspectiveOptions}
+                    activeId={activePerspectiveId}
+                    onChange={onPerspectiveChange}
+                    className="min-w-0"
+                  />
+                )}
               </div>
 
             ) : null}

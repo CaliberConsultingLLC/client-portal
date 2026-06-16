@@ -2118,6 +2118,7 @@ export function DwsEmployeeExperienceDashboardClient({
         perspectives={groupDef.perspectives.map((p) => ({ id: p.id, label: p.label }))}
         activePerspectiveId={activePersp}
         onPerspectiveChange={(id) => setActivePersp(id as PerspectiveId)}
+        forcePerspectiveSelect
       />
       {EXECUTIVE_PERSPECTIVES.has(activePersp) ||
       activePersp === "ee-campaign-results" ||
