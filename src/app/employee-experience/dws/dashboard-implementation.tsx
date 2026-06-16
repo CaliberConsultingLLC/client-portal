@@ -2082,7 +2082,7 @@ export function DwsEmployeeExperienceDashboardClient({
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
             <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
-              <EEEnpsReport data={reportBundle.enpsReport} />
+              <EEEnpsReport data={reportBundle.enpsReport} embedded />
             </div>
             {fixedInfoRail}
           </div>

@@ -2,17 +2,14 @@
 
 import { DateHead, EEReportStyles, deltaStyle, f1 } from "./ee-report-kit";
 import type { EnpsGroupRow, EnpsReportProjection } from "./ee-live-projections";
+import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
 
 function bandColor(score: number) {
-  if (score >= 8.5) return "#2C4E8A";
-  if (score >= 8) return "#4C6FAA";
-  if (score >= 7) return "#DCE7F7";
-  if (score >= 6.5) return "#F4E2E2";
-  return "#D18A8A";
+  return scoreScaleColor(score, 6, 7.5, 9);
 }
 
 function textColor(score: number) {
-  return score >= 8 ? "#FFFFFF" : score >= 7 ? "#2F4C7A" : "#8A3D3A";
+  return scoreScaleTextColor(score, 7.5, 0.8, 6, 9);
 }
 
 function EnpsTable({ rows, title }: { rows: EnpsGroupRow[]; title: string }) {
@@ -27,7 +24,7 @@ function EnpsTable({ rows, title }: { rows: EnpsGroupRow[]; title: string }) {
             <thead>
               <tr>
                 <th>{title}</th>
-                <th className="num">EMPS</th>
+                <th className="num">ENPS</th>
                 <th className="num">Delta</th>
                 <th className="num">Responses</th>
               </tr>
@@ -65,20 +62,20 @@ function EnpsTable({ rows, title }: { rows: EnpsGroupRow[]; title: string }) {
   );
 }
 
-export function EEEnpsReport({ data }: { data: EnpsReportProjection }) {
+export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProjection; embedded?: boolean }) {
   if (!data.hasEnpsData) {
     return (
-      <div className="canvas">
+      <div className={`canvas${embedded ? " embedded" : ""}`} style={embedded ? { minHeight: "auto" } : undefined}>
         <EEReportStyles />
         <main className="center">
           <div className="center-inner">
             <div className="card">
               <div className="card-head">
-                <h3 className="card-title">EMPS</h3>
+                <h3 className="card-title">ENPS</h3>
               </div>
               <div className="card-body">
                 <p style={{ color: "#6E7E96", fontSize: 14 }}>
-                  EMPS data is not available in this dataset yet.
+                  ENPS data is not available in this dataset yet.
                 </p>
               </div>
             </div>
@@ -89,18 +86,18 @@ export function EEEnpsReport({ data }: { data: EnpsReportProjection }) {
   }
 
   return (
-    <div className="canvas">
+    <div className={`canvas${embedded ? " embedded" : ""}`} style={embedded ? { minHeight: "auto" } : undefined}>
       <EEReportStyles />
       <main className="center">
         <div className="center-inner">
           <div className="hero">
             <div>
-              <h2>EMPS</h2>
+              <h2>ENPS</h2>
               <p className="hero-sub">{data.current.label} results</p>
             </div>
             <div className="kpi-strip">
               <div className="kpi">
-                <div className="k-label">EMPS Score</div>
+                <div className="k-label">ENPS Score</div>
                 <div className="k-value">{data.summary.score.toFixed(1)}</div>
               </div>
               <div className="kpi">
@@ -128,7 +125,7 @@ export function EEEnpsReport({ data }: { data: EnpsReportProjection }) {
 
           <div className="card" style={{ marginBottom: 18 }}>
             <div className="card-head">
-              <h3 className="card-title">EMPS Trend</h3>
+              <h3 className="card-title">ENPS Trend</h3>
             </div>
             <div className="card-body">
               <div className="stmt-wrap">
@@ -136,7 +133,7 @@ export function EEEnpsReport({ data }: { data: EnpsReportProjection }) {
                   <thead>
                     <tr>
                       <th>Campaign</th>
-                      <th className="num">EMPS Score</th>
+                      <th className="num">ENPS Score</th>
                       <th className="num">Responses</th>
                     </tr>
                   </thead>
