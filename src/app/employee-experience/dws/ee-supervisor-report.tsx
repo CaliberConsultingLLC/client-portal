@@ -31,6 +31,10 @@ function campaignMatches(campaign, label) {
   return source === label.toLowerCase();
 }
 
+function hasScore(value) {
+  return typeof value === "number" && value > 0;
+}
+
 function SupBarChart({ rows, axis, scoreColor }) {
   const pct = (value) => ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
   return (
@@ -107,9 +111,14 @@ export function EESupervisorReport({ data }: { data: any }) {
 
   const supervisorValue = (statement, campaign) => {
     const cell = statement.bySup[supervisorId];
-    return campaign.key === "current" ? cell.current : cell.comparisons[campaign.key];
+    if (!cell) return null;
+    const value = campaign.key === "current" ? cell.current : cell.comparisons[campaign.key];
+    return hasScore(value) ? value : null;
   };
-  const orgValue = (statement, campaign) => campaign.key === "current" ? statement.org.current : statement.org.comparisons[campaign.key];
+  const orgValue = (statement, campaign) => {
+    const value = campaign.key === "current" ? statement.org.current : statement.org.comparisons[campaign.key];
+    return hasScore(value) ? value : null;
+  };
   const barRows = useMemo(
     () =>
       hasData
@@ -120,6 +129,7 @@ export function EESupervisorReport({ data }: { data: any }) {
               value: supervisorValue(statement, curCamp),
               org: orgValue(statement, curCamp),
             }))
+            .filter((row) => row.value != null && row.org != null)
             .sort((left, right) => right.value - left.value)
         : [],
     [hasData, index?.statements, supervisorId, curCamp]
@@ -138,11 +148,23 @@ export function EESupervisorReport({ data }: { data: any }) {
     );
   }
 
-  const supervisorOverall = round1(mean(index.statements.map((statement) => supervisorValue(statement, curCamp))));
-  const supervisorPrevious = previous ? round1(mean(index.statements.map((statement) => supervisorValue(statement, previous)))) : null;
-  const orgOverall = round1(mean(index.statements.map((statement) => orgValue(statement, curCamp))));
-  const overallDelta = supervisorPrevious == null ? null : round1(supervisorOverall - supervisorPrevious);
-  const vsOrg = round1(supervisorOverall - orgOverall);
+  const supervisorCurrentValues = index.statements
+    .map((statement) => supervisorValue(statement, curCamp))
+    .filter((value): value is number => value != null);
+  const supervisorPreviousValues = previous
+    ? index.statements
+        .map((statement) => supervisorValue(statement, previous))
+        .filter((value): value is number => value != null)
+    : [];
+  const orgCurrentValues = index.statements
+    .map((statement) => orgValue(statement, curCamp))
+    .filter((value): value is number => value != null);
+  const supervisorOverall = supervisorCurrentValues.length > 0 ? round1(mean(supervisorCurrentValues)) : null;
+  const supervisorPrevious = supervisorPreviousValues.length > 0 ? round1(mean(supervisorPreviousValues)) : null;
+  const orgOverall = orgCurrentValues.length > 0 ? round1(mean(orgCurrentValues)) : null;
+  const overallDelta =
+    supervisorOverall == null || supervisorPrevious == null ? null : round1(supervisorOverall - supervisorPrevious);
+  const vsOrg = supervisorOverall == null || orgOverall == null ? null : round1(supervisorOverall - orgOverall);
   return (
     <div className="canvas">
       <EEReportStyles />
@@ -177,8 +199,8 @@ export function EESupervisorReport({ data }: { data: any }) {
           <div className="hero">
             <div><h2>{supervisor.name}</h2><p className="hero-sub">{curCamp.labelLong}{previous ? ` (trend vs ${previous.label})` : ""}</p></div>
             <div className="kpi-strip">
-              <div className="kpi"><div className="k-label">{index.name} Index</div><div className="k-value">{supervisorOverall.toFixed(1)}</div></div>
-              <div className="kpi"><div className="k-label">vs Org</div><div className="k-value" style={{ color: vsOrg >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{f1(vsOrg)}</div></div>
+              <div className="kpi"><div className="k-label">{index.name} Index</div><div className="k-value">{supervisorOverall == null ? "N/A" : supervisorOverall.toFixed(1)}</div></div>
+              <div className="kpi"><div className="k-label">vs Org</div><div className="k-value" style={{ color: vsOrg == null ? "#6E7E96" : vsOrg >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{vsOrg == null ? "N/A" : f1(vsOrg)}</div></div>
               <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{overallDelta == null ? "—" : f1(overallDelta)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{supervisor.responses}</div></div>
             </div>
@@ -200,14 +222,28 @@ export function EESupervisorReport({ data }: { data: any }) {
                 {barRows.map((row) => {
                   const statement = index.statements.find((item) => item.id === row.id);
                   const currentValue = supervisorValue(statement, curCamp);
-                  const change = previous ? round1(currentValue - supervisorValue(statement, previous)) : null;
-                  const orgGap = round1(currentValue - orgValue(statement, curCamp));
+                  const previousValue = previous ? supervisorValue(statement, previous) : null;
+                  const change =
+                    currentValue == null || previousValue == null ? null : round1(currentValue - previousValue);
+                  const statementOrg = orgValue(statement, curCamp);
+                  const orgGap = currentValue == null || statementOrg == null ? null : round1(currentValue - statementOrg);
                   return (
                     <tr key={statement.id} className="stmt-row">
                       <td className="stmt">{statement.text}</td>
-                      {campaigns.map((campaign) => { const value = supervisorValue(statement, campaign); const color = scoreColor(value); return <td key={campaign.id} className="cell" style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}
+                      {campaigns.map((campaign) => {
+                        const value = supervisorValue(statement, campaign);
+                        if (value == null) {
+                          return (
+                            <td key={campaign.id} className="cell" style={{ color: "#6E7E96", background: "#F8FAFC" }}>
+                              N/A
+                            </td>
+                          );
+                        }
+                        const color = scoreColor(value);
+                        return <td key={campaign.id} className="cell" style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>;
+                      })}
                       <td className="cell" style={change == null ? { color: "#6E7E96" } : { background: deltaStyle(change).bg, color: deltaStyle(change).text }}>{change == null ? "—" : f1(change)}</td>
-                      <td className="cell" style={{ background: deltaStyle(orgGap).bg, color: deltaStyle(orgGap).text }}>{f1(orgGap)}</td>
+                      <td className="cell" style={orgGap == null ? { color: "#6E7E96" } : { background: deltaStyle(orgGap).bg, color: deltaStyle(orgGap).text }}>{orgGap == null ? "N/A" : f1(orgGap)}</td>
                     </tr>
                   );
                 })}

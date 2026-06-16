@@ -24,8 +24,9 @@ const PREFERRED_CURRENT_CAMPAIGN = "May 2026";
 const PREFERRED_PRIOR_CAMPAIGN = "Aug 2025";
 
 function valueFor(cell, campaign) {
-  if (!cell) return 0;
-  return campaign.isCurrent ? cell.current : cell.comparisons[campaign.id] ?? 0;
+  if (!cell) return null;
+  const value = campaign.isCurrent ? cell.current : cell.comparisons[campaign.id];
+  return typeof value === "number" && value > 0 ? value : null;
 }
 
 function textFor(color) {
@@ -182,20 +183,41 @@ export function EEDepartmentReport({
     [deptId, minN, segments]
   );
 
-  const deptIndex = (index, campaign) => round1(mean(index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign))));
-  const unitIndex = (index, campaign, unitId) => round1(mean(index.statements.map((statement) => valueFor(statement.byDept[unitId], campaign))));
-  const deptTotal = (campaign) => round1(mean(indexes.flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign)))));
+  const deptIndex = (index, campaign) => {
+    const values = index.statements
+      .map((statement) => valueFor(statement.byDept[deptId], campaign))
+      .filter((value): value is number => value != null);
+    return values.length > 0 ? round1(mean(values)) : null;
+  };
+  const deptTotal = (campaign) => {
+    const values = indexes
+      .flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign)))
+      .filter((value): value is number => value != null);
+    return values.length > 0 ? round1(mean(values)) : null;
+  };
   const companyStatement = (statement, campaign) => {
     let num = 0;
     let den = 0;
     departments.forEach((item) => {
-      num += valueFor(statement.byDept[item.id], campaign) * item.responses;
+      const value = valueFor(statement.byDept[item.id], campaign);
+      if (value == null) return;
+      num += value * item.responses;
       den += item.responses;
     });
-    return round1(num / den);
+    return den > 0 ? round1(num / den) : null;
   };
-  const companyIndex = (index, campaign) => round1(mean(index.statements.map((statement) => companyStatement(statement, campaign))));
-  const companyOverall = (campaign) => round1(mean(indexes.flatMap((index) => index.statements.map((statement) => companyStatement(statement, campaign)))));
+  const companyIndex = (index, campaign) => {
+    const values = index.statements
+      .map((statement) => companyStatement(statement, campaign))
+      .filter((value): value is number => value != null);
+    return values.length > 0 ? round1(mean(values)) : null;
+  };
+  const companyOverall = (campaign) => {
+    const values = indexes
+      .flatMap((index) => index.statements.map((statement) => companyStatement(statement, campaign)))
+      .filter((value): value is number => value != null);
+    return values.length > 0 ? round1(mean(values)) : null;
+  };
   const showVsOrg = unitLabel !== "Brand";
   const activeIndex = indexes.find((index) => index.id === focus) ?? indexes[0] ?? null;
   const brandChartRows = activeIndex
@@ -203,6 +225,7 @@ export function EEDepartmentReport({
         .map((statement) => {
           const value = valueFor(statement.byDept[deptId], curCamp);
           const org = companyStatement(statement, curCamp);
+          if (value == null || org == null) return null;
           return {
             id: statement.id,
             name: statement.text,
@@ -211,6 +234,7 @@ export function EEDepartmentReport({
             org,
           };
         })
+        .filter((row): row is { id: string; name: string; value: number; delta: number; org: number } => row != null)
         .sort((left, right) => right.value - left.value)
     : [];
   const allBrandValues = [...brandChartRows.map((row) => row.value), ...brandChartRows.map((row) => row.org)];
@@ -225,7 +249,8 @@ export function EEDepartmentReport({
   };
 
   const total = deptTotal(curCamp);
-  const totalDelta = previous ? round1(total - deptTotal(previous)) : null;
+  const previousTotal = previous ? deptTotal(previous) : null;
+  const totalDelta = total == null || previousTotal == null ? null : round1(total - previousTotal);
   return (
     <div className="canvas">
       <EEReportStyles />
@@ -265,7 +290,7 @@ export function EEDepartmentReport({
           <div className="hero">
             <div><h2>{dept.name}</h2><p className="hero-sub">{curCamp.labelLong}{previous ? ` (trend vs ${previous.label})` : ""}</p></div>
             <div className="kpi-strip">
-              <div className="kpi"><div className="k-label">Total Index</div><div className="k-value">{total.toFixed(1)}</div></div>
+              <div className="kpi"><div className="k-label">Total Index</div><div className="k-value">{total == null ? "N/A" : total.toFixed(1)}</div></div>
               <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: totalDelta == null ? "#6E7E96" : totalDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{totalDelta == null ? "—" : f1(totalDelta)}</div></div>
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{dept.responses}</div></div>
             </div>
@@ -291,21 +316,32 @@ export function EEDepartmentReport({
                 {indexes.map((index) => {
                   const open = focus === index.id;
                   const cur = deptIndex(index, curCamp);
-                  const change = previous ? round1(cur - deptIndex(index, previous)) : null;
-                  const vsOrg = round1(cur - companyIndex(index, curCamp));
+                  const prevValue = previous ? deptIndex(index, previous) : null;
+                  const orgValue = companyIndex(index, curCamp);
+                  const change = cur == null || prevValue == null ? null : round1(cur - prevValue);
+                  const vsOrg = cur == null || orgValue == null ? null : round1(cur - orgValue);
                   return (
                     <>
                       <tr className={`acc-head${open ? " acc-open" : ""}`} onClick={() => setFocus(open ? ALL : index.id)}>
                         <td><div className="acc-name"><span className="acc-chev"><Chevron /></span><span className="acc-title">{index.name}</span></div></td>
-                        {campaigns.map((campaign, campaignIndex) => { const value = deptIndex(index, campaign); const color = scoreColor(value); return <td key={campaign.id} className={`cell${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}
+                        {campaigns.map((campaign, campaignIndex) => {
+                          const value = deptIndex(index, campaign);
+                          if (value == null) {
+                            return <td key={campaign.id} className={`cell${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ color: "#6E7E96", background: "#F8FAFC" }}>N/A</td>;
+                          }
+                          const color = scoreColor(value);
+                          return <td key={campaign.id} className={`cell${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>;
+                        })}
                         <td className="cell col-group-start" style={change == null ? { color: "#6E7E96" } : { background: deltaStyle(change).bg, color: deltaStyle(change).text }}>{change == null ? "—" : f1(change)}</td>
-                        {showVsOrg ? <td className="cell" style={{ background: deltaStyle(vsOrg).bg, color: deltaStyle(vsOrg).text }}>{f1(vsOrg)}</td> : null}
+                        {showVsOrg ? <td className="cell" style={vsOrg == null ? { color: "#6E7E96" } : { background: deltaStyle(vsOrg).bg, color: deltaStyle(vsOrg).text }}>{vsOrg == null ? "N/A" : f1(vsOrg)}</td> : null}
                       </tr>
                       {open && index.statements.map((statement) => {
                         const curValue = valueFor(statement.byDept[deptId], curCamp);
-                        const statementChange = previous ? round1(curValue - valueFor(statement.byDept[deptId], previous)) : null;
-                        const statementVsOrg = round1(curValue - companyStatement(statement, curCamp));
-                        return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td>{campaigns.map((campaign, campaignIndex) => { const value = valueFor(statement.byDept[deptId], campaign); const color = scoreColor(value); return <td key={campaign.id} className={`cell${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}<td className="cell col-group-start" style={statementChange == null ? { color: "#6E7E96" } : { background: deltaStyle(statementChange).bg, color: deltaStyle(statementChange).text }}>{statementChange == null ? "—" : f1(statementChange)}</td>{showVsOrg ? <td className="cell" style={{ background: deltaStyle(statementVsOrg).bg, color: deltaStyle(statementVsOrg).text }}>{f1(statementVsOrg)}</td> : null}</tr>;
+                        const prevStatementValue = previous ? valueFor(statement.byDept[deptId], previous) : null;
+                        const orgStatementValue = companyStatement(statement, curCamp);
+                        const statementChange = curValue == null || prevStatementValue == null ? null : round1(curValue - prevStatementValue);
+                        const statementVsOrg = curValue == null || orgStatementValue == null ? null : round1(curValue - orgStatementValue);
+                        return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td>{campaigns.map((campaign, campaignIndex) => { const value = valueFor(statement.byDept[deptId], campaign); if (value == null) return <td key={campaign.id} className={`cell${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ color: "#6E7E96", background: "#F8FAFC" }}>N/A</td>; const color = scoreColor(value); return <td key={campaign.id} className={`cell${campaignIndex === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>; })}<td className="cell col-group-start" style={statementChange == null ? { color: "#6E7E96" } : { background: deltaStyle(statementChange).bg, color: deltaStyle(statementChange).text }}>{statementChange == null ? "—" : f1(statementChange)}</td>{showVsOrg ? <td className="cell" style={statementVsOrg == null ? { color: "#6E7E96" } : { background: deltaStyle(statementVsOrg).bg, color: deltaStyle(statementVsOrg).text }}>{statementVsOrg == null ? "N/A" : f1(statementVsOrg)}</td> : null}</tr>;
                       })}
                     </>
                   );
@@ -318,7 +354,7 @@ export function EEDepartmentReport({
             <>
               <p className="slabel" style={{ marginBottom: 6 }}>Results by Segment · {current.label} favorability</p>
               <div className="coavg-note" style={{ marginBottom: 10 }}><span className="dash" /> Dotted line marks the company-wide average.</div>
-              <div className="seg-grid">{visibleSegments.map((segment) => <SegmentCard key={segment.id} segment={segment} deptId={deptId} minN={minN} companyAvg={companyOverall(curCamp)} scoreColor={scoreColor} />)}</div>
+              <div className="seg-grid">{visibleSegments.map((segment) => <SegmentCard key={segment.id} segment={segment} deptId={deptId} minN={minN} companyAvg={companyOverall(curCamp) ?? 0} scoreColor={scoreColor} />)}</div>
             </>
           ) : null}
         </div>
