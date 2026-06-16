@@ -20,9 +20,6 @@ export type EnpsGroupRow = {
   score: number;
   previousScore: number | null;
   delta: number | null;
-  promoterPct: number;
-  passivePct: number;
-  detractorPct: number;
 };
 
 export type EnpsReportProjection = {
@@ -36,9 +33,6 @@ export type EnpsReportProjection = {
     score: number;
     previousScore: number | null;
     delta: number | null;
-    promoterPct: number;
-    passivePct: number;
-    detractorPct: number;
   };
   brandRows: EnpsGroupRow[];
   departmentRows: EnpsGroupRow[];
@@ -118,23 +112,8 @@ function enpsResponseScore(
   const values = itemIds
     .map((itemId) => respondent.scores[itemId])
     .filter((value): value is number => value !== null);
-  return values.length > 0 ? average(values) : null;
-}
-
-function enpsDistribution(scores: number[]) {
-  if (scores.length === 0) {
-    return { score: 0, promoterPct: 0, passivePct: 0, detractorPct: 0 };
-  }
-  const promoters = scores.filter((score) => score >= 9).length;
-  const passives = scores.filter((score) => score >= 7 && score < 9).length;
-  const detractors = scores.filter((score) => score < 7).length;
-  const score = ((promoters - detractors) / scores.length) * 100;
-  return {
-    score: round1(score),
-    promoterPct: round1((promoters / scores.length) * 100),
-    passivePct: round1((passives / scores.length) * 100),
-    detractorPct: round1((detractors / scores.length) * 100),
-  };
+  // Keep ENPS on the same 0-100 score scale used in statement boxes.
+  return values.length > 0 ? toDisplayScore(average(values)) : null;
 }
 
 function buildEnpsRows(
@@ -174,18 +153,15 @@ function buildEnpsRows(
       const previousScores = (previousGroups.get(label) ?? [])
         .map((respondent) => enpsResponseScore(respondent, itemIds))
         .filter((value): value is number => value !== null);
-      const currentDistribution = enpsDistribution(currentScores);
-      const previousDistribution = previousScores.length > 0 ? enpsDistribution(previousScores) : null;
+      const currentScore = round1(average(currentScores));
+      const previousScore = previousScores.length > 0 ? round1(average(previousScores)) : null;
       return {
         id: slugify(label),
         label,
         responses: currentScores.length,
-        score: currentDistribution.score,
-        previousScore: previousDistribution?.score ?? null,
-        delta: previousDistribution ? round1(currentDistribution.score - previousDistribution.score) : null,
-        promoterPct: currentDistribution.promoterPct,
-        passivePct: currentDistribution.passivePct,
-        detractorPct: currentDistribution.detractorPct,
+        score: currentScore,
+        previousScore,
+        delta: previousScore == null ? null : round1(currentScore - previousScore),
       } satisfies EnpsGroupRow;
     })
     .filter((row): row is EnpsGroupRow => row !== null)
@@ -925,9 +901,6 @@ export function projectEnpsReportData(
         score: 0,
         previousScore: null,
         delta: null,
-        promoterPct: 0,
-        passivePct: 0,
-        detractorPct: 0,
       },
       brandRows: [],
       departmentRows: [],
@@ -940,8 +913,8 @@ export function projectEnpsReportData(
   const previousScores = previousRespondents
     .map((respondent) => enpsResponseScore(respondent, itemIds))
     .filter((value): value is number => value !== null);
-  const currentDistribution = enpsDistribution(currentScores);
-  const previousDistribution = previousScores.length > 0 ? enpsDistribution(previousScores) : null;
+  const currentScore = currentScores.length > 0 ? round1(average(currentScores)) : 0;
+  const previousScore = previousScores.length > 0 ? round1(average(previousScores)) : null;
 
   return {
     client: buildClient(data, options),
@@ -961,12 +934,9 @@ export function projectEnpsReportData(
     statementLabel,
     summary: {
       responses: currentScores.length,
-      score: currentDistribution.score,
-      previousScore: previousDistribution?.score ?? null,
-      delta: previousDistribution ? round1(currentDistribution.score - previousDistribution.score) : null,
-      promoterPct: currentDistribution.promoterPct,
-      passivePct: currentDistribution.passivePct,
-      detractorPct: currentDistribution.detractorPct,
+      score: currentScore,
+      previousScore,
+      delta: previousScore == null ? null : round1(currentScore - previousScore),
     },
     brandRows: buildEnpsRows(
       currentRespondents,
