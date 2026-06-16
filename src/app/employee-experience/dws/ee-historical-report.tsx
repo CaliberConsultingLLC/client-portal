@@ -204,7 +204,18 @@ export function EEHistoricalReport({
   const deltaAll = round1(currentScore - series[0]);
   const peakIndex = series.reduce((best, value, index) => value > series[best] ? index : best, 0);
   const scopeLabel = focusIndex ? `${focusIndex.name} index` : "Overall (all indexes)";
-  const title = embedded && variant === "history" ? "Detailed History" : isAll ? "All Departments" : dept.name;
+  const title =
+    embedded && variant === "overview"
+      ? "Campaign Overview"
+      : embedded && variant === "history"
+        ? "Detailed History"
+        : isAll
+          ? "All Departments"
+          : dept.name;
+  const subtitle =
+    embedded && variant === "overview"
+      ? "Overall campaign results"
+      : `${scopeLabel} · ${first.label} to ${last.label}`;
   const responseCount = isAll
     ? totalResponsesByCampaign[activeCampaign.id] ?? 0
     : Number(dept.responsesByCampaign?.[activeCampaign.id] ?? dept.responses ?? 0);
@@ -241,7 +252,7 @@ export function EEHistoricalReport({
       <main className="center">
         <div className="center-inner">
           <div className="hero">
-            <div><h2>{title}</h2><p className="hero-sub">{scopeLabel} · {first.label} to {last.label}</p></div>
+            <div><h2>{title}</h2><p className="hero-sub">{subtitle}</p></div>
             <div className="kpi-strip">
               <div className="kpi"><div className="k-label">{activeCampaign.short}</div><div className="k-value">{currentScore.toFixed(1)}</div></div>
               <div className="kpi"><div className="k-label">Delta Last</div><div className="k-value" style={{ color: deltaLast == null ? "#6E7E96" : deltaLast >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{deltaLast == null ? "—" : f1(deltaLast)}</div></div>
