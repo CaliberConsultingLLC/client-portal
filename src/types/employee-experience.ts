@@ -124,8 +124,10 @@ export interface EmployeeExperienceDashboardData {
   };
   settings: {
     minimumSegmentSize: number;
+    hiddenDimensionIds?: string[];
   };
   questions: EmployeeExperienceQuestionDefinition[];
+  enpsDefinitions?: EmployeeExperienceQuestionDefinition[];
   respondents: EmployeeExperienceRespondent[];
   overview: {
     experienceIndex: number;

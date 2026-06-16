@@ -13,6 +13,37 @@ type ProjectionOptions = {
   campaignLabel?: string;
 };
 
+export type EnpsGroupRow = {
+  id: string;
+  label: string;
+  responses: number;
+  score: number;
+  previousScore: number | null;
+  delta: number | null;
+  promoterPct: number;
+  passivePct: number;
+  detractorPct: number;
+};
+
+export type EnpsReportProjection = {
+  client: ReturnType<typeof buildClient>;
+  current: { id: string; label: string; labelLong: string };
+  previous: { id: string; label: string; labelLong: string } | null;
+  hasEnpsData: boolean;
+  statementLabel: string;
+  summary: {
+    responses: number;
+    score: number;
+    previousScore: number | null;
+    delta: number | null;
+    promoterPct: number;
+    passivePct: number;
+    detractorPct: number;
+  };
+  brandRows: EnpsGroupRow[];
+  departmentRows: EnpsGroupRow[];
+};
+
 function resolveCampaignLabel(data: EmployeeExperienceDashboardData, options?: ProjectionOptions) {
   return options?.campaignLabel ?? data.meta.currentCampaignLabel;
 }
@@ -78,6 +109,87 @@ function itemDisplayScore(respondents: EmployeeExperienceRespondent[], itemId: n
     .map((respondent) => respondent.scores[itemId])
     .filter((value): value is number => value !== null);
   return values.length > 0 ? toDisplayScore(average(values)) : 0;
+}
+
+function enpsResponseScore(
+  respondent: EmployeeExperienceRespondent,
+  itemIds: number[]
+) {
+  const values = itemIds
+    .map((itemId) => respondent.scores[itemId])
+    .filter((value): value is number => value !== null);
+  return values.length > 0 ? average(values) : null;
+}
+
+function enpsDistribution(scores: number[]) {
+  if (scores.length === 0) {
+    return { score: 0, promoterPct: 0, passivePct: 0, detractorPct: 0 };
+  }
+  const promoters = scores.filter((score) => score >= 9).length;
+  const passives = scores.filter((score) => score >= 7 && score < 9).length;
+  const detractors = scores.filter((score) => score < 7).length;
+  const score = ((promoters - detractors) / scores.length) * 100;
+  return {
+    score: round1(score),
+    promoterPct: round1((promoters / scores.length) * 100),
+    passivePct: round1((passives / scores.length) * 100),
+    detractorPct: round1((detractors / scores.length) * 100),
+  };
+}
+
+function buildEnpsRows(
+  respondents: EmployeeExperienceRespondent[],
+  previousRespondents: EmployeeExperienceRespondent[],
+  itemIds: number[],
+  minResponses: number,
+  getGroup: (respondent: EmployeeExperienceRespondent) => string,
+  allowGroup?: (group: string) => boolean
+): EnpsGroupRow[] {
+  const currentGroups = new Map<string, EmployeeExperienceRespondent[]>();
+  respondents.forEach((respondent) => {
+    const group = getGroup(respondent).trim();
+    if (!group) return;
+    if (allowGroup && !allowGroup(group)) return;
+    const existing = currentGroups.get(group) ?? [];
+    existing.push(respondent);
+    currentGroups.set(group, existing);
+  });
+
+  const previousGroups = new Map<string, EmployeeExperienceRespondent[]>();
+  previousRespondents.forEach((respondent) => {
+    const group = getGroup(respondent).trim();
+    if (!group) return;
+    if (allowGroup && !allowGroup(group)) return;
+    const existing = previousGroups.get(group) ?? [];
+    existing.push(respondent);
+    previousGroups.set(group, existing);
+  });
+
+  return Array.from(currentGroups.entries())
+    .map(([label, groupRespondents]) => {
+      const currentScores = groupRespondents
+        .map((respondent) => enpsResponseScore(respondent, itemIds))
+        .filter((value): value is number => value !== null);
+      if (currentScores.length < minResponses) return null;
+      const previousScores = (previousGroups.get(label) ?? [])
+        .map((respondent) => enpsResponseScore(respondent, itemIds))
+        .filter((value): value is number => value !== null);
+      const currentDistribution = enpsDistribution(currentScores);
+      const previousDistribution = previousScores.length > 0 ? enpsDistribution(previousScores) : null;
+      return {
+        id: slugify(label),
+        label,
+        responses: currentScores.length,
+        score: currentDistribution.score,
+        previousScore: previousDistribution?.score ?? null,
+        delta: previousDistribution ? round1(currentDistribution.score - previousDistribution.score) : null,
+        promoterPct: currentDistribution.promoterPct,
+        passivePct: currentDistribution.passivePct,
+        detractorPct: currentDistribution.detractorPct,
+      } satisfies EnpsGroupRow;
+    })
+    .filter((row): row is EnpsGroupRow => row !== null)
+    .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label));
 }
 
 function groupQuestionsByDimension(questions: EmployeeExperienceQuestionDefinition[]) {
@@ -770,6 +882,110 @@ export function projectSupervisorReportData(
   };
 }
 
+export function projectEnpsReportData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+): EnpsReportProjection {
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const currentLabel = resolveCampaignLabel(data, options);
+  const currentIndex = campaigns.findIndex((label) => label === currentLabel);
+  const previousLabel =
+    currentIndex > 0
+      ? campaigns[currentIndex - 1]
+      : campaigns.filter((label) => label !== currentLabel).at(-1) ?? null;
+  const enpsDefinitions = data.enpsDefinitions ?? [];
+  const itemIds = enpsDefinitions.map((definition) => definition.itemId);
+  const currentRespondents = respondentsForCampaign(data.respondents, currentLabel);
+  const previousRespondents = previousLabel
+    ? respondentsForCampaign(data.respondents, previousLabel)
+    : [];
+
+  const statementLabel =
+    enpsDefinitions[0]?.statement?.trim() || "I would recommend this company as a great place to work.";
+
+  if (itemIds.length === 0) {
+    return {
+      client: buildClient(data, options),
+      current: {
+        id: campaignId(currentLabel),
+        label: currentLabel,
+        labelLong: currentLabel.toUpperCase(),
+      },
+      previous: previousLabel
+        ? {
+            id: campaignId(previousLabel),
+            label: previousLabel,
+            labelLong: previousLabel.toUpperCase(),
+          }
+        : null,
+      hasEnpsData: false,
+      statementLabel,
+      summary: {
+        responses: 0,
+        score: 0,
+        previousScore: null,
+        delta: null,
+        promoterPct: 0,
+        passivePct: 0,
+        detractorPct: 0,
+      },
+      brandRows: [],
+      departmentRows: [],
+    };
+  }
+
+  const currentScores = currentRespondents
+    .map((respondent) => enpsResponseScore(respondent, itemIds))
+    .filter((value): value is number => value !== null);
+  const previousScores = previousRespondents
+    .map((respondent) => enpsResponseScore(respondent, itemIds))
+    .filter((value): value is number => value !== null);
+  const currentDistribution = enpsDistribution(currentScores);
+  const previousDistribution = previousScores.length > 0 ? enpsDistribution(previousScores) : null;
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    previous: previousLabel
+      ? {
+          id: campaignId(previousLabel),
+          label: previousLabel,
+          labelLong: previousLabel.toUpperCase(),
+        }
+      : null,
+    hasEnpsData: currentScores.length > 0,
+    statementLabel,
+    summary: {
+      responses: currentScores.length,
+      score: currentDistribution.score,
+      previousScore: previousDistribution?.score ?? null,
+      delta: previousDistribution ? round1(currentDistribution.score - previousDistribution.score) : null,
+      promoterPct: currentDistribution.promoterPct,
+      passivePct: currentDistribution.passivePct,
+      detractorPct: currentDistribution.detractorPct,
+    },
+    brandRows: buildEnpsRows(
+      currentRespondents,
+      previousRespondents,
+      itemIds,
+      3,
+      (respondent) => respondent.location,
+      (group) => isKnownBrandSegment(group)
+    ),
+    departmentRows: buildEnpsRows(
+      currentRespondents,
+      previousRespondents,
+      itemIds,
+      data.settings.minimumSegmentSize,
+      (respondent) => respondent.department
+    ),
+  };
+}
+
 export function projectHistoricalData(
   data: EmployeeExperienceDashboardData,
   options?: ProjectionOptions
@@ -859,6 +1075,7 @@ export function buildEmployeeExperienceReportBundle(
     brandReport: projectBrandReportData(data, options),
     departmentReport: projectDepartmentReportData(data, options),
     supervisorReport: projectSupervisorReportData(data, options),
+    enpsReport: projectEnpsReportData(data, options),
     historicalReport: projectHistoricalData(data, options),
   };
 }

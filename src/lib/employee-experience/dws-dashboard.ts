@@ -3,6 +3,7 @@ import path from "path";
 import { getFirebaseAdminStorage } from "@/lib/firebase/admin";
 import {
   filterExcludedDefinitions,
+  isPlatformExcludedDimension,
   mergeHiddenDimensionIds,
   normalizeDimensionId,
 } from "@/lib/employee-experience/excluded-dimensions";
@@ -1088,6 +1089,7 @@ function buildEmployeeExperienceDashboardData({
   hiddenDimensionIds?: string[];
 }): EmployeeExperienceDashboardData {
   const effectiveHiddenDimensionIds = mergeHiddenDimensionIds(hiddenDimensionIds);
+  const enpsDefinitions = definitions.filter((definition) => isPlatformExcludedDimension(definition.dimension));
   const visibleDefinitions = filterHiddenDefinitions(definitions, hiddenDimensionIds);
   const itemIds = visibleDefinitions.map((definition) => definition.itemId);
   const campaigns = Array.from(
@@ -1248,6 +1250,7 @@ function buildEmployeeExperienceDashboardData({
       hiddenDimensionIds: effectiveHiddenDimensionIds,
     },
     questions: visibleDefinitions,
+    enpsDefinitions,
     respondents,
     overview: {
       experienceIndex: overviewScore,

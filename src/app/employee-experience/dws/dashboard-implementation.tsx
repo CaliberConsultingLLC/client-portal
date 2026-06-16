@@ -8,6 +8,7 @@ import { EELocationComparison } from "./ee-location-comparison";
 import { EEDepartmentReport } from "./ee-department-report";
 import { EEHistoricalReport } from "./ee-historical-report";
 import { EESupervisorReport } from "./ee-supervisor-report";
+import { EEEnpsReport } from "./ee-enps-report";
 import { EEExecutiveRail, EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { buildEmployeeExperienceReportBundle } from "./ee-live-projections";
 import { ClientMark, defaultComparisonId } from "./ee-report-kit";
@@ -93,6 +94,7 @@ const GROUPS = [
       { id: "exec-location" as const, label: "Heat Maps" },
       { id: "ee-location-comparison" as const, label: "Brand Comparison" },
       { id: "ee-department-comparison" as const, label: "Department Comparison" },
+      { id: "ee-enps" as const, label: "ENPS" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
       { id: "hr-open-text" as const, label: "Open Text" },
     ],
@@ -103,6 +105,7 @@ const GROUPS = [
     perspectives: [
       { id: "ee-brand-report" as const, label: "Brand Report" },
       { id: "hr-supervisor" as const, label: "Supervisor Reports" },
+      { id: "ee-enps" as const, label: "ENPS" },
       { id: "ee-department-report" as const, label: "Department Report" },
       { id: "ee-brand-open-text" as const, label: "Open Text" },
     ],
@@ -113,7 +116,7 @@ type GroupId = (typeof GROUPS)[number]["id"];
 type PerspectiveId =
   | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
   | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
-  | "dept-scorecard" | "ee-brand-report" | "ee-brand-open-text" | "ee-department-report" | "ee-historical-report";
+  | "dept-scorecard" | "ee-brand-report" | "ee-brand-open-text" | "ee-department-report" | "ee-historical-report" | "ee-enps";
 
 const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
   "exec-overview",
@@ -122,12 +125,14 @@ const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
   "ee-department-comparison",
   "ee-location-comparison",
   "ee-historical-report",
+  "ee-enps",
 ]);
 const EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER = new Set<PerspectiveId>([
   "exec-overview",
   "ee-campaign-results",
   "ee-historical-report",
   "exec-location",
+  "ee-enps",
 ]);
 
 const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
@@ -137,6 +142,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "ee-department-comparison": "Department Comparison",
   "ee-location-comparison": "Brand Comparison",
   "ee-historical-report": "Detailed History",
+  "ee-enps": "ENPS",
   "hr-index-dive": "Index Deep Dive",
   "hr-supervisor": "Supervisor Reports",
   "hr-open-text": "Open Text",
@@ -1813,6 +1819,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "ee-department-comparison": "Each row is a department for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-historical-report": "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
+    "ee-enps": "ENPS is shown as promoter minus detractor percentage points. Use this page for brand and department ENPS comparisons without affecting other index averages.",
     "hr-index-dive": "Select an index to inspect statement-level scores and brand distribution. Use filters to isolate brand and work-type patterns.",
     "hr-supervisor": "Bars show supervisor scores by statement. The org marker indicates company average for each statement.",
     "hr-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
@@ -2049,6 +2056,16 @@ export function DwsEmployeeExperienceDashboardClient({
             {executiveRail}
             <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
               <EEHistoricalReport data={reportBundle.historicalReport} embedded currentCampaignLabel={current} />
+            </div>
+            {fixedInfoRail}
+          </div>
+        );
+      case "ee-enps":
+        return (
+          <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+            {executiveRail}
+            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+              <EEEnpsReport data={reportBundle.enpsReport} />
             </div>
             {fixedInfoRail}
           </div>
