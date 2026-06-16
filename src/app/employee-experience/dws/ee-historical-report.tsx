@@ -132,7 +132,7 @@ export function EEHistoricalReport({
   const deltaAll = round1(currentScore - series[0]);
   const peakIndex = series.reduce((best, value, index) => value > series[best] ? index : best, 0);
   const scopeLabel = focusIndex ? `${focusIndex.name} index` : "Overall (all indexes)";
-  const title = isAll ? "All Departments" : dept.name;
+  const title = embedded && variant === "history" ? "Detailed History" : isAll ? "All Departments" : dept.name;
   const responseCount = isAll ? totalResponses : dept.responses;
   const latestCampaign = activeCampaign;
 

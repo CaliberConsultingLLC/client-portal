@@ -102,8 +102,9 @@ const GROUPS = [
     label: "Brand",
     perspectives: [
       { id: "ee-brand-report" as const, label: "Brand Report" },
-      { id: "ee-department-report" as const, label: "Department Report" },
       { id: "hr-supervisor" as const, label: "Supervisor Reports" },
+      { id: "ee-department-report" as const, label: "Department Report" },
+      { id: "ee-brand-open-text" as const, label: "Open Text" },
     ],
   },
 ] as const;
@@ -112,7 +113,7 @@ type GroupId = (typeof GROUPS)[number]["id"];
 type PerspectiveId =
   | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
   | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
-  | "dept-scorecard" | "ee-brand-report" | "ee-department-report" | "ee-historical-report";
+  | "dept-scorecard" | "ee-brand-report" | "ee-brand-open-text" | "ee-department-report" | "ee-historical-report";
 
 const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
   "exec-overview",
@@ -121,6 +122,12 @@ const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
   "ee-department-comparison",
   "ee-location-comparison",
   "ee-historical-report",
+]);
+const EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER = new Set<PerspectiveId>([
+  "exec-overview",
+  "ee-campaign-results",
+  "ee-historical-report",
+  "exec-location",
 ]);
 
 const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
@@ -135,6 +142,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "hr-open-text": "Open Text",
   "dept-scorecard": "Department Scorecard",
   "ee-brand-report": "Brand Report",
+  "ee-brand-open-text": "Open Text",
   "ee-department-report": "Department Report",
 };
 
@@ -1052,7 +1060,10 @@ function HrIndexDive({
   const curR = useMemo(() => filterR(data.respondents.filter((r) => r.campaignLabel === current), filters), [data.respondents, current, filters]);
   const priR = useMemo(() => prior ? filterR(data.respondents.filter((r) => r.campaignLabel === prior), filters) : [], [data.respondents, prior, filters]);
 
-  const dimQs = useMemo(() => data.questions.filter((q) => q.dimension === selectedDim), [data.questions, selectedDim]);
+  const dimQs = useMemo(
+    () => (selectedDim ? data.questions.filter((q) => q.dimension === selectedDim) : data.questions),
+    [data.questions, selectedDim]
+  );
   const dimIds = useMemo(() => dimQs.map((q) => q.itemId), [dimQs]);
   const dimAvg = useMemo(() => groupScore(curR, dimIds), [curR, dimIds]);
 
@@ -1077,13 +1088,13 @@ function HrIndexDive({
     [brands, curR, dimIds]
   );
 
-  if (!selectedDim || dimQs.length === 0) return <Empty message="Select a dimension from the left rail." />;
+  if (dimQs.length === 0) return <Empty message="No statements are available for this selection." />;
 
   return (
     <div className="space-y-6">
       <ExecutiveHeader
         title="Index Deep Dive"
-        subtitle={`${selectedDim} · ${current}${prior ? ` vs ${prior}` : ""}`}
+        subtitle={`${selectedDim || "All indexes"} · ${current}${prior ? ` vs ${prior}` : ""}`}
         kpis={[
           { label: "Responses", value: curR.length.toLocaleString() },
           { label: "Brands", value: brands.length.toString() },
@@ -1093,7 +1104,7 @@ function HrIndexDive({
       />
       <EEPanel>
         <EEPanelHeader
-          title={`${selectedDim} — Statement Detail`}
+          title={`${selectedDim || "All indexes"} — Statement Detail`}
           description="All items ranked highest to lowest. Delta reflects change vs prior campaign."
         />
         <EEPanelContent className="pt-0">
@@ -1123,7 +1134,7 @@ function HrIndexDive({
       {brandBars.length > 0 && (
         <EEPanel>
           <EEPanelHeader
-            title={`${selectedDim} by Brand`}
+            title={`${selectedDim || "All indexes"} by Brand`}
             description="Which brands score highest and lowest on this index."
           />
           <EEPanelContent className="pt-0">
@@ -1575,7 +1586,7 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const [hrRankFilters, setHrRankFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
   const dimensionOptions = useMemo(() => orderedDimensionNames(data.questions), [data.questions]);
-  const [selectedDim, setSelectedDim] = useState(dimensionOptions[0] ?? "");
+  const [selectedDim, setSelectedDim] = useState("");
   const [idxFilters, setIdxFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
   const [supFilters, setSupFilters] = useState<Record<string, string>>({ location: "", department: "" });
   const [selectedSup, setSelectedSup] = useState("");
@@ -1657,12 +1668,14 @@ export function DwsEmployeeExperienceDashboardClient({
   const executiveComparisons = reportBundle.campaignResults.comparisons;
   const derivedExecCompId = executiveComparisons.find((comparison) => comparison.label === prior)?.id;
   const activeExecCompId = execCompId || derivedExecCompId || defaultComparisonId(executiveComparisons);
-  const activeExecIndexId = execIndexId || executiveIndexes[0]?.id || "";
+  const activeExecIndexId = execIndexId;
   const brandLocations = locationOpts;
-  const activeDepartmentIndex = reportBundle.departmentComparison.indexes.find((index) => index.id === activeExecIndexId)
-    ?? reportBundle.departmentComparison.indexes[0];
-  const activeBrandIndex = reportBundle.locationComparison.indexes.find((index) => index.id === activeExecIndexId)
-    ?? reportBundle.locationComparison.indexes[0];
+  const activeDepartmentIndex = activeExecIndexId
+    ? reportBundle.departmentComparison.indexes.find((index) => index.id === activeExecIndexId)
+    : undefined;
+  const activeBrandIndex = activeExecIndexId
+    ? reportBundle.locationComparison.indexes.find((index) => index.id === activeExecIndexId)
+    : undefined;
 
   useEffect(() => {
     const preferredCurrent = resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN);
@@ -1703,6 +1716,8 @@ export function DwsEmployeeExperienceDashboardClient({
       indexes={executiveIndexes}
       indexId={activeExecIndexId}
       onIndexId={setExecIndexId}
+      showIndexSection={!EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER.has(activePersp)}
+      includeAllIndexOption
       locations={brandLocations}
       location={execLocation}
       onLocation={setExecLocation}
@@ -1763,6 +1778,7 @@ export function DwsEmployeeExperienceDashboardClient({
             <select
               value={execDeptStatementId}
               onChange={(event) => setExecDeptStatementId(event.target.value)}
+              disabled={!activeExecIndexId}
               className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
             >
               <option value={COMPARISON_ALL}>Index average (all statements)</option>
@@ -1776,6 +1792,7 @@ export function DwsEmployeeExperienceDashboardClient({
             <select
               value={execBrandStatementId}
               onChange={(event) => setExecBrandStatementId(event.target.value)}
+              disabled={!activeExecIndexId}
               className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
             >
               <option value={COMPARISON_ALL}>Index average (all statements)</option>
@@ -1801,6 +1818,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "hr-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
     "dept-scorecard": "Scorecards summarize department performance, statement strengths, and focus areas with demographic cuts.",
     "ee-brand-report": "This report compares each brand to organization averages by statement and index across selected campaigns.",
+    "ee-brand-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
     "ee-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
   };
 
@@ -1869,6 +1887,15 @@ export function DwsEmployeeExperienceDashboardClient({
       {activePersp === "hr-index-dive" && (
         <RailSection title="Index">
           <div className="space-y-0.5">
+            <button
+              type="button"
+              onClick={() => setSelectedDim("")}
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition
+                  ${!selectedDim ? "bg-nsp-blue-50 font-semibold text-nsp-blue-700" : "font-medium text-text-secondary hover:bg-surface-2"}`}
+            >
+              All indexes
+              {!selectedDim && <ChevronRight className="h-4 w-4 text-nsp-blue-400" />}
+            </button>
             {dimensionOptions.map((d) => (
               <button
                 key={d} type="button" onClick={() => setSelectedDim(d)}
@@ -1899,22 +1926,24 @@ export function DwsEmployeeExperienceDashboardClient({
         </RailSection>
       )}
 
-      {/* Focus: Open Text field + department */}
-      {activePersp === "hr-open-text" && (
+      {/* Focus: Open Text */}
+      {(activePersp === "hr-open-text" || activePersp === "ee-brand-open-text") && (
         <RailSection title="Focus">
           <div className="space-y-3">
+            {activePersp === "hr-open-text" ? (
+              <div>
+                <span className="text-xs font-medium text-text-secondary">Question Type</span>
+                <select
+                  value={openTextField}
+                  onChange={(e) => setOpenTextField(e.target.value as OpenTextField)}
+                  className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
+                >
+                  {openTextFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                </select>
+              </div>
+            ) : null}
             <div>
-              <span className="text-xs font-medium text-text-secondary">Question Type</span>
-              <select
-                value={openTextField}
-                onChange={(e) => setOpenTextField(e.target.value as OpenTextField)}
-                className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
-              >
-                {openTextFields.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <span className="text-xs font-medium text-text-secondary">Brand</span>
+              <span className="text-xs font-medium text-text-secondary">Brand / Location</span>
               <select value={openTextBrand} onChange={(e) => setOpenTextBrand(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
                 <option value="">All Brands</option>
                 {locationOpts.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
@@ -1991,8 +2020,14 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <div style={EE_PERSPECTIVE_MAIN_STYLE}>
-              <EEHistoricalReport data={reportBundle.historicalReport} embedded variant="overview" currentCampaignLabel={current} selectedIndexId={activeExecIndexId} />
+            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+              <EEHistoricalReport
+                data={reportBundle.historicalReport}
+                embedded
+                variant="overview"
+                currentCampaignLabel={current}
+                selectedIndexId={activeExecIndexId || undefined}
+              />
               
             </div>
             {fixedInfoRail}
@@ -2012,7 +2047,7 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <div style={EE_PERSPECTIVE_MAIN_STYLE}>
+            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
               <EEHistoricalReport data={reportBundle.historicalReport} embedded currentCampaignLabel={current} />
             </div>
             {fixedInfoRail}
@@ -2023,6 +2058,8 @@ export function DwsEmployeeExperienceDashboardClient({
       case "hr-supervisor":
         return <EESupervisorReport data={reportBundle.supervisorReport} />;
       case "hr-open-text":
+        return <HrOpenText data={data} current={current} brandFilter={openTextBrand} fieldType={openTextField} />;
+      case "ee-brand-open-text":
         return <HrOpenText data={data} current={current} brandFilter={openTextBrand} fieldType={openTextField} />;
       case "dept-scorecard":
         return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
