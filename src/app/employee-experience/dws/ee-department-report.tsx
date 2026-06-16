@@ -72,7 +72,7 @@ function SegmentCard({ segment, deptId, minN, companyAvg, scoreColor }) {
   );
 }
 
-function BrandComparisonChart({ rows, avg, axis, scoreColor }) {
+function BrandComparisonChart({ rows, axis, scoreColor }) {
   const pct = (value) => ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
   return (
     <div className="chart" style={{ "--label-col": "280px", "--gap-col": "140px" }}>
@@ -85,24 +85,8 @@ function BrandComparisonChart({ rows, avg, axis, scoreColor }) {
         .br-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}
         .br-axis-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;padding:0}
         .br-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
-        .br-gap-col-head{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6E7E96;text-align:center;line-height:1.25}
         .br-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
       `}</style>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col)",
-          alignItems: "end",
-          columnGap: 16,
-          marginBottom: 6,
-        }}
-      >
-        <div />
-        <div />
-        <div className="br-gap-col">
-          <div className="br-gap-col-head">Comparison to CSG</div>
-        </div>
-      </div>
       <div className="plot">
         <div className="grid-overlay" style={{ right: "var(--gap-col)" }}>
           {axis.ticks.map((tick) => <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />)}
@@ -119,8 +103,8 @@ function BrandComparisonChart({ rows, avg, axis, scoreColor }) {
                 <div className="br-bar" style={{ width: `${pct(row.value)}%`, background: color }}>
                   <div className="br-chip">{row.value.toFixed(1)}</div>
                 </div>
-                <div className="br-org" style={{ left: `${pct(avg)}%` }} />
-                <div className="br-org-dot" style={{ left: `${pct(avg)}%` }} />
+                <div className="br-org" style={{ left: `${pct(row.org)}%` }} />
+                <div className="br-org-dot" style={{ left: `${pct(row.org)}%` }} />
               </div>
               <div className="br-gap-col">
                 <div className="br-gap-pill" style={{ background: gapTone.bg, color: gapTone.fg, borderColor: gapTone.border }}>
@@ -148,7 +132,7 @@ export function EEDepartmentReport({
   const { client, current, comparisons, scale, departments = [], indexes = [], segments } = data;
   const scoreColor = makeScoreColor(scale);
   const [deptId, setDeptId] = useState(departments[0]?.id ?? "");
-  const [focus, setFocus] = useState(ALL);
+  const [focus, setFocus] = useState(() => (unitLabel === "Brand" ? indexes[0]?.id ?? ALL : ALL));
   const [currentCampaignId, setCurrentCampaignId] = useState(() => {
     const preferredCurrent = [current, ...comparisons].find((campaign) => campaignMatches(campaign, PREFERRED_CURRENT_CAMPAIGN));
     return preferredCurrent?.id ?? current.id;
@@ -212,27 +196,32 @@ export function EEDepartmentReport({
   };
   const companyIndex = (index, campaign) => round1(mean(index.statements.map((statement) => companyStatement(statement, campaign))));
   const companyOverall = (campaign) => round1(mean(indexes.flatMap((index) => index.statements.map((statement) => companyStatement(statement, campaign)))));
-  const activeIndex = focus === ALL ? null : indexes.find((index) => index.id === focus) ?? null;
-  const brandChartAverage = activeIndex ? companyIndex(activeIndex, curCamp) : companyOverall(curCamp);
-  const brandChartRows = departments
-    .map((item) => {
-      const value = activeIndex
-        ? unitIndex(activeIndex, curCamp, item.id)
-        : round1(mean(indexes.flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[item.id], curCamp)))));
-      return {
-        id: item.id,
-        name: item.name,
-        value,
-        delta: round1(value - brandChartAverage),
-      };
-    })
-    .sort((left, right) => right.value - left.value);
-  const allBrandValues = [...brandChartRows.map((row) => row.value), brandChartAverage];
+  const activeIndex = indexes.find((index) => index.id === focus) ?? indexes[0] ?? null;
+  const brandChartRows = activeIndex
+    ? activeIndex.statements
+        .map((statement) => {
+          const value = valueFor(statement.byDept[deptId], curCamp);
+          const org = companyStatement(statement, curCamp);
+          return {
+            id: statement.id,
+            name: statement.text,
+            value,
+            delta: round1(value - org),
+            org,
+          };
+        })
+        .sort((left, right) => right.value - left.value)
+    : [];
+  const allBrandValues = [...brandChartRows.map((row) => row.value), ...brandChartRows.map((row) => row.org)];
   const brandChartAxisMin = Math.floor((Math.min(...allBrandValues) - 2) / 5) * 5;
   const brandChartAxisMax = Math.ceil((Math.max(...allBrandValues) + 2) / 5) * 5;
   const brandChartAxisTicks = [];
   for (let tick = brandChartAxisMin; tick <= brandChartAxisMax; tick += 5) brandChartAxisTicks.push(tick);
-  const brandChartAxis = { min: brandChartAxisMin, max: brandChartAxisMax, ticks: brandChartAxisTicks };
+  const brandChartAxis = {
+    min: Number.isFinite(brandChartAxisMin) ? brandChartAxisMin : 0,
+    max: Number.isFinite(brandChartAxisMax) ? brandChartAxisMax : 100,
+    ticks: brandChartAxisTicks.length > 0 ? brandChartAxisTicks : [0, 20, 40, 60, 80, 100],
+  };
 
   const total = deptTotal(curCamp);
   const totalDelta = previous ? round1(total - deptTotal(previous)) : null;
@@ -265,7 +254,6 @@ export function EEDepartmentReport({
         </RailSection>
         <RailSection title="Index">
           <div className="rs-stack">
-            <button className={`index-btn${focus === ALL ? " active" : ""}`} onClick={() => setFocus(ALL)}>All indexes</button>
             {indexes.map((index) => <button key={index.id} className={`index-btn${focus === index.id ? " active" : ""}`} onClick={() => setFocus(index.id)}>{index.name}</button>)}
           </div>
         </RailSection>
@@ -284,11 +272,12 @@ export function EEDepartmentReport({
 
           {unitLabel === "Brand" ? (
             <div className="card" style={{ marginBottom: 18 }}>
-              <div className="card-head">
-                <h3 className="card-title">Brand Comparison</h3>
+              <div className="card-head flex items-center justify-between gap-4">
+                <h3 className="card-title">{activeIndex ? `${activeIndex.name} Statements` : "Statement Results"}</h3>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
               </div>
               <div className="card-body">
-                <BrandComparisonChart rows={brandChartRows} avg={brandChartAverage} axis={brandChartAxis} scoreColor={scoreColor} />
+                <BrandComparisonChart rows={brandChartRows} axis={brandChartAxis} scoreColor={scoreColor} />
               </div>
             </div>
           ) : null}

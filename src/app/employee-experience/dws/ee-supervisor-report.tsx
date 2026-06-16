@@ -44,24 +44,8 @@ function SupBarChart({ rows, axis, scoreColor }) {
         .sr-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}
         .sr-axis-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;padding:0}
         .sr-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
-        .sr-gap-col-head{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6E7E96;text-align:center;line-height:1.25}
         .sr-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
       `}</style>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col)",
-          alignItems: "end",
-          columnGap: 16,
-          marginBottom: 6,
-        }}
-      >
-        <div />
-        <div />
-        <div className="sr-gap-col">
-          <div className="sr-gap-col-head">Comparison to CSG</div>
-        </div>
-      </div>
       <div className="plot">
         <div
           className="grid-overlay"
@@ -201,7 +185,10 @@ export function EESupervisorReport({ data }: { data: any }) {
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
-            <div className="card-head"><h3 className="card-title">Leadership Effectiveness</h3></div>
+            <div className="card-head flex items-center justify-between gap-4">
+              <h3 className="card-title">Leadership Effectiveness</h3>
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
+            </div>
             <div className="card-body"><SupBarChart rows={barRows} axis={barAxis} scoreColor={scoreColor} /></div>
           </div>
 
