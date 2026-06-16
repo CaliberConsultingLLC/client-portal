@@ -25,22 +25,63 @@ function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
 }
 
-function HistoryChart({ campaigns, values, orgValues, compact = false }: { campaigns: any[]; values: number[]; orgValues?: number[] | null; compact?: boolean }) {
+function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M${points[0].x},${points[0].y}`;
+  if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+
+  let path = `M${points[0].x},${points[0].y}`;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const p0 = points[index - 1] ?? points[index];
+    const p1 = points[index];
+    const p2 = points[index + 1];
+    const p3 = points[index + 2] ?? p2;
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    path += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  }
+  return path;
+}
+
+function HistoryChart({
+  campaigns,
+  values,
+  orgValues,
+  backdropSeries = [],
+  compact = false,
+}: {
+  campaigns: any[];
+  values: number[];
+  orgValues?: number[] | null;
+  backdropSeries?: Array<{ id: string; values: number[] }>;
+  compact?: boolean;
+}) {
   const width = compact ? 640 : 940;
   const height = compact ? 238 : 292;
   const pad = { left: 36, right: compact ? 42 : 74, top: 18, bottom: 36 };
   const months = campaigns.map((campaign) => campaign.month);
   const maxMonth = Math.max(...months);
-  const domain = orgValues ? [...values, ...orgValues] : values;
+  const domain = [
+    ...values,
+    ...(orgValues ?? []),
+    ...backdropSeries.flatMap((series) => series.values),
+  ];
   const min = Math.floor((Math.min(...domain) - 2.5) / 2) * 2;
   const max = Math.ceil((Math.max(...domain) + 2.5) / 2) * 2;
   const xFor = (month) => pad.left + (month / maxMonth) * (width - pad.left - pad.right);
   const yFor = (value) => pad.top + (1 - (value - min) / (max - min)) * (height - pad.top - pad.bottom);
   const points = campaigns.map((campaign, index) => ({ x: xFor(campaign.month), y: yFor(values[index]), value: values[index] }));
-  const line = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
-  const area = `M${points[0].x},${height - pad.bottom} ${points.map((point) => `L${point.x},${point.y}`).join(" ")} L${points.at(-1).x},${height - pad.bottom} Z`;
+  const line = buildSmoothPath(points);
+  const area = `${buildSmoothPath(points)} L${points.at(-1).x},${height - pad.bottom} L${points[0].x},${height - pad.bottom} Z`;
   const orgPoints = orgValues?.map((value, index) => ({ x: xFor(campaigns[index].month), y: yFor(value), value }));
-  const orgLine = orgPoints?.map((point, index) => `${index === 0 ? "M" : "L"}${point.x},${point.y}`).join(" ");
+  const orgLine = orgPoints ? buildSmoothPath(orgPoints) : "";
+  const backdropPaths = backdropSeries.map((series) => {
+    const pts = series.values.map((value, index) => ({ x: xFor(campaigns[index].month), y: yFor(value) }));
+    return { id: series.id, path: buildSmoothPath(pts) };
+  });
   const yTicks = Array.from({ length: 5 }, (_, index) => min + ((max - min) * index) / 4);
 
   return (
@@ -58,6 +99,16 @@ function HistoryChart({ campaigns, values, orgValues, compact = false }: { campa
         <line key={campaigns[index].id} x1={point.x} x2={point.x} y1={pad.top} y2={height - pad.bottom} stroke="#E2E8EF" strokeDasharray="3 8" strokeWidth="1" />
       ))}
       <path d={area} fill="rgba(129,153,180,.22)" />
+      {backdropPaths.map((path, index) => (
+        <path
+          key={path.id}
+          d={path.path}
+          fill="none"
+          stroke={["#A5B4C7", "#B3BFCE", "#BFC9D6", "#CDD4DE", "#D6DCE4"][index % 5]}
+          strokeWidth="1.4"
+          opacity=".75"
+        />
+      ))}
       {orgLine ? <path d={orgLine} fill="none" stroke="#1C252A" strokeDasharray="6 5" strokeWidth="1.5" opacity=".7" /> : null}
       {orgPoints?.length && !compact ? (
         <g>
@@ -132,6 +183,13 @@ export function EEHistoricalReport({
   const orgAvgAt = (statements, campaignId) => round1(mean(statements.map((statement) => orgStatementValue(statement, campaignId))));
 
   const series = campaigns.map((campaign) => avgAt(scopeStatements, campaign.id));
+  const backdropSeries = useMemo(() => {
+    if (focusIndex) return [];
+    return indexes.slice(0, 5).map((index) => ({
+      id: index.id,
+      values: campaigns.map((campaign) => avgAt(index.statements, campaign.id)),
+    }));
+  }, [campaigns, focusIndex, indexes]);
   const orgSeries = isAll ? null : campaigns.map((campaign) => orgAvgAt(scopeStatements, campaign.id));
   const activeCampaignIndex = Math.max(
     0,
@@ -227,13 +285,13 @@ export function EEHistoricalReport({
               </div>
               <div className="card">
                 <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} compact /></div>
+                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} compact /></div>
               </div>
             </div>
           ) : (
             <div className="card" style={{ marginBottom: 18 }}>
               <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} /></div>
+              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} /></div>
             </div>
           )}
 
