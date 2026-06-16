@@ -206,9 +206,7 @@ function OrgComparisonBarChart({ rows, axis, color }: {
         .cmp-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
         .cmp-chip{position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
         .cmp-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
-        .cmp-org-dot{position:absolute;top:50%;width:16px;height:16px;border-radius:999px;background:#152238;border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.32);z-index:6}
         .cmp-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}
-        .cmp-axis-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;padding:0}
         .cmp-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
         .cmp-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
       `}</style>
@@ -231,7 +229,6 @@ function OrgComparisonBarChart({ rows, axis, color }: {
                   <div className="cmp-chip">{row.value.toFixed(1)}</div>
                 </div>
                 <div className="cmp-org" style={{ left: `${pct(row.org)}%` }} />
-                <div className="cmp-org-dot" style={{ left: `${pct(row.org)}%` }} />
               </div>
               <div className="cmp-gap-col">
                 <div className="cmp-gap-pill" style={{ background: gapTone.bg, color: gapTone.fg, borderColor: gapTone.border }}>
@@ -241,15 +238,6 @@ function OrgComparisonBarChart({ rows, axis, color }: {
             </div>
           );
         })}
-      </div>
-      <div className="cmp-axis-row">
-        <div />
-        <div className="axis">
-          {axis.ticks.map((tick) => (
-            <div key={tick} className="tick" style={{ left: `${pct(tick)}%` }}>{tick}</div>
-          ))}
-        </div>
-        <div />
       </div>
     </div>
   );
@@ -269,6 +257,9 @@ function DeptDeltaChart({ rows, axis }: { rows: { name: string; delta: number }[
         {rows.map((r, i) => {
           const s = dStyle(r.delta);
           const pos = r.delta >= 0;
+          const tone = pos
+            ? { fg: "#2F6A45", border: "#9BC6A9" }
+            : { fg: "#8A3D3A", border: "#D5A3A0" };
           const visualDelta = clampDeltaVisual(r.delta, axis);
           const w = Math.abs((visualDelta / span) * 100);
           const rawLeft = pos ? z0 : z0 - w;
@@ -282,7 +273,7 @@ function DeptDeltaChart({ rows, axis }: { rows: { name: string; delta: number }[
             <div title={r.name} style={{ padding: "3px 12px 3px 0", alignSelf: "center", fontSize: 12.5, lineHeight: 1.18, fontWeight: 500, color: "#152238", zIndex: 2 }}>{r.name}</div>
             <div style={{ position: "relative", height: 24, alignSelf: "center", zIndex: 2, overflow: "hidden" }}>
               <div style={{ position: "absolute", left: `${left}%`, width: `${width}%`, top: 0, bottom: 0, background: s.bg, borderRadius: 3, transition: "left .55s cubic-bezier(.34,1.1,.64,1), width .55s cubic-bezier(.34,1.1,.64,1)" }} />
-              <div style={{ position: "absolute", top: "50%", transform: pos ? "translate(-100%, -50%)" : "translateY(-50%)", left: `${labelAnchor}%`, background: s.bg, color: "#152238", fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{f1(r.delta)}</div>
+              <div style={{ position: "absolute", top: "50%", transform: pos ? "translate(-100%, -50%)" : "translateY(-50%)", left: `${labelAnchor}%`, background: "#FFFFFF", color: tone.fg, border: `1px solid ${tone.border}`, fontSize: 11, fontWeight: 800, borderRadius: 6, padding: "2px 8px", whiteSpace: "nowrap" }}>{f1(r.delta)}</div>
             </div>
             </div>
           );
