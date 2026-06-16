@@ -123,7 +123,12 @@ export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProje
             </div>
           </div>
 
-          <div className="card" style={{ marginBottom: 18 }}>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <EnpsTable rows={data.brandRows} title="Brand Comparison" />
+            <EnpsTable rows={data.departmentRows} title="Department Comparison" />
+          </div>
+
+          <div className="card" style={{ marginTop: 18, marginBottom: 18 }}>
             <div className="card-head">
               <h3 className="card-title">ENPS Trend</h3>
             </div>
@@ -156,11 +161,6 @@ export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProje
                 </table>
               </div>
             </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <EnpsTable rows={data.brandRows} title="Brand Comparison" />
-            <EnpsTable rows={data.departmentRows} title="Department Comparison" />
           </div>
         </div>
       </main>
