@@ -21,7 +21,7 @@ import { EEContextRail } from "./ee-context-rail";
 const REPORT_DATA = toHistoricalData();
 const ALL = "all";
 const BRAND_ORDER = [
-  "ABR",
+  "AVR",
   "Larson",
   "Elite",
   "Keeney",
@@ -30,8 +30,8 @@ const BRAND_ORDER = [
   "LKHS",
 ] as const;
 const BRAND_ALIASES: Record<string, string> = {
-  abr: "ABR",
-  avr: "ABR",
+  abr: "AVR",
+  avr: "AVR",
   larson: "Larson",
   elite: "Elite",
   keeney: "Keeney",
@@ -300,12 +300,12 @@ export function EEHistoricalReport({
 
     const text =
       spread >= 6
-        ? `Org insight: momentum is uneven across indexes, suggesting stronger practices are not scaling consistently. Prioritize manager routines that transfer ${strongest.name} behaviors into ${watch.name}.`
+        ? `Momentum is uneven across indexes, suggesting stronger practices are not scaling consistently. Prioritize manager routines that transfer ${strongest.name} behaviors into ${watch.name}.`
         : avgDelta >= 1.2 && positiveShare >= 0.7
-          ? `Org insight: results suggest broad adoption momentum rather than isolated gains. Lock in this lift by reinforcing cadence and accountability before the next campaign cycle.`
+          ? `Results suggest broad adoption momentum rather than isolated gains. Lock in this lift by reinforcing cadence and accountability before the next campaign cycle.`
           : avgDelta <= -0.8
-            ? `Org insight: patterns indicate early fatigue across core experience signals. Re-anchor team expectations now to prevent further softening in the next campaign window.`
-            : `Org insight: results are relatively stable but change is concentrated in pockets. Focus next actions on consistency so gains convert into system-wide movement.`;
+            ? `Patterns indicate early fatigue across core experience signals. Re-anchor team expectations now to prevent further softening in the next campaign window.`
+            : `Results are relatively stable but change is concentrated in pockets. Focus next actions on consistency so gains convert into system-wide movement.`;
     return clampInsight(text, 200);
   }, [indexSnapshots]);
   const brandInsights = useMemo(() => {
@@ -371,14 +371,14 @@ export function EEHistoricalReport({
       const spread = topIndex && watchIndex ? round1(topIndex.current - watchIndex.current) : 0;
       const text =
         !topIndex || !watchIndex
-          ? `${brand} insight: current results are available, but index signals are too sparse for a reliable directional interpretation yet.`
+          ? `Current results are available, but index signals are too sparse for a reliable directional interpretation yet.`
           : spread >= 6
-            ? `${brand} insight: performance appears fragmented across indexes, which points to inconsistent local execution. Focus next-cycle coaching on lifting ${watchIndex.name} without losing ${topIndex.name} momentum.`
+            ? `Performance appears fragmented across indexes, which points to inconsistent local execution. Focus next-cycle coaching on lifting ${watchIndex.name} without losing ${topIndex.name} momentum.`
             : avgDelta >= 1
-              ? `${brand} insight: improvement is broad enough to suggest adoption is taking hold. Reinforce current manager habits now so this momentum compounds into the next campaign.`
+              ? `Improvement is broad enough to suggest adoption is taking hold. Reinforce current manager habits now so this momentum compounds into the next campaign.`
               : avgDelta <= -0.8
-                ? `${brand} insight: patterns suggest early pressure on engagement quality. Prioritize fast corrective check-ins to stabilize sentiment before declines become structural.`
-                : `${brand} insight: results are steady but mostly flat, indicating limited conversion from effort to movement. Target one or two high-leverage behaviors for clearer lift next cycle.`;
+                ? `Patterns suggest early pressure on engagement quality. Prioritize fast corrective check-ins to stabilize sentiment before declines become structural.`
+                : `Results are steady but mostly flat, indicating limited conversion from effort to movement. Target one or two high-leverage behaviors for clearer lift next cycle.`;
       return {
         id: brand,
         name: brand,
@@ -429,7 +429,7 @@ export function EEHistoricalReport({
 
           {variant === "overview" ? (
             <div className="card" style={{ marginBottom: 18 }}>
-              <div className="card-head"><h3 className="card-title">Organization Insight</h3></div>
+              <div className="card-head"><h3 className="card-title">Insight</h3></div>
               <div className="card-body">
                 <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{overallInsight}</p>
               </div>
