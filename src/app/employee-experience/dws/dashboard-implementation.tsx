@@ -94,7 +94,7 @@ const GROUPS = [
       { id: "ee-historical-report" as const, label: "Detailed History" },
       { id: "exec-location" as const, label: "Heat Maps" },
       { id: "ee-location-comparison" as const, label: "Brand Comparison" },
-      { id: "ee-department-comparison" as const, label: "Job Category Comparison" },
+      { id: "ee-department-comparison" as const, label: "Job / Department Comparison" },
       { id: "ee-enps" as const, label: "ENPS" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
       { id: "hr-open-text" as const, label: "Open Text" },
@@ -106,8 +106,9 @@ const GROUPS = [
     perspectives: [
       { id: "ee-brand-report" as const, label: "Brand Report" },
       { id: "hr-supervisor" as const, label: "Supervisor Reports" },
-      { id: "ee-enps" as const, label: "ENPS" },
       { id: "ee-department-report" as const, label: "Job Category Report" },
+      { id: "ee-unit-department-report" as const, label: "Department Report" },
+      { id: "ee-enps" as const, label: "ENPS" },
       { id: "ee-brand-open-text" as const, label: "Open Text" },
     ],
   },
@@ -117,7 +118,7 @@ type GroupId = (typeof GROUPS)[number]["id"];
 type PerspectiveId =
   | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
   | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
-  | "dept-scorecard" | "ee-brand-report" | "ee-brand-open-text" | "ee-department-report" | "ee-historical-report" | "ee-enps";
+  | "dept-scorecard" | "ee-brand-report" | "ee-brand-open-text" | "ee-department-report" | "ee-unit-department-report" | "ee-historical-report" | "ee-enps";
 
 const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
   "exec-overview",
@@ -139,7 +140,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "exec-overview": "Campaign Overview",
   "exec-location": "Heat Maps",
   "ee-campaign-results": "Detailed Results",
-  "ee-department-comparison": "Job Category Comparison",
+  "ee-department-comparison": "Job / Department Comparison",
   "ee-location-comparison": "Brand Comparison",
   "ee-historical-report": "Detailed History",
   "ee-enps": "ENPS",
@@ -150,6 +151,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "ee-brand-report": "Brand Report",
   "ee-brand-open-text": "Open Text",
   "ee-department-report": "Job Category Report",
+  "ee-unit-department-report": "Department Report",
 };
 
 const OPEN_TEXT_FIELDS = [
@@ -1867,7 +1869,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "exec-overview": "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
     "exec-location": "Heat map rows are grouped by brand and demographic/workforce categories. Compare row totals to quickly identify where strengths and watch areas concentrate.",
     "ee-campaign-results": "Use Detailed Results filters in the left rail to investigate index and statement movement for specific groups. Green indicates positive movement and red indicates decline.",
-    "ee-department-comparison": "Each row is a job category for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-department-comparison": "Top section shows job categories and lower section shows departments for the same selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-historical-report": "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
     "ee-enps": "ENPS is shown as promoter minus detractor percentage points. Use this page for brand and department ENPS comparisons without affecting other index averages.",
@@ -1878,6 +1880,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "ee-brand-report": "This report compares each brand to organization averages by statement and index across selected campaigns.",
     "ee-brand-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
     "ee-department-report": "This report compares each job category to organization averages by statement and index across selected campaigns.",
+    "ee-unit-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
   };
 
   const fixedInfoRail = (
@@ -2078,6 +2081,7 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <EEDepartmentComparison
             data={reportBundle.departmentComparison}
+            secondaryData={reportBundle.departmentComparisonByDepartment}
             dashboardInstanceId={dashboardInstanceId}
             canEditGuidance={canEditGuidance}
             executiveRail={executiveRail}
@@ -2179,9 +2183,18 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <EEDepartmentReport
             key="job-category-report"
-            data={reportBundle.departmentReport}
+            data={reportBundle.jobCategoryReport}
             unitLabel="Job Category"
             reportHeading="JOB CATEGORY REPORT"
+          />
+        );
+      case "ee-unit-department-report":
+        return (
+          <EEDepartmentReport
+            key="department-report"
+            data={reportBundle.departmentReport}
+            unitLabel="Department"
+            reportHeading="DEPARTMENT REPORT"
           />
         );
       default: return null;
@@ -2206,7 +2219,8 @@ export function DwsEmployeeExperienceDashboardClient({
       activePersp === "ee-location-comparison" ||
       activePersp === "hr-supervisor" ||
       activePersp === "ee-brand-report" ||
-      activePersp === "ee-department-report"
+      activePersp === "ee-department-report" ||
+      activePersp === "ee-unit-department-report"
         ? content
         : <DashboardCanvas leftRail={leftRail} rightRail={canvasInfoRail}>{content}</DashboardCanvas>}
     </>

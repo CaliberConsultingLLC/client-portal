@@ -296,6 +296,7 @@ const ALL = "__ALL__";
 
 export function EEDepartmentComparison({
   data,
+  secondaryData,
   dashboardInstanceId,
   canEditGuidance = false,
   executiveRail,
@@ -307,6 +308,7 @@ export function EEDepartmentComparison({
   onStatementId,
 }: {
   data: Data;
+  secondaryData?: Data;
   dashboardInstanceId?: string;
   canEditGuidance?: boolean;
   executiveRail?: React.ReactNode;
@@ -409,6 +411,66 @@ export function EEDepartmentComparison({
       ? `${idx.name} index average across all statements`
       : "All indexes averaged across all statements";
 
+  const secondaryRows = useMemo(() => {
+    if (!secondaryData) return [];
+    const sourceIndex = !indexId
+      ? secondaryData.indexes
+      : secondaryData.indexes.filter((item) => item.id === indexId);
+    const resolvedIndexes = sourceIndex.length > 0 ? sourceIndex : secondaryData.indexes;
+    const resolvedIdx = resolvedIndexes[0] ?? secondaryData.indexes[0];
+    const secondaryStatement = statementId === ALL || resolvedIndexes.length !== 1
+      ? null
+      : resolvedIdx?.statements.find((statement) => statement.id === statementId) ?? null;
+    return secondaryData.departments.map((department) => {
+      let cur: number;
+      let prev: number | null;
+      if (secondaryStatement) {
+        const cell = secondaryStatement.byDept[department.id];
+        cur = cell.current;
+        const prior = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
+        prev = prior != null && prior > 0 ? prior : null;
+      } else {
+        const statements = resolvedIndexes.flatMap((index) => index.statements);
+        const curs = statements.map((statement) => statement.byDept[department.id].current);
+        const prevs = statements
+          .map((statement) => {
+            const prior = statement.byDept[department.id].comparisons[compId];
+            return Object.prototype.hasOwnProperty.call(statement.byDept[department.id].comparisons, compId) && prior > 0 ? prior : null;
+          })
+          .filter((value): value is number => value != null);
+        cur = r1(mean(curs));
+        prev = prevs.length > 0 ? r1(mean(prevs)) : null;
+      }
+      return { id: department.id, name: department.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
+    });
+  }, [secondaryData, indexId, statementId, compId]);
+  const secondaryRowsByValueDesc = useMemo(
+    () => [...secondaryRows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
+    [secondaryRows]
+  );
+  const secondaryRowsByDeltaDesc = useMemo(
+    () =>
+      secondaryRows
+        .filter((row) => row.delta != null)
+        .sort(
+          (left, right) =>
+            (right.delta as number) - (left.delta as number) || left.name.localeCompare(right.name)
+        ) as Array<{ id: string; name: string; value: number; prev: number | null; delta: number }>,
+    [secondaryRows]
+  );
+  const secondaryOverallAvg = useMemo(
+    () => (secondaryRows.length > 0 ? r1(mean(secondaryRows.map((row) => row.value))) : overallAvg),
+    [secondaryRows, overallAvg]
+  );
+  const secondaryDeltaAxis = useMemo(() => {
+    if (!secondaryData) return deltaAxis;
+    const fallback = secondaryData.display?.deltaAxis
+      ? { ...secondaryData.display.deltaAxis, ticks: secondaryData.display.deltaAxis.ticks ?? [-10, 0, 10] }
+      : { min: -10, max: 10, ticks: [-10, 0, 10] };
+    const validRows = secondaryRows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
+    return computeDeltaAxis(validRows, fallback);
+  }, [secondaryData, secondaryRows, deltaAxis]);
+
   return (
     <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
       {executiveRail}
@@ -430,7 +492,7 @@ export function EEDepartmentComparison({
 
         <div className="rounded-[18px] bg-white p-4 text-center" style={{ border: "1px solid #8798AA", boxShadow: "0 2px 8px rgba(15,23,42,.07)" }}>
           <img src={client.logoUrl ?? "/top-flight-logo.png"} alt={`${client.name} logo`} className="mx-auto h-auto w-[180px]" />
-          <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>{current.label.toUpperCase()} DEPARTMENT COMPARISON</div>
+          <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>{current.label.toUpperCase()} JOB / DEPARTMENT COMPARISON</div>
           <div className="mt-0.5 italic" style={{ fontSize: 10.5, color: "#6E7E96" }}>(compared to {comp.labelLong})</div>
         </div>
 
@@ -477,7 +539,7 @@ export function EEDepartmentComparison({
             {idx.statements.map(s => <option key={s.id} value={s.id}>{s.text}</option>)}
           </select>
           <p className="mt-2.5 px-0.5 text-[11px] leading-relaxed" style={{ color: "#6E7E96" }}>
-            Choose a single statement to compare job categories on that question, or keep the index average.
+            Choose a single statement to compare both job categories and departments on that question, or keep the index average.
           </p>
         </RailSection>
       </aside>
@@ -490,7 +552,7 @@ export function EEDepartmentComparison({
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Job Category Comparison</h2>
+                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Job / Department Comparison</h2>
                 <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong} · compared to {comp.label} · {scopeLabel}</p>
               </div>
               <div className="flex shrink-0 gap-3">
@@ -511,7 +573,7 @@ export function EEDepartmentComparison({
           <div className="flex flex-col gap-4">
             <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
               <div className="px-6 py-4 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
-                <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign</h3>
+                <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign — Job Category</h3>
                 <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
               </div>
               <div className="px-6 py-5">
@@ -528,6 +590,31 @@ export function EEDepartmentComparison({
                 <DeptDeltaChart rows={rowsByDeltaDesc.map(r => ({ name: r.name, delta: r.delta }))} axis={deltaAxis} />
               </div>
             </div>
+
+            {secondaryRows.length > 0 ? (
+              <>
+                <div style={{ height: 1, width: "100%", background: "#D3DDE7", margin: "4px 0" }} />
+                <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+                  <div className="px-6 py-4 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
+                    <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign — Department</h3>
+                    <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
+                  </div>
+                  <div className="px-6 py-5">
+                    <OrgComparisonBarChart rows={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: secondaryOverallAvg, delta: r1(row.value - secondaryOverallAvg) }))} axis={barAxis} color={sc} />
+                  </div>
+                </div>
+
+                <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+                  <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
+                    <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Point Difference (YoY) — Department</h3>
+                    <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by department vs {comp.label} · gains in green, declines in red.</p>
+                  </div>
+                  <div className="px-6 py-5">
+                    <DeptDeltaChart rows={secondaryRowsByDeltaDesc.map((row) => ({ name: row.name, delta: row.delta }))} axis={secondaryDeltaAxis} />
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
 
         </div>

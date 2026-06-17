@@ -482,8 +482,9 @@ function buildSegments(
   respondents: EmployeeExperienceRespondent[],
   campaigns: string[],
   currentLabel: string,
-  departments: Array<{ id: string; name: string }>,
-  minimumSegmentSize: number
+  groups: Array<{ id: string; name: string }>,
+  minimumSegmentSize: number,
+  groupField: "department" | "fieldCategory" = "department"
 ) {
   const comparisons = buildComparisons(campaigns, currentLabel);
 
@@ -506,17 +507,17 @@ function buildSegments(
           { responses: number; current: number; comparisons: Record<string, number> }
         > = {};
 
-        departments.forEach((department) => {
+        groups.forEach((group) => {
           const slice = (campaignLabel: string) =>
             respondentsForCampaign(respondents, campaignLabel).filter(
               (respondent) =>
-                respondent.department === department.name && respondent[dimension.field] === name
+                respondent[groupField] === group.name && respondent[dimension.field] === name
             );
 
           const currentSlice = slice(currentLabel);
           if (currentSlice.length < minimumSegmentSize) return;
 
-          byDept[department.id] = {
+          byDept[group.id] = {
             responses: currentSlice.length,
             current: toDisplayScore(
               average(
@@ -762,7 +763,7 @@ export function projectLocationComparisonData(
   };
 }
 
-export function projectDepartmentReportData(
+export function projectJobCategoryReportData(
   data: EmployeeExperienceDashboardData,
   options?: ProjectionOptions
 ) {
@@ -797,9 +798,88 @@ export function projectDepartmentReportData(
       campaigns,
       currentLabel,
       jobCategories,
-      data.settings.minimumSegmentSize
+      data.settings.minimumSegmentSize,
+      "fieldCategory"
     ),
     segmentMinResponses: data.settings.minimumSegmentSize,
+  };
+}
+
+export function projectDepartmentReportData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const departments = buildDepartments(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize
+  );
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons,
+    scale: REPORT_SCORE_SCALE,
+    departments,
+    indexes: buildByDeptStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      departments
+    ),
+    segments: buildSegments(
+      data.respondents,
+      campaigns,
+      currentLabel,
+      departments,
+      data.settings.minimumSegmentSize,
+      "department"
+    ),
+    segmentMinResponses: data.settings.minimumSegmentSize,
+  };
+}
+
+export function projectDepartmentComparisonByDepartmentData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const departments = buildDepartments(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize
+  );
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons: buildComparisons(campaigns, currentLabel),
+    scale: REPORT_SCORE_SCALE,
+    display: {
+      barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
+      deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
+    },
+    departments: departments.map((department) => ({ id: department.id, name: department.name })),
+    indexes: buildByDeptStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      departments
+    ),
   };
 }
 
@@ -1134,8 +1214,10 @@ export function buildEmployeeExperienceReportBundle(
   return {
     campaignResults: projectCampaignResultsData(data, options),
     departmentComparison: projectDepartmentComparisonData(data, options),
+    departmentComparisonByDepartment: projectDepartmentComparisonByDepartmentData(data, options),
     locationComparison: projectLocationComparisonData(data, options),
     brandReport: projectBrandReportData(data, options),
+    jobCategoryReport: projectJobCategoryReportData(data, options),
     departmentReport: projectDepartmentReportData(data, options),
     supervisorReport: projectSupervisorReportData(data, options),
     enpsReport: projectEnpsReportData(data, options),
