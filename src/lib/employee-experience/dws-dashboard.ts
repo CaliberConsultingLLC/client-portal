@@ -936,6 +936,19 @@ function parseRespondents(definitions: StatementDefinition[], databaseCsvText: s
     return typeof index === "number" ? row[index] ?? "" : "";
   };
 
+  const getJobCategoryValue = (row: string[]) => {
+    const explicit = getAliasedValue(row, [
+      "Job Category",
+      "job category",
+      "Field Category",
+      "field category",
+      "Category",
+    ]);
+    if (explicit.trim()) return explicit;
+    // CSG data contract: column N stores Job Category.
+    return row[13] ?? "";
+  };
+
   return records
     .filter((row) => {
       const status = getAliasedValue(row, ["Status"]).trim().toLowerCase();
@@ -958,8 +971,8 @@ function parseRespondents(definitions: StatementDefinition[], databaseCsvText: s
         department: normalizeLabel(getAliasedValue(row, ["Department", "Dept"]), "Unknown Department"),
         division: normalizeLabel(getAliasedValue(row, ["Division", "Division Name"]), "Unknown Division"),
         supervisor: normalizeLabel(getAliasedValue(row, ["Supervisor", "Manager"]), "Unknown Supervisor"),
-        jobTitle: normalizeLabel(getAliasedValue(row, ["Job Title", "Job Category", "Job Family", "Title"]), "Unknown Job Title"),
-        fieldCategory: normalizeLabel(getAliasedValue(row, ["Field Category", "Employment", "Employment Type", "Employee Type"]), "Unspecified"),
+        jobTitle: normalizeLabel(getAliasedValue(row, ["Job Title", "Job Family", "Title"]), "Unknown Job Title"),
+        fieldCategory: normalizeLabel(getJobCategoryValue(row), "Unspecified"),
         leadership: normalizeLabel(getAliasedValue(row, ["Leadership", "Leadership Level"]), "Unspecified"),
         generation: normalizeLabel(getAliasedValue(row, ["Generation", "Generational Cohort"]), "Unspecified"),
         rateType: normalizeLabel(getAliasedValue(row, ["Rate Type", "Pay Type"]), "Unspecified"),
