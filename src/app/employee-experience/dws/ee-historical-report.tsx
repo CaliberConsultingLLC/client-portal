@@ -51,6 +51,12 @@ function clampWords(text: string, maxWords: number) {
   return `${words.slice(0, maxWords).join(" ").trimEnd()}...`;
 }
 
+function shortStatement(text: string, maxWords = 8) {
+  const words = String(text).trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text.trim();
+  return `${words.slice(0, maxWords).join(" ")}...`;
+}
+
 function buildSmoothPath(points: Array<{ x: number; y: number }>) {
   if (points.length === 0) return "";
   if (points.length === 1) return `M${points[0].x},${points[0].y}`;
@@ -364,64 +370,91 @@ export function EEHistoricalReport({
 
     return orderedBrands.map((brand) => {
       const deptItems = grouped.get(brand) ?? [];
-      const sortedIndexes = indexes
-        .map((index) => ({
-          name: index.name,
-          current: weightedIndexScore(index, deptItems, activeCampaign.id),
-          previous: previousCampaign ? weightedIndexScore(index, deptItems, previousCampaign.id) : null,
-        }))
-        .filter((index): index is { name: string; current: number; previous: number | null } => index.current != null)
-        .map((index) => ({
-          ...index,
-          delta: index.previous == null ? null : round1(index.current - index.previous),
-        }))
-        .sort((left, right) => right.current - left.current);
-      const topIndex = sortedIndexes[0];
-      const watchIndex = sortedIndexes[sortedIndexes.length - 1];
-      const deltas = sortedIndexes
-        .map((index) => index.delta)
-        .filter((value): value is number => value != null);
-      const spread = topIndex && watchIndex ? round1(topIndex.current - watchIndex.current) : 0;
+
+      const statementSignals = indexes
+        .flatMap((index) =>
+          index.statements.map((statement) => {
+            const deptScores = deptItems
+              .map((department) => {
+                const score = statement.byDept?.[department.id]?.[activeCampaign.id];
+                const weight = Number(department.responsesByCampaign?.[activeCampaign.id] ?? department.responses ?? 0);
+                return typeof score === "number" && weight > 0
+                  ? { department: department.name, score, weight }
+                  : null;
+              })
+              .filter((entry): entry is { department: string; score: number; weight: number } => entry != null);
+            if (deptScores.length === 0) return null;
+
+            const currentWeighted =
+              deptScores.reduce((sum, entry) => sum + entry.score * entry.weight, 0) /
+              deptScores.reduce((sum, entry) => sum + entry.weight, 0);
+
+            const previousScores =
+              previousCampaign
+                ? deptItems
+                    .map((department) => {
+                      const score = statement.byDept?.[department.id]?.[previousCampaign.id];
+                      const weight = Number(department.responsesByCampaign?.[previousCampaign.id] ?? 0);
+                      return typeof score === "number" && weight > 0
+                        ? { score, weight }
+                        : null;
+                    })
+                    .filter((entry): entry is { score: number; weight: number } => entry != null)
+                : [];
+
+            const previousWeighted =
+              previousScores.length > 0
+                ? previousScores.reduce((sum, entry) => sum + entry.score * entry.weight, 0) /
+                  previousScores.reduce((sum, entry) => sum + entry.weight, 0)
+                : null;
+
+            const sortedDeptScores = [...deptScores].sort((left, right) => left.score - right.score);
+            const lowestDept = sortedDeptScores[0];
+            const highestDept = sortedDeptScores[sortedDeptScores.length - 1];
+
+            return {
+              indexName: index.name,
+              statement: statement.text,
+              current: round1(currentWeighted),
+              delta: previousWeighted == null ? null : round1(currentWeighted - previousWeighted),
+              spread: round1(highestDept.score - lowestDept.score),
+              lowestDept: lowestDept.department,
+            };
+          })
+        )
+        .filter(
+          (
+            entry
+          ): entry is {
+            indexName: string;
+            statement: string;
+            current: number;
+            delta: number | null;
+            spread: number;
+            lowestDept: string;
+          } => entry != null
+        );
+
+      const lowestStatements = [...statementSignals].sort((left, right) => left.current - right.current).slice(0, 4);
+      const weakest = lowestStatements[0];
+      const secondWeakest = lowestStatements[1];
+      const thirdWeakest = lowestStatements[2];
+      const keyAnomaly =
+        [...statementSignals].sort((left, right) => right.spread - left.spread)[0] ?? weakest;
+      const decliningWatch =
+        [...statementSignals]
+          .filter((entry) => entry.delta != null && entry.delta <= -0.8)
+          .sort((left, right) => (left.delta ?? 0) - (right.delta ?? 0))[0] ?? null;
+
       const responseCountForBrand = deptItems.reduce(
         (sum, department) => sum + Number(department.responsesByCampaign?.[activeCampaign.id] ?? department.responses ?? 0),
         0
       );
-      const overallValues = indexes
-        .map((index) => weightedIndexScore(index, deptItems, activeCampaign.id))
-        .filter((value): value is number => value != null);
-      const previousValues = previousCampaign
-        ? indexes
-            .map((index) => weightedIndexScore(index, deptItems, previousCampaign.id))
-            .filter((value): value is number => value != null)
-        : [];
-      const currentOverall = overallValues.length > 0 ? round1(mean(overallValues)) : null;
-      const previousOverall = previousValues.length > 0 ? round1(mean(previousValues)) : null;
-      const overallDelta = currentOverall != null && previousOverall != null ? round1(currentOverall - previousOverall) : null;
-      const orgGap = currentOverall != null ? round1(currentOverall - currentScore) : null;
-      const trendRead =
-        overallDelta == null
-          ? "holding roughly flat versus the prior campaign"
-          : overallDelta >= 0.8
-            ? "showing clear positive momentum"
-            : overallDelta <= -0.8
-              ? "showing visible softening"
-              : "moving only marginally versus the prior campaign";
-      const executionRead =
-        spread >= 6
-          ? `execution is uneven across indexes, with ${watchIndex?.name ?? "one index"} clearly lagging`
-          : "index performance is relatively balanced across the portfolio";
-      const orgGapRead =
-        orgGap == null
-          ? "relative position to the organization baseline is still stabilizing"
-          : orgGap >= 1
-            ? `the brand is currently outperforming the organization average by ${orgGap.toFixed(1)} points`
-            : orgGap <= -1
-              ? `the brand sits ${Math.abs(orgGap).toFixed(1)} points below the organization average`
-              : "the brand is tracking close to the organization average";
+
       const text =
-        !topIndex || !watchIndex
+        !weakest
           ? `${brand} has limited signal in the current cut, so directional interpretation should remain provisional until response depth improves.`
-          : `${brand} is ${trendRead} with ${responseCountForBrand} responses in the current campaign. ${orgGapRead}. The leading index is ${topIndex.name} (${topIndex.current.toFixed(1)}), while ${watchIndex.name} (${watchIndex.current.toFixed(1)}) defines the primary drag; ${executionRead}. Next-cycle focus should protect strengths in ${topIndex.name} while closing execution gaps in ${watchIndex.name} so gains convert into steadier, cross-index movement.`;
+          : `${brand} shows the clearest friction in "${shortStatement(weakest.statement)}" (${weakest.current.toFixed(1)}), "${shortStatement(secondWeakest?.statement ?? weakest.statement)}" (${(secondWeakest ?? weakest).current.toFixed(1)}), and "${shortStatement(thirdWeakest?.statement ?? weakest.statement)}" (${(thirdWeakest ?? weakest).current.toFixed(1)}). The strongest anomaly is "${shortStatement(keyAnomaly.statement)}", where internal spread is ${keyAnomaly.spread.toFixed(1)} points and ${keyAnomaly.lowestDept} is carrying the weakest response. ${decliningWatch ? `The fastest deterioration is in "${shortStatement(decliningWatch.statement)}" (${f1(decliningWatch.delta ?? 0)}), which should be triaged first.` : "No single statement is collapsing, so triage should prioritize these persistent low-score items."} With ${responseCountForBrand} responses, this pattern is actionable for targeted leader follow-through.`;
       return {
         id: brand,
         name: brand,
@@ -528,7 +561,7 @@ export function EEHistoricalReport({
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" style={{ marginBottom: 18 }}>
               {brandInsights.map((item) => (
                 <div key={item.id} className="card">
-                  <div className="card-head"><h3 className="card-title">{item.name}</h3></div>
+                  <div className="card-head"><h3 className="card-title">{item.name} Insights</h3></div>
                   <div className="card-body">
                     <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{item.insight}</p>
                   </div>
