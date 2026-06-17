@@ -527,6 +527,15 @@ export function EEHistoricalReport({
             </div>
           </div>
 
+          {variant === "overview" ? (
+            <div className="card" style={{ marginBottom: 18 }}>
+              <div className="card-head"><h3 className="card-title">Organizational Insight</h3></div>
+              <div className="card-body">
+                <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{overallInsight}</p>
+              </div>
+            </div>
+          ) : null}
+
 
           {variant === "overview" ? (
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]" style={{ marginBottom: 18 }}>
