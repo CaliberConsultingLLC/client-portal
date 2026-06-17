@@ -45,9 +45,10 @@ function textFor(color) {
   return isLightBand(color) ? "#1C252A" : "#fff";
 }
 
-function clampInsight(text: string, max = 200) {
-  if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
+function clampWords(text: string, maxWords: number) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text.trim();
+  return `${words.slice(0, maxWords).join(" ").trimEnd()}...`;
 }
 
 function buildSmoothPath(points: Array<{ x: number; y: number }>) {
@@ -294,19 +295,32 @@ export function EEHistoricalReport({
       .map((index) => index.delta)
       .filter((value): value is number => value != null);
     const avgDelta = deltas.length > 0 ? round1(mean(deltas)) : 0;
-    const positiveShare = deltas.length > 0
-      ? deltas.filter((value) => value > 0).length / deltas.length
-      : 0;
-
-    const text =
+    const positiveShare = deltas.length > 0 ? Math.round((deltas.filter((value) => value > 0).length / deltas.length) * 100) : 0;
+    const totalGain = round1(currentScore - series[0]);
+    const lastStep = deltaLast ?? 0;
+    const responses = totalResponsesByCampaign[activeCampaign.id] ?? responseCount;
+    const directionPhrase =
+      avgDelta >= 1
+        ? "broad upward movement"
+        : avgDelta <= -0.8
+          ? "broad softening"
+          : "mixed movement with limited net lift";
+    const consistencyPhrase =
       spread >= 6
-        ? `Momentum is uneven across indexes, suggesting stronger practices are not scaling consistently. Prioritize manager routines that transfer ${strongest.name} behaviors into ${watch.name}.`
-        : avgDelta >= 1.2 && positiveShare >= 0.7
-          ? `Results suggest broad adoption momentum rather than isolated gains. Lock in this lift by reinforcing cadence and accountability before the next campaign cycle.`
-          : avgDelta <= -0.8
-            ? `Patterns indicate early fatigue across core experience signals. Re-anchor team expectations now to prevent further softening in the next campaign window.`
-            : `Results are relatively stable but change is concentrated in pockets. Focus next actions on consistency so gains convert into system-wide movement.`;
-    return clampInsight(text, 200);
+        ? "execution consistency is the core constraint right now"
+        : "index performance is comparatively tight, which gives leadership a stronger base to scale improvements";
+
+    const narrative = [
+      `Campaign ${activeCampaign.label} indicates ${directionPhrase} across the organization, with ${responses} responses shaping this readout.`,
+      `${strongest.name} remains the strongest index at ${strongest.current.toFixed(1)}, while ${watch.name} sits lowest at ${watch.current.toFixed(1)}, creating a ${spread.toFixed(1)}-point spread that signals where employee experience is not landing evenly.`,
+      `At an aggregate level, indexes are moving ${avgDelta >= 0 ? "up" : "down"} by ${Math.abs(avgDelta).toFixed(1)} points on average, and ${positiveShare}% of indexes improved versus the prior campaign.`,
+      `The organization has moved ${totalGain >= 0 ? "up" : "down"} ${Math.abs(totalGain).toFixed(1)} points since ${first.label}, so this is not just short-term noise; it reflects a multi-cycle pattern.`,
+      `The latest step change versus last campaign is ${lastStep >= 0 ? `+${lastStep.toFixed(1)}` : lastStep.toFixed(1)}, which suggests current momentum is ${Math.abs(lastStep) < 0.4 ? "plateauing" : lastStep > 0 ? "still building" : "starting to reverse"}.`,
+      `For executive action, ${consistencyPhrase}.`,
+      `The near-term priority is to protect what is driving ${strongest.name} while translating those management and communication behaviors into ${watch.name}, where operational friction is most likely eroding trust and sustainability.`,
+      `If that transfer succeeds before the next cycle, the company should see a cleaner conversion of effort into organization-wide movement instead of isolated wins.`,
+    ].join(" ");
+    return clampWords(narrative, 200);
   }, [indexSnapshots]);
   const brandInsights = useMemo(() => {
     const normalizeBrand = (value: string) => {
@@ -367,25 +381,54 @@ export function EEHistoricalReport({
       const deltas = sortedIndexes
         .map((index) => index.delta)
         .filter((value): value is number => value != null);
-      const avgDelta = deltas.length > 0 ? round1(mean(deltas)) : 0;
       const spread = topIndex && watchIndex ? round1(topIndex.current - watchIndex.current) : 0;
+      const responseCountForBrand = deptItems.reduce(
+        (sum, department) => sum + Number(department.responsesByCampaign?.[activeCampaign.id] ?? department.responses ?? 0),
+        0
+      );
+      const overallValues = indexes
+        .map((index) => weightedIndexScore(index, deptItems, activeCampaign.id))
+        .filter((value): value is number => value != null);
+      const previousValues = previousCampaign
+        ? indexes
+            .map((index) => weightedIndexScore(index, deptItems, previousCampaign.id))
+            .filter((value): value is number => value != null)
+        : [];
+      const currentOverall = overallValues.length > 0 ? round1(mean(overallValues)) : null;
+      const previousOverall = previousValues.length > 0 ? round1(mean(previousValues)) : null;
+      const overallDelta = currentOverall != null && previousOverall != null ? round1(currentOverall - previousOverall) : null;
+      const orgGap = currentOverall != null ? round1(currentOverall - currentScore) : null;
+      const trendRead =
+        overallDelta == null
+          ? "holding roughly flat versus the prior campaign"
+          : overallDelta >= 0.8
+            ? "showing clear positive momentum"
+            : overallDelta <= -0.8
+              ? "showing visible softening"
+              : "moving only marginally versus the prior campaign";
+      const executionRead =
+        spread >= 6
+          ? `execution is uneven across indexes, with ${watchIndex?.name ?? "one index"} clearly lagging`
+          : "index performance is relatively balanced across the portfolio";
+      const orgGapRead =
+        orgGap == null
+          ? "relative position to the organization baseline is still stabilizing"
+          : orgGap >= 1
+            ? `the brand is currently outperforming the organization average by ${orgGap.toFixed(1)} points`
+            : orgGap <= -1
+              ? `the brand sits ${Math.abs(orgGap).toFixed(1)} points below the organization average`
+              : "the brand is tracking close to the organization average";
       const text =
         !topIndex || !watchIndex
-          ? `Current results are available, but index signals are too sparse for a reliable directional interpretation yet.`
-          : spread >= 6
-            ? `Performance appears fragmented across indexes, which points to inconsistent local execution. Focus next-cycle coaching on lifting ${watchIndex.name} without losing ${topIndex.name} momentum.`
-            : avgDelta >= 1
-              ? `Improvement is broad enough to suggest adoption is taking hold. Reinforce current manager habits now so this momentum compounds into the next campaign.`
-              : avgDelta <= -0.8
-                ? `Patterns suggest early pressure on engagement quality. Prioritize fast corrective check-ins to stabilize sentiment before declines become structural.`
-                : `Results are steady but mostly flat, indicating limited conversion from effort to movement. Target one or two high-leverage behaviors for clearer lift next cycle.`;
+          ? `${brand} has limited signal in the current cut, so directional interpretation should remain provisional until response depth improves.`
+          : `${brand} is ${trendRead} with ${responseCountForBrand} responses in the current campaign. ${orgGapRead}. The leading index is ${topIndex.name} (${topIndex.current.toFixed(1)}), while ${watchIndex.name} (${watchIndex.current.toFixed(1)}) defines the primary drag; ${executionRead}. Next-cycle focus should protect strengths in ${topIndex.name} while closing execution gaps in ${watchIndex.name} so gains convert into steadier, cross-index movement.`;
       return {
         id: brand,
         name: brand,
-        insight: clampInsight(text, 200),
+        insight: clampWords(text, 100),
       };
     });
-  }, [departments, indexes, activeCampaign.id, previousCampaign?.id]);
+  }, [departments, indexes, activeCampaign.id, previousCampaign?.id, currentScore, first.label]);
 
   useEffect(() => {
     if (selectedIndexId && selectedIndexId !== focus) {
@@ -429,7 +472,7 @@ export function EEHistoricalReport({
 
           {variant === "overview" ? (
             <div className="card" style={{ marginBottom: 18 }}>
-              <div className="card-head"><h3 className="card-title">Insight</h3></div>
+              <div className="card-head"><h3 className="card-title">Organizational Insight</h3></div>
               <div className="card-body">
                 <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{overallInsight}</p>
               </div>
