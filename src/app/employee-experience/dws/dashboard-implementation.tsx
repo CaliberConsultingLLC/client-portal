@@ -94,7 +94,7 @@ const GROUPS = [
       { id: "ee-historical-report" as const, label: "Detailed History" },
       { id: "exec-location" as const, label: "Heat Maps" },
       { id: "ee-location-comparison" as const, label: "Brand Comparison" },
-      { id: "ee-department-comparison" as const, label: "Department Comparison" },
+      { id: "ee-department-comparison" as const, label: "Job Category Comparison" },
       { id: "ee-enps" as const, label: "ENPS" },
       { id: "hr-index-dive" as const, label: "Index Deep Dive" },
       { id: "hr-open-text" as const, label: "Open Text" },
@@ -107,7 +107,7 @@ const GROUPS = [
       { id: "ee-brand-report" as const, label: "Brand Report" },
       { id: "hr-supervisor" as const, label: "Supervisor Reports" },
       { id: "ee-enps" as const, label: "ENPS" },
-      { id: "ee-department-report" as const, label: "Department Report" },
+      { id: "ee-department-report" as const, label: "Job Category Report" },
       { id: "ee-brand-open-text" as const, label: "Open Text" },
     ],
   },
@@ -139,7 +139,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "exec-overview": "Campaign Overview",
   "exec-location": "Heat Maps",
   "ee-campaign-results": "Detailed Results",
-  "ee-department-comparison": "Department Comparison",
+  "ee-department-comparison": "Job Category Comparison",
   "ee-location-comparison": "Brand Comparison",
   "ee-historical-report": "Detailed History",
   "ee-enps": "ENPS",
@@ -149,7 +149,7 @@ const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
   "dept-scorecard": "Department Scorecard",
   "ee-brand-report": "Brand Report",
   "ee-brand-open-text": "Open Text",
-  "ee-department-report": "Department Report",
+  "ee-department-report": "Job Category Report",
 };
 
 const OPEN_TEXT_FIELDS = [
@@ -1877,7 +1877,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "dept-scorecard": "Scorecards summarize department performance, statement strengths, and focus areas with demographic cuts.",
     "ee-brand-report": "This report compares each brand to organization averages by statement and index across selected campaigns.",
     "ee-brand-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
-    "ee-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
+    "ee-department-report": "This report compares each job category to organization averages by statement and index across selected campaigns.",
   };
 
   const fixedInfoRail = (
@@ -2176,7 +2176,14 @@ export function DwsEmployeeExperienceDashboardClient({
           />
         );
       case "ee-department-report":
-        return <EEDepartmentReport key="department-report" data={reportBundle.departmentReport} />;
+        return (
+          <EEDepartmentReport
+            key="job-category-report"
+            data={reportBundle.departmentReport}
+            unitLabel="Job Category"
+            reportHeading="JOB CATEGORY REPORT"
+          />
+        );
       default: return null;
     }
   }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, selectedDept, deptOpts, reportBundle, campaignResultsBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);

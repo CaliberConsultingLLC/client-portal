@@ -259,7 +259,7 @@ function buildJobCategories(
   const currentRespondents = respondentsForCampaign(respondents, currentLabel);
   const counts = new Map<string, number>();
   currentRespondents.forEach((respondent) => {
-    const category = respondent.jobTitle?.trim();
+    const category = respondent.fieldCategory?.trim();
     if (!category) return;
     counts.set(category, (counts.get(category) ?? 0) + 1);
   });
@@ -271,6 +271,7 @@ function buildJobCategories(
       id: slugify(name),
       name,
       responses,
+      location: "",
     }));
 }
 
@@ -332,7 +333,7 @@ function buildByJobCategoryStatements(
       jobCategories.forEach((category) => {
         const categoryRespondents = (campaignLabel: string) =>
           respondentsForCampaign(respondents, campaignLabel).filter(
-            (respondent) => respondent.jobTitle === category.name
+            (respondent) => respondent.fieldCategory === category.name
           );
 
         byDept[category.id] = {
@@ -767,7 +768,7 @@ export function projectDepartmentReportData(
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
   const campaigns = sortedCampaigns(data.meta.campaigns);
-  const departments = buildDepartments(
+  const jobCategories = buildJobCategories(
     data.respondents,
     currentLabel,
     data.settings.minimumSegmentSize
@@ -783,13 +784,13 @@ export function projectDepartmentReportData(
     },
     comparisons,
     scale: REPORT_SCORE_SCALE,
-    departments,
-    indexes: buildByDeptStatements(
+    departments: jobCategories,
+    indexes: buildByJobCategoryStatements(
       data.questions,
       data.respondents,
       campaigns,
       currentLabel,
-      departments
+      jobCategories
     ),
     segments: buildSegments(
       data.respondents,

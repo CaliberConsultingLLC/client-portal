@@ -477,7 +477,7 @@ export function EEDepartmentComparison({
             {idx.statements.map(s => <option key={s.id} value={s.id}>{s.text}</option>)}
           </select>
           <p className="mt-2.5 px-0.5 text-[11px] leading-relaxed" style={{ color: "#6E7E96" }}>
-            Choose a single statement to compare departments on that question, or keep the index average.
+            Choose a single statement to compare job categories on that question, or keep the index average.
           </p>
         </RailSection>
       </aside>
@@ -490,7 +490,7 @@ export function EEDepartmentComparison({
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Department Comparison</h2>
+                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Job Category Comparison</h2>
                 <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong} · compared to {comp.label} · {scopeLabel}</p>
               </div>
               <div className="flex shrink-0 gap-3">
