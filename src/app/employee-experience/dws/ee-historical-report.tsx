@@ -527,14 +527,6 @@ export function EEHistoricalReport({
             </div>
           </div>
 
-          {variant === "overview" ? (
-            <div className="card" style={{ marginBottom: 18 }}>
-              <div className="card-head"><h3 className="card-title">Organizational Insight</h3></div>
-              <div className="card-body">
-                <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{overallInsight}</p>
-              </div>
-            </div>
-          ) : null}
 
           {variant === "overview" ? (
             <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]" style={{ marginBottom: 18 }}>
@@ -581,35 +573,6 @@ export function EEHistoricalReport({
             </div>
           )}
 
-          {variant === "overview" ? (
-            <>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ height: 1, width: "100%", background: "#D3DDE7", marginBottom: 10 }} />
-                <h3
-                  style={{
-                    margin: 0,
-                    color: "#1C252A",
-                    fontSize: 14,
-                    fontWeight: 800,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Brand Level Insights
-                </h3>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" style={{ marginBottom: 18 }}>
-                {brandInsights.map((item) => (
-                  <div key={item.id} className="card">
-                    <div className="card-head"><h3 className="card-title">{item.name} Insights</h3></div>
-                    <div className="card-body">
-                      <p style={{ margin: 0, color: "#3B4B63", fontSize: 13, lineHeight: 1.45 }}>{item.insight}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
 
           {variant !== "overview" ? (
             <>
