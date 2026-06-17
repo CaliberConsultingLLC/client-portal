@@ -96,7 +96,6 @@ const GROUPS = [
       { id: "ee-location-comparison" as const, label: "Brand Comparison" },
       { id: "ee-department-comparison" as const, label: "Job / Department Comparison" },
       { id: "ee-enps" as const, label: "ENPS" },
-      { id: "hr-index-dive" as const, label: "Index Deep Dive" },
       { id: "hr-open-text" as const, label: "Open Text" },
     ],
   },
@@ -133,6 +132,12 @@ const EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER = new Set<PerspectiveId>([
   "exec-overview",
   "ee-campaign-results",
   "exec-location",
+  "ee-enps",
+]);
+const EXECUTIVE_PERSPECTIVES_WITHOUT_BRAND_FILTER = new Set<PerspectiveId>([
+  "exec-overview",
+  "exec-location",
+  "ee-location-comparison",
   "ee-enps",
 ]);
 
@@ -1735,6 +1740,7 @@ export function DwsEmployeeExperienceDashboardClient({
   const activeBrandIndex = activeExecIndexId
     ? reportBundle.locationComparison.indexes.find((index) => index.id === activeExecIndexId)
     : undefined;
+  const showExecutiveBrandFilter = !EXECUTIVE_PERSPECTIVES_WITHOUT_BRAND_FILTER.has(activePersp);
 
   useEffect(() => {
     const preferredCurrent = resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN);
@@ -1777,7 +1783,7 @@ export function DwsEmployeeExperienceDashboardClient({
       onIndexId={setExecIndexId}
       showIndexSection={!EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER.has(activePersp)}
       includeAllIndexOption
-      locations={brandLocations}
+      locations={showExecutiveBrandFilter ? brandLocations : []}
       location={execLocation}
       onLocation={setExecLocation}
       extraSections={
