@@ -435,26 +435,50 @@ export function EEHistoricalReport({
           } => entry != null
         );
 
-      const lowestStatements = [...statementSignals].sort((left, right) => left.current - right.current).slice(0, 4);
+      const lowestStatements = [...statementSignals].sort((left, right) => left.current - right.current).slice(0, 3);
       const weakest = lowestStatements[0];
-      const secondWeakest = lowestStatements[1];
-      const thirdWeakest = lowestStatements[2];
       const keyAnomaly =
         [...statementSignals].sort((left, right) => right.spread - left.spread)[0] ?? weakest;
       const decliningWatch =
         [...statementSignals]
           .filter((entry) => entry.delta != null && entry.delta <= -0.8)
           .sort((left, right) => (left.delta ?? 0) - (right.delta ?? 0))[0] ?? null;
+      const indexSnapshotsForBrand = indexes
+        .map((index) => ({
+          name: index.name,
+          score: weightedIndexScore(index, deptItems, activeCampaign.id),
+        }))
+        .filter((entry): entry is { name: string; score: number } => entry.score != null)
+        .sort((left, right) => right.score - left.score);
+      const topIndex = indexSnapshotsForBrand[0];
+      const bottomIndex = indexSnapshotsForBrand[indexSnapshotsForBrand.length - 1];
+      const indexSpread =
+        topIndex && bottomIndex
+          ? round1(topIndex.score - bottomIndex.score)
+          : null;
 
       const responseCountForBrand = deptItems.reduce(
         (sum, department) => sum + Number(department.responsesByCampaign?.[activeCampaign.id] ?? department.responses ?? 0),
         0
       );
 
-      const text =
-        !weakest
-          ? `${brand} has limited signal in the current cut, so directional interpretation should remain provisional until response depth improves.`
-          : `${brand} shows the clearest friction in "${shortStatement(weakest.statement)}" (${weakest.current.toFixed(1)}), "${shortStatement(secondWeakest?.statement ?? weakest.statement)}" (${(secondWeakest ?? weakest).current.toFixed(1)}), and "${shortStatement(thirdWeakest?.statement ?? weakest.statement)}" (${(thirdWeakest ?? weakest).current.toFixed(1)}). The strongest anomaly is "${shortStatement(keyAnomaly.statement)}", where internal spread is ${keyAnomaly.spread.toFixed(1)} points and ${keyAnomaly.lowestDept} is carrying the weakest response. ${decliningWatch ? `The fastest deterioration is in "${shortStatement(decliningWatch.statement)}" (${f1(decliningWatch.delta ?? 0)}), which should be triaged first.` : "No single statement is collapsing, so triage should prioritize these persistent low-score items."} With ${responseCountForBrand} responses, this pattern is actionable for targeted leader follow-through.`;
+      const actionSentence = decliningWatch
+        ? `Start with "${shortStatement(decliningWatch.statement)}" first, where momentum is reversing (${f1(decliningWatch.delta ?? 0)}), then tighten leader follow-through in ${keyAnomaly.lowestDept} to stabilize delivery.`
+        : `Prioritize one focused action plan around "${shortStatement(weakest?.statement ?? "")}" and require weekly leader follow-through in ${keyAnomaly.lowestDept} until consistency improves.`;
+      const contextSentence =
+        topIndex && bottomIndex && indexSpread != null
+          ? `${brand} is not failing broadly, but execution is uneven: ${topIndex.name} outperforms ${bottomIndex.name} by ${indexSpread.toFixed(1)} points.`
+          : `${brand} shows mixed performance, with clear pockets where execution is not translating into a consistent employee experience.`;
+      const signalSentence = weakest
+        ? `The clearest friction is "${shortStatement(weakest.statement)}" at ${weakest.current.toFixed(1)}, and the widest internal gap appears in "${shortStatement(keyAnomaly.statement)}" (${keyAnomaly.spread.toFixed(1)}-point spread).`
+        : `${brand} has limited signal in the current cut, so directional interpretation should remain provisional until response depth improves.`;
+      const closingSentence =
+        responseCountForBrand >= 30
+          ? `With ${responseCountForBrand} responses, this is actionable now and should be treated as an execution issue, not a measurement issue.`
+          : `Response volume is still light (${responseCountForBrand}), so validate direction next cycle while acting on the current weak spot.`;
+      const text = !weakest
+        ? signalSentence
+        : `${contextSentence} ${signalSentence} ${actionSentence} ${closingSentence}`;
       return {
         id: brand,
         name: brand,
