@@ -796,7 +796,7 @@ export function projectDepartmentReportData(
       data.respondents,
       campaigns,
       currentLabel,
-      departments,
+      jobCategories,
       data.settings.minimumSegmentSize
     ),
     segmentMinResponses: data.settings.minimumSegmentSize,
