@@ -562,8 +562,12 @@ function buildBrandSegments(
   minimumSegmentSize: number
 ) {
   const comparisons = buildComparisons(campaigns, currentLabel);
+  const brandSegmentFields = [
+    ...SEGMENT_FIELDS,
+    { id: "job-category", label: "Job Category", field: "fieldCategory" as const },
+  ];
 
-  return SEGMENT_FIELDS.map((dimension) => {
+  return brandSegmentFields.map((dimension) => {
     const groupNames = Array.from(
       new Set(
         respondentsForCampaign(respondents, currentLabel)
