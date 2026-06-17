@@ -522,7 +522,7 @@ export function EEDepartmentComparison({
             <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
               <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
                 <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Point Difference (YoY)</h3>
-                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by department vs {comp.label} · gains in green, declines in red.</p>
+                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by job category vs {comp.label} · gains in green, declines in red.</p>
               </div>
               <div className="px-6 py-5">
                 <DeptDeltaChart rows={rowsByDeltaDesc.map(r => ({ name: r.name, delta: r.delta }))} axis={deltaAxis} />
@@ -534,7 +534,7 @@ export function EEDepartmentComparison({
       </main>
 
       <aside className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6" style={EE_GUIDANCE_RAIL_STYLE}>
-        <EEContextRail howToRead="Each row is a department for the selected index or statement. Dashed line marks company average, and Point Difference shows movement vs compared campaign." />
+        <EEContextRail howToRead="Each row is a job category for the selected index or statement. Dashed line marks company average, and Point Difference shows movement vs compared campaign." />
         {dashboardInstanceId ? (
           <GuidancePinRail
             dashboardInstanceId={dashboardInstanceId}

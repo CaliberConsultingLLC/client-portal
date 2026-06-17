@@ -1867,7 +1867,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "exec-overview": "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
     "exec-location": "Heat map rows are grouped by brand and demographic/workforce categories. Compare row totals to quickly identify where strengths and watch areas concentrate.",
     "ee-campaign-results": "Use Detailed Results filters in the left rail to investigate index and statement movement for specific groups. Green indicates positive movement and red indicates decline.",
-    "ee-department-comparison": "Each row is a department for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-department-comparison": "Each row is a job category for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-historical-report": "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
     "ee-enps": "ENPS is shown as promoter minus detractor percentage points. Use this page for brand and department ENPS comparisons without affecting other index averages.",

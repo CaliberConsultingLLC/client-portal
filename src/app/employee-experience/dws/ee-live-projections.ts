@@ -251,6 +251,29 @@ function buildDepartments(
     });
 }
 
+function buildJobCategories(
+  respondents: EmployeeExperienceRespondent[],
+  currentLabel: string,
+  minimumSegmentSize: number
+) {
+  const currentRespondents = respondentsForCampaign(respondents, currentLabel);
+  const counts = new Map<string, number>();
+  currentRespondents.forEach((respondent) => {
+    const category = respondent.jobTitle?.trim();
+    if (!category) return;
+    counts.set(category, (counts.get(category) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .filter(([, count]) => count >= minimumSegmentSize)
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([name, responses]) => ({
+      id: slugify(name),
+      name,
+      responses,
+    }));
+}
+
 function buildByDeptStatements(
   questions: EmployeeExperienceQuestionDefinition[],
   respondents: EmployeeExperienceRespondent[],
@@ -278,6 +301,47 @@ function buildByDeptStatements(
               const priorLabel =
                 campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
               return [comparison.id, itemDisplayScore(deptRespondents(priorLabel), question.itemId)];
+            })
+          ),
+        };
+      });
+
+      return {
+        id: `${slugify(dimension)}-${index + 1}`,
+        text: question.statement,
+        byDept,
+      };
+    }),
+  }));
+}
+
+function buildByJobCategoryStatements(
+  questions: EmployeeExperienceQuestionDefinition[],
+  respondents: EmployeeExperienceRespondent[],
+  campaigns: string[],
+  currentLabel: string,
+  jobCategories: Array<{ id: string; name: string }>
+) {
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return Array.from(groupQuestionsByDimension(questions).entries()).map(([dimension, items]) => ({
+    id: slugify(dimension),
+    name: dimension,
+    statements: items.map((question, index) => {
+      const byDept: Record<string, { current: number; comparisons: Record<string, number> }> = {};
+      jobCategories.forEach((category) => {
+        const categoryRespondents = (campaignLabel: string) =>
+          respondentsForCampaign(respondents, campaignLabel).filter(
+            (respondent) => respondent.jobTitle === category.name
+          );
+
+        byDept[category.id] = {
+          current: itemDisplayScore(categoryRespondents(currentLabel), question.itemId),
+          comparisons: Object.fromEntries(
+            comparisons.map((comparison) => {
+              const priorLabel =
+                campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
+              return [comparison.id, itemDisplayScore(categoryRespondents(priorLabel), question.itemId)];
             })
           ),
         };
@@ -631,7 +695,7 @@ export function projectDepartmentComparisonData(
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
   const campaigns = sortedCampaigns(data.meta.campaigns);
-  const departments = buildDepartments(
+  const jobCategories = buildJobCategories(
     data.respondents,
     currentLabel,
     data.settings.minimumSegmentSize
@@ -650,13 +714,13 @@ export function projectDepartmentComparisonData(
       barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
       deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
     },
-    departments: departments.map((department) => ({ id: department.id, name: department.name })),
-    indexes: buildByDeptStatements(
+    departments: jobCategories.map((category) => ({ id: category.id, name: category.name })),
+    indexes: buildByJobCategoryStatements(
       data.questions,
       data.respondents,
       campaigns,
       currentLabel,
-      departments
+      jobCategories
     ),
   };
 }
