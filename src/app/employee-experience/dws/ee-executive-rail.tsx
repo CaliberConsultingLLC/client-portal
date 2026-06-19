@@ -41,6 +41,8 @@ export function EEExecutiveRail({
   indexes,
   indexId,
   onIndexId,
+  showIndexSection = true,
+  includeAllIndexOption = false,
   locations,
   location,
   onLocation,
@@ -61,6 +63,8 @@ export function EEExecutiveRail({
   indexes: EEExecutiveIndex[];
   indexId: string;
   onIndexId: (value: string) => void;
+  showIndexSection?: boolean;
+  includeAllIndexOption?: boolean;
   locations: string[];
   location: string;
   onLocation: (value: string) => void;
@@ -78,6 +82,7 @@ export function EEExecutiveRail({
         left: 0,
         width: 268,
         overflow: "auto",
+        overflowAnchor: "none",
         background: "#E8ECE9",
         borderRight: "1px solid #D4DAD6",
       }}
@@ -122,9 +127,19 @@ export function EEExecutiveRail({
         </div>
       </RailSection>
 
-      {indexes.length > 0 ? (
+      {showIndexSection && indexes.length > 0 ? (
         <RailSection title="Index">
           <div className="flex flex-col gap-2">
+            {includeAllIndexOption ? (
+              <button
+                type="button"
+                onClick={() => onIndexId("")}
+                className="w-full rounded-[11px] px-3 py-2.5 text-center text-sm font-semibold transition-colors"
+                style={toggleStyle(!indexId)}
+              >
+                All indexes
+              </button>
+            ) : null}
             {indexes.map((item) => (
               <button
                 key={item.id}
@@ -162,6 +177,7 @@ export function EEExecutiveRail({
 
 export const EE_PERSPECTIVE_CANVAS_STYLE = {
   minHeight: "calc(100vh - var(--app-top-banner-height,78px) - 66px)",
+  overflowAnchor: "none",
   background: "linear-gradient(90deg,#E8ECE9 0 268px,#fff 268px calc(100% - 268px),#E8ECE9 calc(100% - 268px) 100%)",
 } as const;
 
@@ -170,6 +186,7 @@ export const EE_PERSPECTIVE_MAIN_STYLE = {
   marginLeft: 268,
   marginRight: 268,
   background: "#fff",
+  overflowAnchor: "none",
   padding: "30px 30px 56px",
 } as const;
 
@@ -180,6 +197,7 @@ export const EE_GUIDANCE_RAIL_STYLE: React.CSSProperties = {
   bottom: 0,
   width: 268,
   overflow: "auto",
+  overflowAnchor: "none",
   background: "#E8ECE9",
   borderLeft: "1px solid #D4DAD6",
 };

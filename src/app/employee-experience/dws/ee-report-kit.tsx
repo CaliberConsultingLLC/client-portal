@@ -4,9 +4,9 @@ import { ChevronRight } from "lucide-react";
 import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
 
 const EE_REPORT_CSS = `
-.canvas{display:block;min-height:calc(100vh - var(--app-top-banner-height,78px) - 66px);background:linear-gradient(90deg,#E8ECE9 0 268px,#fff 268px calc(100% - 268px),#E8ECE9 calc(100% - 268px) 100%);--surface-2:#F1F4F7;--surface-3:#E2E8EF;--border-subtle:#D3DDE7;--border-strong:#8798AA;--text-primary:#152238;--text-secondary:#3B4B63;--text-muted:#6E7E96;--rail:#E8ECE9;--rail-line:#D4DAD6;--ink:#2B2B2B;--nsp-green-500:#6E9B7B}
-.rail{position:fixed;top:calc(var(--app-top-banner-height,78px) + 66px);bottom:0;width:268px;overflow:auto;background:var(--rail);padding:26px 22px;z-index:30}.rail.left{left:0;border-right:1px solid var(--rail-line)}.rail.right{right:0;border-left:1px solid var(--rail-line)}
-.center{min-height:calc(100vh - var(--app-top-banner-height,78px) - 66px);background:#fff;margin-left:268px;margin-right:268px;padding:30px 30px 56px}.center-inner{max-width:1320px;margin:0 auto}
+.canvas{display:block;min-height:calc(100vh - var(--app-top-banner-height,78px) - 66px);background:linear-gradient(90deg,#E8ECE9 0 268px,#fff 268px calc(100% - 268px),#E8ECE9 calc(100% - 268px) 100%);overflow-anchor:none;--surface-2:#F1F4F7;--surface-3:#E2E8EF;--border-subtle:#D3DDE7;--border-strong:#8798AA;--text-primary:#152238;--text-secondary:#3B4B63;--text-muted:#6E7E96;--rail:#E8ECE9;--rail-line:#D4DAD6;--ink:#2B2B2B;--nsp-green-500:#6E9B7B}
+.rail{position:fixed;top:calc(var(--app-top-banner-height,78px) + 66px);bottom:0;width:268px;overflow:auto;overflow-anchor:none;background:var(--rail);padding:26px 22px;z-index:30}.rail.left{left:0;border-right:1px solid var(--rail-line)}.rail.right{right:0;border-left:1px solid var(--rail-line)}
+.center{min-height:calc(100vh - var(--app-top-banner-height,78px) - 66px);background:#fff;margin-left:268px;margin-right:268px;padding:30px 30px 56px;overflow-anchor:none}.center-inner{max-width:1320px;margin:0 auto}
 .client-card{background:#fff;border:1px solid var(--border-strong);border-radius:18px;padding:18px 16px 16px;text-align:center;box-shadow:0 1px 3px rgba(15,23,42,.08);margin-bottom:14px}
 .tf-mark{position:relative;width:180px;min-height:86px;margin:2px auto 8px;border-radius:14px;background:#fff}.tf-mark img{display:block;width:100%;height:auto;object-fit:contain}
 .client-head{font-size:11.5px;font-weight:700;letter-spacing:.1em;color:var(--text-primary);margin-top:12px;line-height:1.35}
