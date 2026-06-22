@@ -150,21 +150,6 @@ export function PortalShell({
           exact: item.exact,
         }))}
       >
-        <div className="text-right">
-          <p className="text-sm font-semibold text-white">{userName || "Portal User"}</p>
-          {isViewingAsUser ? (
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E8CC70]">
-              User preview
-            </p>
-          ) : null}
-        </div>
-        {showViewAsToggle ? (
-          <ViewAsToggle
-            isViewingAsUser={isViewingAsUser}
-            viewingAsUserUid={viewingAsUserUid}
-            users={viewAsUsers}
-          />
-        ) : null}
         {showDemoLabButton ? (
           <Button
             asChild
@@ -176,35 +161,54 @@ export function PortalShell({
             </Link>
           </Button>
         ) : null}
-        {isInternalUser && isInsightsRoute ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
-            onClick={() => {
-              const next = !insightsEditing;
-              setIsInsightsEditing(next);
-              window.dispatchEvent(new CustomEvent("portal-readout-edit-mode", { detail: next }));
-            }}
-          >
-            {insightsEditing ? "Done editing" : "Edit narrative"}
-          </Button>
-        ) : null}
         <FirebaseSignOutButton
           redirectTo="/login"
           variant="outline"
           className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
         />
+        <div className="flex flex-col items-end gap-1">
+          <div className="text-right">
+            <p className="text-sm font-semibold text-white">{userName || "Portal User"}</p>
+            {isViewingAsUser ? (
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E8CC70]">
+                User preview
+              </p>
+            ) : null}
+          </div>
+          {showViewAsToggle ? (
+            <ViewAsToggle
+              isViewingAsUser={isViewingAsUser}
+              viewingAsUserUid={viewingAsUserUid}
+              users={viewAsUsers}
+            />
+          ) : null}
+        </div>
       </AppTopBanner>
 
       <main
         className={cn(
-          "mx-auto w-full",
+          "relative mx-auto w-full",
           isDashboardRoute
             ? "px-0 pb-8"
             : "min-h-[calc(100vh-var(--app-top-banner-height))] bg-[#E8ECE9]"
         )}
       >
+        {isInternalUser && isInsightsRoute ? (
+          <div className="pointer-events-none absolute right-6 top-4 z-30">
+            <Button
+              type="button"
+              variant="outline"
+              className="pointer-events-auto rounded-full border-[#8798AA] bg-white px-4 text-[#152238] hover:bg-[#F5F8FA]"
+              onClick={() => {
+                const next = !insightsEditing;
+                setIsInsightsEditing(next);
+                window.dispatchEvent(new CustomEvent("portal-readout-edit-mode", { detail: next }));
+              }}
+            >
+              {insightsEditing ? "Done editing" : "Edit narrative"}
+            </Button>
+          </div>
+        ) : null}
         {children}
       </main>
     </div>
