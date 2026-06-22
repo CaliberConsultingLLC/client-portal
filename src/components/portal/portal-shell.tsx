@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -7,8 +8,7 @@ import {
   BarChart3,
   PanelsTopLeft,
   FileText,
-  FolderOpen,
-  LifeBuoy,
+  NotebookPen,
   ClipboardList,
   Megaphone,
 } from "lucide-react";
@@ -16,7 +16,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppTopBanner } from "@/components/shared/app-top-banner";
 import { FirebaseSignOutButton } from "@/components/auth/firebase-sign-out-button";
-import { ViewAsToggle, type ViewAsClientOption } from "@/components/portal/view-as-toggle";
+import { ViewAsToggle, type ViewAsUserOption } from "@/components/portal/view-as-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -25,12 +25,11 @@ const navItems = [
   { label: "Clients", href: "/portal/clients", icon: Building2 },
   { label: "Users", href: "/portal/users", icon: Users },
   { label: "Dashboards", href: "/portal/dashboards", icon: BarChart3 },
+  { label: "Insights", href: "/portal/insights", icon: NotebookPen },
   { label: "Perspectives", href: "/portal/perspectives", icon: PanelsTopLeft },
   { label: "Reports", href: "/portal/reports", icon: FileText },
   { label: "Census", href: "/portal/census", icon: ClipboardList },
   { label: "Campaigns", href: "/portal/campaigns", icon: Megaphone },
-  { label: "Documents", href: "/portal/documents", icon: FolderOpen },
-  { label: "Resources", href: "/portal/resources", icon: LifeBuoy },
 ];
 
 interface PortalShellProps {
@@ -42,12 +41,12 @@ interface PortalShellProps {
   canManageCensus?: boolean;
   /** True when the real signed-in user is the super admin (controls the View-as toggle). */
   showViewAsToggle?: boolean;
-  /** True when the super admin is currently previewing the portal as a client. */
-  isViewingAsClient?: boolean;
-  /** The clientId currently being previewed, if any. */
-  viewingAsClientId?: string | null;
-  /** All clients the super admin can preview as. */
-  viewAsClients?: ViewAsClientOption[];
+  /** True when the super admin is currently previewing as another user. */
+  isViewingAsUser?: boolean;
+  /** The user uid currently being previewed, if any. */
+  viewingAsUserUid?: string | null;
+  /** All users the super admin can preview as. */
+  viewAsUsers?: ViewAsUserOption[];
   defaultDemoLabHref?: string;
 }
 
@@ -76,13 +75,14 @@ export function PortalShell({
   demoDashboardAssetIds = [],
   hasDemoWorkspaceAccess = false,
   showViewAsToggle = false,
-  isViewingAsClient = false,
-  viewingAsClientId = null,
-  viewAsClients = [],
+  isViewingAsUser = false,
+  viewingAsUserUid = null,
+  viewAsUsers = [],
   defaultDemoLabHref = "/portal/dashboards/lab/collaboration?demoLab=open",
 }: PortalShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [isInsightsEditing, setIsInsightsEditing] = useState(false);
   // Internal-only top-nav. Clients reach their census through the campaign
   // card's "Census" button instead of a global Census tab.
   const internalOnlyNav = new Set([
@@ -93,7 +93,7 @@ export function PortalShell({
     "/portal/resources",
     "/portal/census",
   ]);
-  const canSeeInternalNav = isInternalUser && !isViewingAsClient;
+  const canSeeInternalNav = isInternalUser && !isViewingAsUser;
   const visibleNavItems = navItems.filter((item) => {
     if (internalOnlyNav.has(item.href)) {
       return canSeeInternalNav;
@@ -129,6 +129,14 @@ export function PortalShell({
         : defaultDemoLabHref;
   const showDemoLabButton =
     isDashboardRoute && (isInternalUser || isDemoDashboardRoute || hasDemoWorkspaceAccess);
+  const isInsightsRoute = pathname.startsWith("/portal/insights");
+  const insightsEditing = isInsightsRoute ? isInsightsEditing : false;
+
+  useEffect(() => {
+    if (!isInsightsRoute) {
+      window.dispatchEvent(new CustomEvent("portal-readout-edit-mode", { detail: false }));
+    }
+  }, [isInsightsRoute]);
 
   return (
     <div className="min-h-screen bg-[#EEF2EE]">
@@ -144,17 +152,17 @@ export function PortalShell({
       >
         <div className="text-right">
           <p className="text-sm font-semibold text-white">{userName || "Portal User"}</p>
-          {isViewingAsClient ? (
+          {isViewingAsUser ? (
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E8CC70]">
-              Client preview
+              User preview
             </p>
           ) : null}
         </div>
         {showViewAsToggle ? (
           <ViewAsToggle
-            isViewingAsClient={isViewingAsClient}
-            viewingAsClientId={viewingAsClientId}
-            clients={viewAsClients}
+            isViewingAsUser={isViewingAsUser}
+            viewingAsUserUid={viewingAsUserUid}
+            users={viewAsUsers}
           />
         ) : null}
         {showDemoLabButton ? (
@@ -166,6 +174,20 @@ export function PortalShell({
             <Link href={demoLabHref}>
               {isDemoLabOpen ? "Hide Demo Lab" : "Open Demo Lab"}
             </Link>
+          </Button>
+        ) : null}
+        {isInternalUser && isInsightsRoute ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
+            onClick={() => {
+              const next = !insightsEditing;
+              setIsInsightsEditing(next);
+              window.dispatchEvent(new CustomEvent("portal-readout-edit-mode", { detail: next }));
+            }}
+          >
+            {insightsEditing ? "Done editing" : "Edit narrative"}
           </Button>
         ) : null}
         <FirebaseSignOutButton
