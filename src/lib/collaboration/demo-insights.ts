@@ -283,18 +283,19 @@ export function buildDepartmentPriorityRows(
 
 export function buildQuestionInsights(
   respondents: DemoRespondent[],
-  selectedDepartment: string
+  selectedDepartment: string,
+  questionLabels: readonly string[] = DEMO_CI_QUESTIONS
 ) {
-  const questionBuckets = DEMO_CI_QUESTIONS.map(() => [] as number[]);
+  const questionBuckets = questionLabels.map(() => [] as number[]);
 
   for (const respondent of respondents) {
     if (respondent.department === selectedDepartment) continue;
     respondent.ciScores[selectedDepartment]?.forEach((score, index) => {
-      questionBuckets[index].push(score);
+      if (index < questionBuckets.length) questionBuckets[index].push(score);
     });
   }
 
-  return DEMO_CI_QUESTIONS.map((question, index) => ({
+  return questionLabels.map((question, index) => ({
     id: `${selectedDepartment}-question-${index}`,
     question,
     score: round2(avg(questionBuckets[index])),
@@ -305,17 +306,18 @@ export function buildQuestionInsights(
 export function buildPartnerQuestionHotspots(
   respondents: DemoRespondent[],
   departments: string[],
-  selectedDepartment: string
+  selectedDepartment: string,
+  questionLabels: readonly string[] = DEMO_CI_QUESTIONS
 ) {
   return departments
     .filter((department) => department !== selectedDepartment)
     .map((partner) => {
-      const questionBuckets = DEMO_CI_QUESTIONS.map(() => [] as number[]);
+      const questionBuckets = questionLabels.map(() => [] as number[]);
 
       for (const respondent of respondents) {
         if (respondent.department !== partner) continue;
         respondent.ciScores[selectedDepartment]?.forEach((score, index) => {
-          questionBuckets[index].push(score);
+          if (index < questionBuckets.length) questionBuckets[index].push(score);
         });
       }
 
@@ -326,7 +328,7 @@ export function buildPartnerQuestionHotspots(
       return {
         id: `${selectedDepartment}-${partner}-hotspot`,
         partner,
-        weakestQuestion: DEMO_CI_QUESTIONS[weakestIndex],
+        weakestQuestion: questionLabels[weakestIndex],
         score: round2(avg(questionBuckets[weakestIndex])),
       };
     })
@@ -388,15 +390,108 @@ export function buildSegmentSummary(
   return summaries.sort((left, right) => left.outgoingCdrs - right.outgoingCdrs);
 }
 
+function ciScoresForSegment(
+  respondent: DemoRespondent,
+  selectedDepartment: string,
+  questionIndex?: number
+) {
+  const scores = respondent.ciScores[selectedDepartment] ?? [];
+  if (questionIndex === undefined) return scores;
+  const score = scores[questionIndex];
+  return typeof score === "number" ? [score] : [];
+}
+
+export function buildDepartmentCiByDept(
+  respondents: DemoRespondent[],
+  selectedDepartment: string,
+  departments: string[],
+  questionIndex?: number
+) {
+  const scoresByRaterDept: Record<string, number[]> = {};
+
+  for (const department of departments) {
+    if (department !== selectedDepartment) {
+      scoresByRaterDept[department] = [];
+    }
+  }
+
+  for (const respondent of respondents) {
+    if (respondent.department === selectedDepartment) continue;
+    if (!departments.includes(respondent.department)) continue;
+
+    const values = ciScoresForSegment(respondent, selectedDepartment, questionIndex);
+    if (values.length === 0) continue;
+    scoresByRaterDept[respondent.department].push(...values);
+  }
+
+  return Object.entries(scoresByRaterDept)
+    .map(([department, values]) => ({
+      department,
+      score: round2(avg(values)),
+      count: values.length,
+    }))
+    .filter((entry) => entry.count >= 2)
+    .sort((left, right) => right.score - left.score);
+}
+
 export function buildDepartmentSegmentSummary(
   respondents: DemoRespondent[],
   selectedDepartment: string,
-  type: "role" | "generation" | "tenure"
+  type: "role" | "generation" | "tenure",
+  direction: "incoming" | "outgoing" = "outgoing",
+  questionIndex?: number
 ): DepartmentSegmentSummary[] {
+  if (direction === "incoming") {
+    const incomingRaters = respondents.filter((respondent) => {
+      if (respondent.department === selectedDepartment) return false;
+      if (questionIndex !== undefined) {
+        return ciScoresForSegment(respondent, selectedDepartment, questionIndex).length > 0;
+      }
+      return typeof respondent.cdrsRatings[selectedDepartment] === "number";
+    });
+    const values = Array.from(
+      new Set(
+        incomingRaters
+          .map((respondent) => String(respondent[type]).trim())
+          .filter(Boolean)
+      )
+    );
+
+    return values
+      .map((value) => {
+        const segmentRaters = incomingRaters.filter(
+          (respondent) => String(respondent[type]) === value
+        );
+        if (segmentRaters.length < 2) {
+          return null;
+        }
+        const incomingValues = segmentRaters
+          .map((respondent) => respondent.cdrsRatings[selectedDepartment])
+          .filter((score): score is number => typeof score === "number");
+        const ciValues = segmentRaters.flatMap((respondent) =>
+          ciScoresForSegment(respondent, selectedDepartment, questionIndex)
+        );
+        const incoming = round2(avg(incomingValues));
+        return {
+          id: `${selectedDepartment}-incoming-${type}-${value}`,
+          label: value,
+          respondents: segmentRaters.length,
+          incomingCdrs: incoming,
+          outgoingCdrs: incoming,
+          gap: 0,
+          ci: round2(avg(ciValues)),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+      .sort((left, right) => right.incomingCdrs - left.incomingCdrs);
+  }
+
   const subset = respondents.filter(
     (respondent) => respondent.department === selectedDepartment
   );
-  const values = Array.from(new Set(subset.map((respondent) => String(respondent[type]))));
+  const values = Array.from(
+    new Set(subset.map((respondent) => String(respondent[type]).trim()).filter(Boolean))
+  );
 
   return values
     .map((value) => {
@@ -407,26 +502,24 @@ export function buildDepartmentSegmentSummary(
         return null;
       }
       const outgoingValues = segmentRespondents.flatMap((respondent) =>
-        Object.values(respondent.cdrsRatings).filter(
-          (score): score is number => typeof score === "number"
-        )
+        Object.entries(respondent.cdrsRatings)
+          .filter(([dept]) => dept !== selectedDepartment)
+          .map(([, score]) => score)
+          .filter((score): score is number => typeof score === "number")
       );
-      const incomingValues = respondents
-        .filter((respondent) => String(respondent[type]) === value)
-        .map((respondent) => respondent.cdrsRatings[selectedDepartment])
-        .filter((score): score is number => typeof score === "number");
       const ciValues = segmentRespondents.flatMap((respondent) =>
-        Object.values(respondent.ciScores).flat()
+        questionIndex === undefined
+          ? Object.values(respondent.ciScores).flat()
+          : ciScoresForSegment(respondent, selectedDepartment, questionIndex)
       );
       const outgoing = round2(avg(outgoingValues));
-      const incoming = round2(avg(incomingValues));
       return {
-        id: `${selectedDepartment}-${type}-${value}`,
+        id: `${selectedDepartment}-outgoing-${type}-${value}`,
         label: value,
         respondents: segmentRespondents.length,
-        incomingCdrs: incoming,
+        incomingCdrs: outgoing,
         outgoingCdrs: outgoing,
-        gap: round2(Math.abs(outgoing - incoming)),
+        gap: 0,
         ci: round2(avg(ciValues)),
       };
     })
