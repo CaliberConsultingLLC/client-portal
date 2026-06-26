@@ -1,13 +1,14 @@
 "use client";
 
-import Image from "next/image";
 import { useState, useMemo, type ReactNode } from "react";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { ScoreTable } from "@/components/collaboration/score-table";
 import { ColorLegend } from "@/components/collaboration/color-legend";
+import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
+import { ReportSummaryHeader } from "@/components/collaboration/demo-report-tabs";
 
 import type { CollaborationData } from "@/types/collaboration";
 
@@ -27,7 +28,6 @@ interface DashboardProps {
   data: CollaborationData;
   campaignName: string;
   organizationName: string;
-  headerAction?: ReactNode;
   tabRowAction?: ReactNode;
   tabRowActionModeId?: string;
   floatingPanel?: ReactNode;
@@ -43,6 +43,18 @@ interface DashboardProps {
     content?: ReactNode;
   }>;
   tabOrder?: string[];
+  /** When provided, replaces the built-in left rail entirely. */
+  leftRailOverride?: ReactNode;
+  /** When provided, replaces the built-in right rail. Pass null to remove it. */
+  rightRailOverride?: ReactNode;
+  /** Hide the redundant per-tab title row above the canvas content. */
+  hideTitleRow?: boolean;
+  /** Controlled active perspective (tab) id. */
+  activeTabId?: string;
+  onActiveTabChange?: (id: string) => void;
+  /** Controlled active mode (category) id. */
+  activeModeId?: string;
+  onActiveModeChange?: (id: string) => void;
 }
 
 function avg(values: number[]) {
@@ -57,7 +69,6 @@ export function CollaborationDashboardClient({
   data,
   campaignName,
   organizationName,
-  headerAction,
   tabRowAction,
   tabRowActionModeId,
   floatingPanel,
@@ -65,9 +76,30 @@ export function CollaborationDashboardClient({
   modeSections,
   tabOverrides = [],
   tabOrder,
+  leftRailOverride,
+  rightRailOverride,
+  hideTitleRow = false,
+  activeTabId,
+  onActiveTabChange,
+  activeModeId,
+  onActiveModeChange,
 }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState("overview");
-  const [activeMode, setActiveMode] = useState(modeSections?.[0]?.id ?? "");
+  const [internalActiveTab, setInternalActiveTab] = useState("overview");
+  const [internalActiveMode, setInternalActiveMode] = useState(modeSections?.[0]?.id ?? "");
+  const activeTab = activeTabId ?? internalActiveTab;
+  const activeMode = activeModeId ?? internalActiveMode;
+  const setActiveTab = (id: string) => {
+    onActiveTabChange?.(id);
+    if (activeTabId === undefined) setInternalActiveTab(id);
+  };
+  const setActiveMode = (id: string) => {
+    onActiveModeChange?.(id);
+    if (activeModeId === undefined) setInternalActiveMode(id);
+  };
+  const [selectedDept, setSelectedDept] = useState(
+    data.departmentDetails[0]?.department ?? data.meta.departments[0] ?? ""
+  );
+  const [departmentFiltersOpen, setDepartmentFiltersOpen] = useState(false);
   const overrideMap = new Map(tabOverrides.map((tab) => [tab.id, tab]));
   const defaultTabs: DashboardTab[] = [
     { id: "overview", label: "Overview", content: <OverviewTab data={data} /> },
@@ -78,7 +110,11 @@ export function CollaborationDashboardClient({
     },
     { id: "cdrs", label: "CDRS", content: <CdrsTab data={data} /> },
     { id: "ci", label: "CI", content: <CiTab data={data} /> },
-    { id: "dept", label: "Department Report", content: <DeptTab data={data} /> },
+    {
+      id: "dept",
+      label: "Department Report",
+      content: <DeptTab data={data} selectedDept={selectedDept} />,
+    },
   ];
   const mergedTabs = [
     ...defaultTabs.map((tab) => ({
@@ -110,96 +146,107 @@ export function CollaborationDashboardClient({
     visibleTabs.find((tab) => tab.id === activeTab)?.id ?? visibleTabs[0]?.id ?? "";
   const activeTabContent =
     visibleTabs.find((tab) => tab.id === resolvedActiveTabId)?.content ?? null;
+  const toolbarActionVisible =
+    tabRowAction && (!tabRowActionModeId || activeModeSection?.id === tabRowActionModeId);
+  const builtInLeftRail =
+    resolvedActiveTabId === "dept" ? (
+      <div className="xl:sticky xl:top-6 xl:self-start">
+        <Card>
+          <button
+            type="button"
+            onClick={() => setDepartmentFiltersOpen((value) => !value)}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <span>
+              <span className="block text-sm font-bold uppercase tracking-wider text-text-primary">
+                Department Filters
+              </span>
+              {departmentFiltersOpen ? (
+                <span className="mt-0.5 block text-xs text-text-muted">
+                  Use the left rail for active report selections.
+                </span>
+              ) : null}
+            </span>
+            <span className="rounded-full border border-border-strong px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+              {departmentFiltersOpen ? "Hide" : "Show"}
+            </span>
+          </button>
+          {departmentFiltersOpen ? (
+            <div className="mt-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Select Department
+              </label>
+              <select
+                value={selectedDept}
+                onChange={(event) => setSelectedDept(event.target.value)}
+                className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-base font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:ring-2 focus:ring-nsp-blue-500/15 focus:outline-none"
+              >
+                {data.meta.departments.map((department) => (
+                  <option key={department} value={department}>
+                    {department}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+        </Card>
+      </div>
+    ) : undefined;
+  const leftRail = leftRailOverride !== undefined ? leftRailOverride : builtInLeftRail;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-4 py-6">
-      <section className="mb-6 overflow-hidden rounded-2xl border border-border-strong bg-white shadow-sm">
-        <header className="flex flex-wrap items-end justify-between gap-6 px-5 py-5">
-          <div className="flex items-center gap-5">
-            <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-border-strong bg-white p-2 shadow-sm">
-              <Image
-                src="/CollabLogo.png"
-                alt="Collaboration dashboard logo"
-                fill
-                sizes="112px"
-                className="object-contain p-2"
-                priority
-              />
-            </div>
-            <div className="max-w-3xl">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-500">
-                Collaboration Analytics
-              </p>
-              <h1 className="font-serif text-2xl font-bold text-text-primary">
-                {campaignName}
-              </h1>
-              <p className="mt-1 text-sm text-text-secondary">
-                {organizationName
-                  ? `${organizationName} — `
-                  : ""}
-                Cross-Department Relational Strength &amp; Collaboration Analytics
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col items-start gap-3 sm:items-end">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">
-              Score Guide
-            </p>
-            <ColorLegend />
-            {headerAction}
-          </div>
-        </header>
+    <>
+      <DashboardRibbon
+        title={campaignName}
+        categories={(modeSections ?? []).map((section) => ({ id: section.id, label: section.label }))}
+        activeCategoryId={activeModeSection?.id}
+        onCategoryChange={(nextModeId) => {
+          const nextModeSection =
+            modeSections?.find((section) => section.id === nextModeId) ?? modeSections?.[0];
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-border-strong bg-surface-3/90 px-3 py-2.5">
-          {modeSections && activeModeSection && (
-            <>
-              <div className="flex shrink-0 items-center gap-2">
-                {modeSections.map((section) => (
-                  <button
-                    key={section.id}
-                    onClick={() => {
-                      setActiveMode(section.id);
-                      setActiveTab(section.tabIds[0] ?? "");
-                    }}
-                    className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${
-                      activeModeSection.id === section.id
-                        ? "bg-nsp-blue-500 text-white shadow-sm"
-                        : "border border-border-strong bg-white text-text-secondary hover:border-nsp-blue-200 hover:text-text-primary"
-                    }`}
-                  >
-                    {section.label}
-                  </button>
-                ))}
-              </div>
-              <div className="h-8 w-px shrink-0 bg-border-strong" />
-            </>
-          )}
-          <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-            {visibleTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`whitespace-nowrap rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${
-                  resolvedActiveTabId === tab.id
-                    ? "bg-nsp-blue-500 text-white shadow-sm"
-                    : "text-text-secondary hover:bg-white hover:text-text-primary"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-          {tabRowAction &&
-            (!tabRowActionModeId || activeModeSection?.id === tabRowActionModeId) && (
-              <div className="ml-auto w-full shrink-0 md:w-auto">{tabRowAction}</div>
-            )}
-        </div>
-      </section>
-      {floatingPanel}
+          if (!nextModeSection) {
+            return;
+          }
 
-      {/* Tab content */}
-      <div className="min-h-[600px]">{activeTabContent}</div>
-    </div>
+          setActiveMode(nextModeSection.id);
+          setActiveTab(nextModeSection.tabIds[0] ?? "");
+        }}
+        perspectives={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+        activePerspectiveId={resolvedActiveTabId}
+        onPerspectiveChange={setActiveTab}
+        legend={<ColorLegend />}
+      />
+      <DashboardCanvas
+        leftRail={leftRail}
+        rightRail={
+          rightRailOverride !== undefined ? (
+            rightRailOverride
+          ) : (
+            <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+              <Card title="Report Context">
+                <p className="text-sm leading-relaxed text-text-secondary">
+                  {organizationName ? `${organizationName} — ` : ""}
+                  Cross-department relational strength and collaboration analytics built to help leaders
+                  understand connection quality, friction points, and where to focus action.
+                </p>
+              </Card>
+            </div>
+          )
+        }
+        maxWidthClassName="max-w-[1320px]"
+      >
+        {hideTitleRow ? null : (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 px-4 sm:px-6">
+            <h1 className="text-[18px] font-semibold uppercase leading-none tracking-[0.16em] text-[#2B2B2B] sm:text-[20px]">
+              {visibleTabs.find((tab) => tab.id === resolvedActiveTabId)?.label ?? "Dashboard"}
+            </h1>
+            {toolbarActionVisible ? <div className="w-full max-w-[280px]">{tabRowAction}</div> : null}
+          </div>
+        )}
+        {floatingPanel}
+        {activeTabContent}
+      </DashboardCanvas>
+    </>
   );
 }
 
@@ -207,47 +254,12 @@ export function CollaborationDashboardClient({
 //  Tab 1: Overview
 // ════════════════════════════════════════════════════════════
 function OverviewTab({ data }: { data: CollaborationData }) {
-  const overallCdrs = Number(
-    avg(
-      data.departmentMetrics
-        .flatMap((metric) => [metric.incomingCDRS, metric.outgoingCDRS])
-        .filter((score) => score > 0)
-    ).toFixed(2)
-  );
-  const averageCi = Number(
-    avg(
-      data.departmentMetrics
-        .map((metric) => metric.collaborationIndex)
-        .filter((score) => score > 0)
-    ).toFixed(2)
-  );
-
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
-        <KpiCard
-          label="Average CDRS"
-          value={overallCdrs}
-          color="var(--color-nsp-blue-500)"
-        />
-        <KpiCard
-          label="Average CI"
-          value={averageCi}
-          color="var(--color-nsp-blue-400)"
-        />
-        <KpiCard
-          label="Respondents"
-          value={data.meta.totalRespondents}
-          color="var(--color-text-secondary)"
-          isCount
-        />
-        <KpiCard
-          label="Departments Reviewed"
-          value={data.meta.totalDepartments}
-          color="var(--color-nsp-orange-500)"
-          isCount
-        />
-      </div>
+      <ReportSummaryHeader
+        title="Overview"
+        description="This page explains how to read the collaboration dashboard. CDRS captures cross-department relationship strength; CI captures collaboration quality through statement-level feedback."
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="CDRS Overview" className="h-full text-center">
@@ -551,10 +563,27 @@ function CdrsHeatmapTab({ data }: { data: CollaborationData }) {
   }
 
   return (
-    <Card
-      title="Cross-Department Relational Strength Heatmap"
-      subtitle="Each cell shows the average score that the row department received from the column department"
-    >
+    <div className="space-y-6">
+      <ReportSummaryHeader
+        title="Heatmap"
+        description="Cross-department relational strength matrix. Each cell shows the average score the row department received from the column department."
+        metrics={[
+          { label: "Departments", value: sortedDepts.length },
+          {
+            label: "Avg Incoming",
+            value: formatScoreForDisplay(data.meta.dwsAverageIncoming),
+          },
+          {
+            label: "Avg Outgoing",
+            value: formatScoreForDisplay(data.meta.dwsAverageOutgoing),
+          },
+        ]}
+      />
+
+      <Card
+        title="Cross-Department Relational Strength Heatmap"
+        subtitle="Each cell shows the average score that the row department received from the column department"
+      >
       <HeatmapChart
         rows={sortedDepts}
         columns={sortedDepts}
@@ -563,6 +592,7 @@ function CdrsHeatmapTab({ data }: { data: CollaborationData }) {
         rowTotals={rowTotals}
       />
     </Card>
+    </div>
   );
 }
 
@@ -620,11 +650,13 @@ function CiHeatmapTab({ data }: { data: CollaborationData }) {
 // ════════════════════════════════════════════════════════════
 //  Tab 5: Department Report
 // ════════════════════════════════════════════════════════════
-function DeptTab({ data }: { data: CollaborationData }) {
-  const [selectedDept, setSelectedDept] = useState(
-    data.departmentDetails[0]?.department ?? ""
-  );
-
+function DeptTab({
+  data,
+  selectedDept,
+}: {
+  data: CollaborationData;
+  selectedDept: string;
+}) {
   const detail = useMemo(
     () => data.departmentDetails.find((d) => d.department === selectedDept),
     [data.departmentDetails, selectedDept]
@@ -632,15 +664,13 @@ function DeptTab({ data }: { data: CollaborationData }) {
 
   if (!detail) return null;
 
-  const incomingBars = detail.incomingByDept.map((d) => ({
-    name: d.department,
-    value: d.score,
-  }));
+  const incomingBars = detail.incomingByDept
+    .filter((d) => d.count >= 2 && d.score > 0)
+    .map((d) => ({ name: d.department, value: d.score }));
 
-  const outgoingRows = detail.outgoingByDept.map((d) => ({
-    label: d.department,
-    score: d.score,
-  }));
+  const outgoingRows = detail.outgoingByDept
+    .filter((d) => d.count >= 2 && d.score > 0)
+    .map((d) => ({ label: d.department, score: d.score }));
 
   const questionRows = detail.questionScores.map((q) => ({
     label: q.question,
@@ -649,25 +679,16 @@ function DeptTab({ data }: { data: CollaborationData }) {
 
   return (
     <div className="space-y-6">
-      {/* Header with selector and KPI cards */}
       <div className="flex flex-wrap items-start gap-4">
         <Card className="flex-1">
           <div className="flex flex-wrap items-center gap-6">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Select Department
-              </label>
-              <select
-                value={selectedDept}
-                onChange={(e) => setSelectedDept(e.target.value)}
-                className="rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-lg font-bold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:ring-2 focus:ring-nsp-blue-500/15 focus:outline-none"
-              >
-                {data.meta.departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              <p className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Selected Department
+              </p>
+              <p className="rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-lg font-bold text-text-primary shadow-sm">
+                {selectedDept}
+              </p>
             </div>
             <h2 className="font-serif text-3xl font-bold text-text-primary">
               {selectedDept}
@@ -711,19 +732,6 @@ function DeptTab({ data }: { data: CollaborationData }) {
 
         <div className="lg:col-span-5">
           <Card title="Incoming CDRS" className="h-full">
-            <div className="mb-2 flex items-center gap-2">
-              <select
-                value={selectedDept}
-                onChange={(e) => setSelectedDept(e.target.value)}
-                className="rounded-2xl border border-border-strong bg-white px-3 py-1.5 text-sm text-text-primary"
-              >
-                {data.meta.departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
             <GradientBarChart data={incomingBars} />
             <ColorLegend className="mt-3 justify-center" />
           </Card>

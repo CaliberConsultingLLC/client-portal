@@ -37,6 +37,9 @@ interface RelationshipMapProps {
   roleRows: DepartmentSegmentSummary[];
   generationRows: DepartmentSegmentSummary[];
   tenureRows: DepartmentSegmentSummary[];
+  variant?: "cdrs" | "ci";
+  ciByDept?: Array<{ department: string; score: number }>;
+  centerScore?: number;
 }
 
 const CONTENT_WIDTH = 1120;
@@ -54,17 +57,13 @@ const LEFT_TARGET_X = 178;
 const RIGHT_TARGET_X = 942;
 const CTRL_OFFSET_X = 150;
 
-function toGapDisplay(delta: number): number {
-  return Math.min(10, Math.abs(delta) / 6 * 10);
-}
-
 function getNodeColor(mode: MapMode, node: MapNode): string {
-  if (mode === "gap") return gapScaleColor(node.gap);
+  if (mode === "gap") return gapScaleColor(Math.abs(node.gap));
   return scoreScaleColor(mode === "incoming" ? node.incoming : node.outgoing, 3, 6, 9);
 }
 
 function getNodeTextColor(mode: MapMode, node: MapNode): string {
-  if (mode === "gap") return gapScaleTextColor(node.gap);
+  if (mode === "gap") return gapScaleTextColor(Math.abs(node.gap));
   return scoreScaleTextColor(mode === "incoming" ? node.incoming : node.outgoing, 6);
 }
 
@@ -397,16 +396,21 @@ export function RelationshipMap({
   roleRows,
   generationRows,
   tenureRows,
+  variant = "cdrs",
+  ciByDept = [],
+  centerScore,
 }: RelationshipMapProps) {
+  const isCiVariant = variant === "ci";
   const [mode, setMode] = useState<MapMode>("incoming");
   const [lens, setLens] = useState<MapLens>("department");
   const [animationTime, setAnimationTime] = useState(0);
+  const effectiveMode: MapMode = isCiVariant ? "incoming" : mode;
 
   useEffect(() => {
-    if (lens !== "department" && mode !== "incoming") {
+    if (!isCiVariant && lens !== "department" && mode !== "incoming") {
       setMode("incoming");
     }
-  }, [lens, mode]);
+  }, [isCiVariant, lens, mode]);
 
   useEffect(() => {
     let frameId = 0;
@@ -423,11 +427,30 @@ export function RelationshipMap({
 
   const nodes = useMemo(() => {
     if (lens === "department") {
-      const incomingMap = new Map(incomingByDept.map((row) => [row.department, row.score]));
-      const outgoingMap = new Map(outgoingByDept.map((row) => [row.department, row.score]));
+      if (isCiVariant) {
+        return ciByDept
+          .slice()
+          .sort((left, right) => left.department.localeCompare(right.department))
+          .map((row) => ({
+            id: `department-${row.department}`,
+            label: row.department,
+            incoming: row.score,
+            outgoing: row.score,
+            gap: 0,
+          }));
+      }
 
-      return Array.from(new Set([...incomingMap.keys(), ...outgoingMap.keys()]))
+      // Only include departments where at least one side has a valid score
+      // (meets rule of two). The ?? 0 fallback must not create phantom zero
+      // entries for the missing side, so we only build nodes for departments
+      // that appear in BOTH maps — one-sided relationships are excluded.
+      const incomingMap = new Map(incomingByDept.filter((row) => row.score > 0).map((row) => [row.department, row.score]));
+      const outgoingMap = new Map(outgoingByDept.filter((row) => row.score > 0).map((row) => [row.department, row.score]));
+      const validDepts = new Set([...incomingMap.keys(), ...outgoingMap.keys()]);
+
+      return Array.from(validDepts)
         .filter((label) => label !== selectedDepartment)
+        .filter((label) => incomingMap.has(label) || outgoingMap.has(label))
         .sort()
         .map((label) => {
           const incoming = incomingMap.get(label) ?? 0;
@@ -437,7 +460,7 @@ export function RelationshipMap({
             label,
             incoming,
             outgoing,
-            gap: toGapDisplay(outgoing - incoming),
+            gap: incoming - outgoing,
           } satisfies MapNode;
         });
     }
@@ -455,15 +478,17 @@ export function RelationshipMap({
       .map((row) => ({
         id: `${lens}-${row.id}`,
         label: row.label,
-        incoming: row.incomingCdrs,
-        outgoing: row.outgoingCdrs,
-        gap: toGapDisplay(row.outgoingCdrs - row.incomingCdrs),
+        incoming: isCiVariant ? row.ci : row.incomingCdrs,
+        outgoing: isCiVariant ? row.ci : row.outgoingCdrs,
+        gap: isCiVariant ? 0 : row.incomingCdrs - row.outgoingCdrs,
         respondents: row.respondents,
       }));
   }, [
+    isCiVariant,
     lens,
     incomingByDept,
     outgoingByDept,
+    ciByDept,
     selectedDepartment,
     roleRows,
     generationRows,
@@ -507,14 +532,78 @@ export function RelationshipMap({
   const rightTargetLeftEdgeX = RIGHT_TARGET_X - TARGET_NODE_WIDTH / 2;
 
   const getDisplayScore = (node: MapNode) => {
-    if (mode === "gap") return formatScoreForDisplay(node.gap);
-    return formatScoreForDisplay(mode === "incoming" ? node.incoming : node.outgoing);
+    if (isCiVariant) {
+      return formatScoreForDisplay(node.incoming);
+    }
+    if (effectiveMode === "gap") {
+      return formatScoreForDisplay(node.gap);
+    }
+    return formatScoreForDisplay(
+      effectiveMode === "incoming" ? node.incoming : node.outgoing
+    );
   };
 
+  const getEffectiveNodeColor = (node: MapNode) => {
+    if (isCiVariant) {
+      return scoreScaleColor(node.incoming, 3, 6, 9);
+    }
+    if (effectiveMode === "gap") {
+      return gapScaleColor(Math.abs(node.gap));
+    }
+    return scoreScaleColor(
+      effectiveMode === "incoming" ? node.incoming : node.outgoing,
+      3,
+      6,
+      9
+    );
+  };
+
+  const getEffectiveNodeTextColor = (node: MapNode) => {
+    if (isCiVariant) {
+      return scoreScaleTextColor(node.incoming, 6);
+    }
+    if (effectiveMode === "gap") {
+      return gapScaleTextColor(Math.abs(node.gap));
+    }
+    return scoreScaleTextColor(
+      effectiveMode === "incoming" ? node.incoming : node.outgoing,
+      6
+    );
+  };
+
+  const centerDisplayScore = isCiVariant
+    ? centerScore ?? incomingCDRS
+    : effectiveMode === "gap"
+      ? incomingCDRS - outgoingCDRS
+      : effectiveMode === "incoming"
+        ? incomingCDRS
+        : outgoingCDRS;
+
+  const centerBackgroundColor = isCiVariant
+    ? scoreScaleColor(centerDisplayScore, 3, 6, 9)
+    : effectiveMode === "gap"
+      ? gapScaleColor(Math.abs(incomingCDRS - outgoingCDRS))
+      : scoreScaleColor(centerDisplayScore, 3, 6, 9);
+
+  const centerTextColor = isCiVariant
+    ? scoreScaleTextColor(centerDisplayScore, 6)
+    : effectiveMode === "gap"
+      ? gapScaleTextColor(Math.abs(incomingCDRS - outgoingCDRS))
+      : scoreScaleTextColor(centerDisplayScore, 6);
+
+  const nodeTooltip = (node: MapNode) =>
+    isCiVariant
+      ? `${node.label} | CI ${formatScoreForDisplay(node.incoming)}${
+          typeof node.respondents === "number" ? ` | Respondents ${node.respondents}` : ""
+        }`
+      : `${node.label} | Incoming ${formatScoreForDisplay(node.incoming)} | Outgoing ${formatScoreForDisplay(node.outgoing)} | Gap ${formatScoreForDisplay(node.gap)}${
+          typeof node.respondents === "number" ? ` | Respondents ${node.respondents}` : ""
+        }`;
+
   const availableModes =
-    lens === "department"
-      ? (["incoming", "outgoing", "gap"] as const)
-      : (["incoming"] as const);
+    isCiVariant || lens !== "department"
+      ? ([] as const)
+      : (["incoming", "outgoing", "gap"] as const);
   const primaryDurationMs = 5290;
   const secondaryDurationMs = 6210;
   const primaryPhase = (animationTime % primaryDurationMs) / primaryDurationMs;
@@ -542,13 +631,14 @@ export function RelationshipMap({
           ))}
         </div>
 
+        {!isCiVariant && availableModes.length > 0 ? (
         <div className="flex flex-wrap gap-2">
           {availableModes.map((value) => (
             <button
               key={value}
               onClick={() => setMode(value)}
               className={`rounded-xl px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.16em] transition ${
-                mode === value
+                effectiveMode === value
                   ? "bg-nsp-blue-500 text-white shadow-sm"
                   : "border border-border-strong bg-white text-text-secondary hover:border-nsp-blue-200"
               }`}
@@ -557,6 +647,7 @@ export function RelationshipMap({
             </button>
           ))}
         </div>
+        ) : null}
       </div>
 
       <div className="overflow-x-auto">
@@ -582,8 +673,8 @@ export function RelationshipMap({
               </filter>
             </defs>
             {leftNodes.map(({ node, y }, index) => {
-              const color = getNodeColor(mode, node);
-              const flowAccent = getFlowAccent(mode, node);
+              const color = getEffectiveNodeColor(node);
+              const flowAccent = getFlowAccent(effectiveMode, node);
               const startY = leftStackStartY + index * ribbonSourceWidth;
               const centerLine = buildCenterLinePath({
                 startX: sourceLeftEdgeX,
@@ -602,7 +693,7 @@ export function RelationshipMap({
                 direction: -1,
               });
               const animatedPath =
-                mode === "incoming"
+                effectiveMode === "incoming"
                   ? buildCenterLinePath({
                       startX: leftTargetRightEdgeX,
                       startY: y,
@@ -621,14 +712,14 @@ export function RelationshipMap({
                     strokeWidth="1.2"
                     filter="url(#relationship-ribbon-shadow)"
                   />
-                  {mode !== "gap"
+                  {effectiveMode !== "gap"
                     ? segmentOffsets.map((offset) =>
                         getWrappedSegmentRanges(
                           primaryPhase + offset * segmentSpacing,
                           segmentLength
                         ).map(([tStart, tEnd], segmentIndex) => {
                           const segmentPath = buildRibbonSegmentPath(
-                            mode === "incoming"
+                            effectiveMode === "incoming"
                               ? {
                                   startX: leftTargetRightEdgeX,
                                   startY: y,
@@ -666,7 +757,7 @@ export function RelationshipMap({
                         })
                       )
                     : null}
-                  {mode !== "gap" ? (
+                  {effectiveMode !== "gap" ? (
                     <path
                       d={animatedPath}
                       fill="none"
@@ -680,8 +771,8 @@ export function RelationshipMap({
             })}
 
             {rightNodes.map(({ node, y }, index) => {
-              const color = getNodeColor(mode, node);
-              const flowAccent = getFlowAccent(mode, node);
+              const color = getEffectiveNodeColor(node);
+              const flowAccent = getFlowAccent(effectiveMode, node);
               const startY = rightStackStartY + index * ribbonSourceWidth;
               const centerLine = buildCenterLinePath({
                 startX: sourceRightEdgeX,
@@ -700,7 +791,7 @@ export function RelationshipMap({
                 direction: 1,
               });
               const animatedPath =
-                mode === "incoming"
+                effectiveMode === "incoming"
                   ? buildCenterLinePath({
                       startX: rightTargetLeftEdgeX,
                       startY: y,
@@ -719,14 +810,14 @@ export function RelationshipMap({
                     strokeWidth="1.2"
                     filter="url(#relationship-ribbon-shadow)"
                   />
-                  {mode !== "gap"
+                  {effectiveMode !== "gap"
                     ? segmentOffsets.map((offset) =>
                         getWrappedSegmentRanges(
                           primaryPhase + offset * segmentSpacing,
                           segmentLength
                         ).map(([tStart, tEnd], segmentIndex) => {
                           const segmentPath = buildRibbonSegmentPath(
-                            mode === "incoming"
+                            effectiveMode === "incoming"
                               ? {
                                   startX: rightTargetLeftEdgeX,
                                   startY: y,
@@ -764,7 +855,7 @@ export function RelationshipMap({
                         })
                       )
                     : null}
-                  {mode !== "gap" ? (
+                  {effectiveMode !== "gap" ? (
                     <path
                       d={animatedPath}
                       fill="none"
@@ -785,39 +876,9 @@ export function RelationshipMap({
               top: centerY - sourceNodeHeight / 2,
               width: BASE_SOURCE_NODE_WIDTH,
               height: sourceNodeHeight,
-              backgroundColor:
-                mode === "gap"
-                  ? gapScaleColor(averageGap)
-                  : scoreScaleColor(
-                      mode === "incoming" ? incomingCDRS : outgoingCDRS,
-                      3,
-                      6,
-                      9
-                    ),
-              color:
-                mode === "gap"
-                  ? gapScaleTextColor(averageGap)
-                  : scoreScaleTextColor(
-                      mode === "incoming" ? incomingCDRS : outgoingCDRS,
-                      6
-                    ),
-              ...getNodeSurfaceStyle(
-                mode === "gap"
-                  ? gapScaleColor(averageGap)
-                  : scoreScaleColor(
-                      mode === "incoming" ? incomingCDRS : outgoingCDRS,
-                      3,
-                      6,
-                      9
-                    ),
-                mode === "gap"
-                  ? gapScaleTextColor(averageGap)
-                  : scoreScaleTextColor(
-                      mode === "incoming" ? incomingCDRS : outgoingCDRS,
-                      6
-                    ),
-                "selected"
-              ),
+              backgroundColor: centerBackgroundColor,
+              color: centerTextColor,
+              ...getNodeSurfaceStyle(centerBackgroundColor, centerTextColor, "selected"),
             }}
           >
             <span
@@ -827,17 +888,13 @@ export function RelationshipMap({
               {selectedDepartment}
             </span>
             <span className="mt-4 text-3xl font-extrabold leading-none">
-              {mode === "gap"
-                ? formatScoreForDisplay(averageGap)
-                : formatScoreForDisplay(
-                    mode === "incoming" ? incomingCDRS : outgoingCDRS
-                  )}
+              {formatScoreForDisplay(centerDisplayScore)}
             </span>
           </div>
 
           {leftNodes.map(({ node, y }) => {
-            const color = getNodeColor(mode, node);
-            const textColor = getNodeTextColor(mode, node);
+            const color = getEffectiveNodeColor(node);
+            const textColor = getEffectiveNodeTextColor(node);
             return (
               <div
                 key={node.id}
@@ -850,7 +907,7 @@ export function RelationshipMap({
                   color: textColor,
                   ...getNodeSurfaceStyle(color, textColor),
                 }}
-                title={`${node.label} | Incoming ${formatScoreForDisplay(node.incoming)} | Outgoing ${formatScoreForDisplay(node.outgoing)} | Gap ${formatScoreForDisplay(node.gap)}${typeof node.respondents === "number" ? ` | Respondents ${node.respondents}` : ""}`}
+                title={nodeTooltip(node)}
               >
                 <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold">
                   {node.label}
@@ -863,8 +920,8 @@ export function RelationshipMap({
           })}
 
           {rightNodes.map(({ node, y }) => {
-            const color = getNodeColor(mode, node);
-            const textColor = getNodeTextColor(mode, node);
+            const color = getEffectiveNodeColor(node);
+            const textColor = getEffectiveNodeTextColor(node);
             return (
               <div
                 key={node.id}
@@ -877,7 +934,7 @@ export function RelationshipMap({
                   color: textColor,
                   ...getNodeSurfaceStyle(color, textColor),
                 }}
-                title={`${node.label} | Incoming ${formatScoreForDisplay(node.incoming)} | Outgoing ${formatScoreForDisplay(node.outgoing)} | Gap ${formatScoreForDisplay(node.gap)}${typeof node.respondents === "number" ? ` | Respondents ${node.respondents}` : ""}`}
+                title={nodeTooltip(node)}
               >
                 <span className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold">
                   {node.label}

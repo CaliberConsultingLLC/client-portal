@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -40,6 +41,7 @@ import {
 import {
   formatScoreDeltaForDisplay,
   formatScoreForDisplay,
+  succinctCiStatementLabel,
 } from "@/lib/collaboration/display-format";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
 import type {
@@ -51,6 +53,10 @@ import type {
   QuestionInsight,
   RelationshipInsight,
   SegmentSummary,
+} from "@/lib/collaboration/demo-insights";
+import {
+  buildDepartmentCiByDept,
+  buildDepartmentSegmentSummary,
 } from "@/lib/collaboration/demo-insights";
 
 function ScoreChip({
@@ -89,29 +95,20 @@ function sortByNumericDesc<T>(rows: T[], accessor: (row: T) => number) {
 }
 
 function shortQuestionLabel(question: string) {
-  if (question.includes("communicate the information")) return "Communication";
-  if (question.includes("informed and involved")) return "Decision Transparency";
-  if (question.includes("priorities align")) return "Priority Alignment";
-  if (question.includes("provide the support")) return "Cross-Team Support";
-  if (question.includes("How proactive")) return "Proactive Communication";
-  if (question.includes("work through it")) return "Conflict Recovery";
-  if (question.includes("following through")) return "Follow-Through";
-  if (question.includes("quality your team expects")) return "Delivery Quality";
-  if (question.includes("operating rhythms")) return "Working Style Compatibility";
-  return "Collaboration Quality";
+  return succinctCiStatementLabel(question);
 }
 
 function actionHint(question: string) {
   const label = shortQuestionLabel(question);
-  if (label === "communication") return "Clarify what updates this group needs and when they need them.";
-  if (label === "decision transparency") return "Bring them into decisions earlier and close the loop more visibly.";
-  if (label === "priority alignment") return "Reconfirm shared priorities before work moves into execution.";
-  if (label === "cross-team support") return "Tighten ownership around requests and handoffs.";
-  if (label === "proactive communication") return "Increase pre-reads, proactive context, and next-step visibility.";
-  if (label === "conflict recovery") return "Create a faster path for surfacing and resolving friction.";
-  if (label === "follow-through") return "Use clearer commitments and follow-up checkpoints.";
-  if (label === "delivery quality") return "Reset expectations around what good work looks like.";
-  if (label === "working style compatibility") return "Adjust rhythms and meeting norms so coordination feels easier.";
+  if (label === "Communication") return "Clarify what updates this group needs and when they need them.";
+  if (label === "Decision Transparency") return "Bring them into decisions earlier and close the loop more visibly.";
+  if (label === "Priority Alignment") return "Reconfirm shared priorities before work moves into execution.";
+  if (label === "Cross-Team Support") return "Tighten ownership around requests and handoffs.";
+  if (label === "Proactive Communication") return "Increase pre-reads, proactive context, and next-step visibility.";
+  if (label === "Conflict Recovery") return "Create a faster path for surfacing and resolving friction.";
+  if (label === "Follow-Through") return "Use clearer commitments and follow-up checkpoints.";
+  if (label === "Delivery Quality") return "Reset expectations around what good work looks like.";
+  if (label === "Working Style Compatibility") return "Adjust rhythms and meeting norms so coordination feels easier.";
   return "Use this as a practical coaching and operating-rhythm opportunity.";
 }
 
@@ -341,6 +338,78 @@ function GapMeter({
       </div>
     </div>
   );
+}
+
+function ReportSummaryHeader({
+  title,
+  description,
+  metrics = [],
+}: {
+  title: string;
+  description?: React.ReactNode;
+  metrics?: Array<{ label: string; value: string | number; sublabel?: string }>;
+}) {
+  return (
+    <Card className="border-border-strong">
+      <CardContent className="flex flex-col gap-6 p-6 xl:flex-row xl:items-center xl:justify-between">
+        <div className="space-y-4 xl:max-w-2xl">
+          <CardTitle className="text-4xl font-extrabold tracking-tight text-text-primary">
+            {title}
+          </CardTitle>
+          {description ? (
+            <CardDescription className="max-w-2xl text-base leading-relaxed text-text-secondary">
+              {description}
+            </CardDescription>
+          ) : null}
+        </div>
+        {metrics.length > 0 ? (
+          <div className="flex flex-wrap justify-end gap-3">
+            {metrics.map((metric) => (
+              <div
+                key={metric.label}
+                className="flex h-[132px] w-[132px] shrink-0 flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-3 px-3 py-3 text-center"
+                style={getDataBoxSurfaceStyle()}
+              >
+                <p className="text-[10px] font-semibold uppercase leading-tight tracking-[0.16em] text-text-primary">
+                  {metric.label}
+                </p>
+                <p className="mt-2 text-2xl font-extrabold leading-none text-text-primary">
+                  {metric.value}
+                </p>
+                {metric.sublabel ? (
+                  <p className="mt-1.5 text-[10px] italic leading-tight text-text-secondary">
+                    {metric.sublabel}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+export { ReportSummaryHeader };
+
+function averageDepartmentGap(
+  metrics: CollaborationData["departmentMetrics"]
+): number {
+  const gaps = metrics
+    .filter((metric) => metric.incomingCDRS > 0 && metric.outgoingCDRS > 0)
+    .map((metric) => Math.abs(metric.outgoingCDRS - metric.incomingCDRS));
+  return gaps.length > 0 ? gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length : 0;
+}
+
+function averageCollaborationIndex(
+  metrics: CollaborationData["departmentMetrics"]
+): number {
+  const scores = metrics
+    .map((metric) => metric.collaborationIndex)
+    .filter((score) => score > 0);
+  return scores.length > 0
+    ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+    : 0;
 }
 
 function ReportHero({
@@ -579,12 +648,11 @@ export function ReportSegmentFilters({
 
 export function ExecutiveSummaryTab({
   data,
-  kpis,
   narrative,
   relationships,
 }: {
   data: CollaborationData;
-  kpis: ExecutiveKpi[];
+  kpis?: ExecutiveKpi[];
   narrative: string[];
   relationships: RelationshipInsight[];
 }) {
@@ -613,38 +681,24 @@ export function ExecutiveSummaryTab({
       ...relationship,
       id: relationship.id,
     }));
-  const highestRiskDepartment = atRiskDepartments[0];
-  const biggestRiskRelationship = relationshipRows[0];
-
   return (
     <div className="space-y-6">
-      <ReportHero
-        eyebrow="Executive Mode"
-        title={
-          highestRiskDepartment
-            ? `${highestRiskDepartment.department} needs enterprise attention`
-            : "Enterprise collaboration summary"
-        }
-        summary={
-          biggestRiskRelationship
-            ? `${biggestRiskRelationship.departments} is the most fragile cross-functional seam right now. Pair that with ${highestRiskDepartment?.department ?? "the weakest department"} receiving the lowest incoming sentiment and leadership has a clear place to start.`
-            : "Use this page to identify the parts of the operating model that need executive ownership first."
-        }
-        value={
-          highestRiskDepartment
-            ? formatScoreForDisplay(highestRiskDepartment.incoming)
-            : "—"
-        }
-        valueLabel="Lowest incoming CDRS"
-        tone="warning"
-        action="Assign executive owners to the top seam and the lowest-trust department before those issues turn into execution drag."
+      <ReportSummaryHeader
+        title="Executive Summary"
+        description="Enterprise-wide collaboration health, critical relationship seams, and where leadership should intervene first."
+        metrics={[
+          {
+            label: "Avg Incoming",
+            value: formatScoreForDisplay(data.meta.dwsAverageIncoming),
+          },
+          {
+            label: "Avg Outgoing",
+            value: formatScoreForDisplay(data.meta.dwsAverageOutgoing),
+          },
+          { label: "Respondents", value: data.meta.totalRespondents },
+          { label: "Departments", value: data.meta.totalDepartments },
+        ]}
       />
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => (
-          <KpiCard key={kpi.label} kpi={kpi} />
-        ))}
-      </div>
 
       <Card className="rounded-[24px] border-border-strong">
         <CardHeader>
@@ -956,34 +1010,17 @@ export function SegmentSignalsTab({
 
   return (
     <div className="space-y-6">
-      <ReportHero
-        eyebrow="Executive Mode"
-        title={sortedRoleSummary[sortedRoleSummary.length - 1]?.label ?? "Segment signals"}
-        summary="This view is intentionally outgoing-only. It shows whether specific employee populations are experiencing the rest of the organization differently, which makes it ideal for spotting where trust or collaboration quality is breaking for a cohort."
-        value={
-          sortedRoleSummary[sortedRoleSummary.length - 1]
-            ? formatScoreForDisplay(
-                sortedRoleSummary[sortedRoleSummary.length - 1].outgoingCdrs
-              )
-            : "—"
-        }
-        valueLabel="Lowest segment CDRS"
-        tone="warning"
-        action="Use the weakest segment as an early warning signal before the issue becomes enterprise-wide."
+      <ReportSummaryHeader
+        title="Segment Signals"
+        description="Outgoing-only view of how employee segments experience the rest of the organization."
+        metrics={[
+          { label: "Role Segments", value: sortedRoleSummary.length },
+          { label: "Generations", value: sortedGenerationSummary.length },
+          { label: "Tenure Bands", value: sortedTenureSummary.length },
+        ]}
       />
-      <Card className="border-border-strong">
-        <CardHeader>
-          <CardTitle>Enterprise Segment Signals</CardTitle>
-          <CardDescription>
-            This view is intentionally outgoing-only. It shows how different employee
-            segments experience the rest of the organization, which makes it ideal
-            for spotting where trust or collaboration quality is breaking for a
-            specific population.
-          </CardDescription>
-        </CardHeader>
-      </Card>
 
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="space-y-6">
         <Card className="border-border-strong">
           <CardHeader>
             <CardTitle>Role Signal</CardTitle>
@@ -1021,6 +1058,7 @@ export function DemoCdrsReportTab({
   generations,
   tenures,
   matchingRespondents,
+  hideFilters = false,
 }: {
   data: CollaborationData;
   filters: DemoFilters;
@@ -1029,6 +1067,7 @@ export function DemoCdrsReportTab({
   generations: readonly DemoGeneration[];
   tenures: readonly DemoTenureBand[];
   matchingRespondents: number;
+  hideFilters?: boolean;
 }) {
   const incomingData = data.departmentMetrics
     .filter((metric) => metric.incomingCount >= 2 && metric.incomingCDRS > 0)
@@ -1040,18 +1079,20 @@ export function DemoCdrsReportTab({
     .slice()
     .sort((left, right) => right.outgoingCDRS - left.outgoingCDRS)
     .map((metric) => ({ label: metric.department, score: metric.outgoingCDRS }));
-  const weakestIncoming = incomingData[incomingData.length - 1];
+  const averageGap = averageDepartmentGap(data.departmentMetrics);
 
   return (
     <div className="space-y-6">
-      <ReportSegmentFilters
-        filters={filters}
-        onChange={onFiltersChange}
-        roles={roles}
-        generations={generations}
-        tenures={tenures}
-        matchingRespondents={matchingRespondents}
-      />
+      {hideFilters ? null : (
+        <ReportSegmentFilters
+          filters={filters}
+          onChange={onFiltersChange}
+          roles={roles}
+          generations={generations}
+          tenures={tenures}
+          matchingRespondents={matchingRespondents}
+        />
+      )}
 
       {matchingRespondents < 2 ? (
         <Card className="border-border-strong">
@@ -1065,35 +1106,26 @@ export function DemoCdrsReportTab({
         </Card>
       ) : (
         <>
-          <ReportHero
-            eyebrow="Department Mode"
-            title={weakestIncoming ? `${weakestIncoming.name} is weakest under this lens` : "Segmented CDRS view"}
-            summary="This report shows departmental CDRS through the eyes of the selected employee segment so you can see which groups perceive the organization most differently."
-            value={weakestIncoming ? formatScoreForDisplay(weakestIncoming.value) : "—"}
-            valueLabel="Lowest incoming CDRS"
-            tone="warning"
-            action="Use the gap between incoming and outgoing to decide whether the issue is local friction, enterprise drag, or a perception blind spot."
+          <ReportSummaryHeader
+            title="CDRS"
+            description="Cross-department relationship scores for the active employee segment."
+            metrics={[
+              {
+                label: "Average Incoming",
+                value: formatScoreForDisplay(data.meta.dwsAverageIncoming),
+              },
+              {
+                label: "Average Outgoing",
+                value: formatScoreForDisplay(data.meta.dwsAverageOutgoing),
+              },
+              {
+                label: "Average Gap",
+                value: formatScoreForDisplay(averageGap),
+              },
+            ]}
           />
           <div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
-            <div className="lg:col-span-3">
-              <Card className="h-full border-border-strong">
-                <CardContent className="space-y-4 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-                    How to read this
-                  </p>
-                  <p className="text-sm leading-relaxed text-text-secondary">
-                    Incoming CDRS reflects how the active segment rates each department.
-                    Outgoing CDRS reflects how each department in the active segment rates
-                    the rest of the organization.
-                  </p>
-                  <p className="text-sm leading-relaxed text-text-secondary">
-                    This is the clearest way to see whether newer employees, managers,
-                    or executives are experiencing the enterprise differently.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="lg:col-span-5">
+            <div className="lg:col-span-7">
               <Card className="h-full border-border-strong">
                 <CardHeader>
                   <CardTitle>Incoming CDRS</CardTitle>
@@ -1106,7 +1138,7 @@ export function DemoCdrsReportTab({
                 </CardContent>
               </Card>
             </div>
-            <div className="lg:col-span-4">
+            <div className="lg:col-span-5">
               <ScoreTable
                 title="Outgoing CDRS"
                 headers={["Dept", "Score"]}
@@ -1129,6 +1161,8 @@ export function DemoCiReportTab({
   generations,
   tenures,
   matchingRespondents,
+  hideFilters = false,
+  orgAverageCi,
 }: {
   data: CollaborationData;
   filters: DemoFilters;
@@ -1137,6 +1171,8 @@ export function DemoCiReportTab({
   generations: readonly DemoGeneration[];
   tenures: readonly DemoTenureBand[];
   matchingRespondents: number;
+  hideFilters?: boolean;
+  orgAverageCi?: number;
 }) {
   const ciData = data.departmentMetrics
     .filter((metric) => metric.ciCount >= 2 && metric.collaborationIndex > 0)
@@ -1159,8 +1195,7 @@ export function DemoCiReportTab({
       return { label: question, score: Number(average.toFixed(2)) };
     })
     .filter((row) => row.score > 0);
-  const weakestCiDepartment = ciData[ciData.length - 1];
-  const weakestQuestion = questionRows[questionRows.length - 1];
+  const resolvedOrgAverageCi = orgAverageCi ?? averageCollaborationIndex(data.departmentMetrics);
 
   const departments = data.departmentMetrics
     .filter((metric) => metric.ciCount >= 2)
@@ -1198,14 +1233,16 @@ export function DemoCiReportTab({
 
   return (
     <div className="space-y-6">
-      <ReportSegmentFilters
-        filters={filters}
-        onChange={onFiltersChange}
-        roles={roles}
-        generations={generations}
-        tenures={tenures}
-        matchingRespondents={matchingRespondents}
-      />
+      {hideFilters ? null : (
+        <ReportSegmentFilters
+          filters={filters}
+          onChange={onFiltersChange}
+          roles={roles}
+          generations={generations}
+          tenures={tenures}
+          matchingRespondents={matchingRespondents}
+        />
+      )}
 
       {matchingRespondents < 2 ? (
         <Card className="border-border-strong">
@@ -1219,35 +1256,26 @@ export function DemoCiReportTab({
         </Card>
       ) : (
         <>
-          <ReportHero
-            eyebrow="Department Mode"
-            title={weakestCiDepartment ? `${weakestCiDepartment.name} has the lowest CI` : "Segmented collaboration index"}
-            summary="This report shows outgoing collaboration quality through the eyes of the selected employee segment so you can isolate where communication, coordination, or follow-through are breaking down."
-            value={weakestQuestion ? formatScoreForDisplay(weakestQuestion.score) : "—"}
-            valueLabel="Weakest CI statement"
-            tone="warning"
-            action="Start with the weakest statement before trying to improve the overall index."
+          <ReportSummaryHeader
+            title="CI"
+            description="Collaboration Index scores for the active employee segment, including statement detail and heatmap."
+            metrics={[
+              {
+                label: "Average CI",
+                value: formatScoreForDisplay(ciAverage),
+              },
+              {
+                label: "Matching Respondents",
+                value: matchingRespondents,
+              },
+              {
+                label: "Organization Average",
+                value: formatScoreForDisplay(resolvedOrgAverageCi),
+              },
+            ]}
           />
           <div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
-            <div className="lg:col-span-3">
-              <Card className="h-full border-border-strong">
-                <CardContent className="space-y-4 p-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-                    How to read this
-                  </p>
-                  <p className="text-sm leading-relaxed text-text-secondary">
-                    Because collaboration index is perception-based, this tab is best for
-                    uncovering which groups are experiencing coordination, communication,
-                    and follow-through differently.
-                  </p>
-                  <p className="text-sm leading-relaxed text-text-secondary">
-                    The heatmap at the bottom highlights which dimensions are weakest by
-                    department under the active segment lens.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="lg:col-span-5">
+            <div className="lg:col-span-7">
               <Card className="h-full border-border-strong">
                 <CardHeader>
                   <CardTitle>Departmental Collaboration Index</CardTitle>
@@ -1266,7 +1294,7 @@ export function DemoCiReportTab({
                 </CardContent>
               </Card>
             </div>
-            <div className="lg:col-span-4">
+            <div className="lg:col-span-5">
               <ScoreTable
                 title="CI Statements"
                 headers={["Statement", "Collab Index"]}
@@ -1328,104 +1356,56 @@ export function DepartmentCdrsReportTab({
   if (!detail) return null;
 
   const incomingBars = detail.incomingByDept
-    .slice()
+    .filter((row) => row.count >= 2 && row.score > 0)
     .sort((left, right) => right.score - left.score)
     .map((row) => ({ name: row.department, value: row.score }));
-  const outgoingRows = detail.outgoingByDept.map((row) => ({
-    label: row.department,
-    score: row.score,
-  }));
-  const averageGap = Math.abs(detail.outgoingCDRS - detail.incomingCDRS);
+  const outgoingRows = detail.outgoingByDept
+    .filter((row) => row.count >= 2 && row.score > 0)
+    .map((row) => ({
+      label: row.department,
+      score: row.score,
+    }));
+  const averageGap = detail.incomingCDRS - detail.outgoingCDRS;
   const orgAverageGap =
     data.departmentDetails.length > 0
       ? data.departmentDetails.reduce(
           (sum, department) =>
-            sum + Math.abs(department.outgoingCDRS - department.incomingCDRS),
+            sum + (department.incomingCDRS - department.outgoingCDRS),
           0
         ) / data.departmentDetails.length
       : 0;
 
   return (
     <div className="space-y-6">
-      <Card className="border-border-strong">
-        <CardContent className="flex flex-col gap-6 p-6 xl:flex-row xl:items-center xl:justify-between">
-          <div className="space-y-4 xl:max-w-2xl">
-            <CardTitle className="text-4xl font-extrabold tracking-tight text-text-primary">
-              CDRS Report
-            </CardTitle>
-            <CardDescription className="max-w-2xl text-base leading-relaxed text-text-secondary">
-              Shows how{" "}
-              <span className="font-semibold text-text-primary">
-                {selectedDepartment}
-              </span>{" "}
-              is experienced by other groups, how it experiences them in return,
-              and where the biggest relationship gaps deserve attention.
-            </CardDescription>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:flex-1 xl:grid-cols-4">
-            <div
-              className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-3 px-4 py-4 text-center"
-              style={getDataBoxSurfaceStyle()}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-primary">
-                Responses
-              </p>
-              <p className="mt-2 text-3xl font-extrabold text-text-primary">
-                {detail.responseCount}
-              </p>
-            </div>
-            <div
-              className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-3 px-4 py-4 text-center"
-              style={getDataBoxSurfaceStyle()}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-primary">
-                Incoming CDRS
-              </p>
-              <p
-                className="mt-2 text-3xl font-extrabold text-text-primary"
-              >
-                {formatScoreForDisplay(detail.incomingCDRS)}
-              </p>
-              <p className="mt-2 text-xs italic text-text-secondary">
-                Org: {formatScoreForDisplay(data.meta.dwsAverageIncoming)}
-              </p>
-            </div>
-            <div
-              className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-3 px-4 py-4 text-center"
-              style={getDataBoxSurfaceStyle()}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-primary">
-                Outgoing CDRS
-              </p>
-              <p
-                className="mt-2 text-3xl font-extrabold text-text-primary"
-              >
-                {formatScoreForDisplay(detail.outgoingCDRS)}
-              </p>
-              <p className="mt-2 text-xs italic text-text-secondary">
-                Org: {formatScoreForDisplay(data.meta.dwsAverageOutgoing)}
-              </p>
-            </div>
-            <div
-              className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-3 px-4 py-4 text-center"
-              style={getDataBoxSurfaceStyle()}
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-primary">
-                Average Gap
-              </p>
-              <p
-                className="mt-2 text-3xl font-extrabold text-text-primary"
-              >
-                {formatScoreForDisplay(averageGap)}
-              </p>
-              <p className="mt-2 text-xs italic text-text-secondary">
-                Org: {formatScoreForDisplay(orgAverageGap)}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <ReportSummaryHeader
+        title="CDRS Report"
+        description={
+          <>
+            Shows how{" "}
+            <span className="font-semibold text-text-primary">{selectedDepartment}</span>{" "}
+            is experienced by other groups, how it experiences them in return, and where
+            the biggest relationship gaps deserve attention.
+          </>
+        }
+        metrics={[
+          { label: "Responses", value: detail.responseCount },
+          {
+            label: "Incoming CDRS",
+            value: formatScoreForDisplay(detail.incomingCDRS),
+            sublabel: `Org: ${formatScoreForDisplay(data.meta.dwsAverageIncoming)}`,
+          },
+          {
+            label: "Outgoing CDRS",
+            value: formatScoreForDisplay(detail.outgoingCDRS),
+            sublabel: `Org: ${formatScoreForDisplay(data.meta.dwsAverageOutgoing)}`,
+          },
+          {
+            label: "Average Gap",
+            value: formatScoreForDisplay(averageGap),
+            sublabel: `Org: ${formatScoreForDisplay(orgAverageGap)}`,
+          },
+        ]}
+      />
 
       <RelationshipMap
         selectedDepartment={selectedDepartment}
@@ -1474,15 +1454,78 @@ export function DepartmentCdrsReportTab({
 export function DepartmentCiReportTab({
   data,
   selectedDepartment,
+  respondents,
+  departments,
+  selectedStatementIndex = "all",
 }: {
   data: CollaborationData;
   selectedDepartment: string;
+  respondents: DemoRespondent[];
+  departments: string[];
+  selectedStatementIndex?: number | "all";
 }) {
   const detail = data.departmentDetails.find(
     (department) => department.department === selectedDepartment
   );
 
   if (!detail) return null;
+
+  const questionIndex =
+    selectedStatementIndex === "all" ? undefined : selectedStatementIndex;
+
+  const flowCiByDept = useMemo(
+    () =>
+      buildDepartmentCiByDept(
+        respondents,
+        selectedDepartment,
+        departments,
+        questionIndex
+      ),
+    [respondents, selectedDepartment, departments, questionIndex]
+  );
+  const flowRoleRows = useMemo(
+    () =>
+      buildDepartmentSegmentSummary(
+        respondents,
+        selectedDepartment,
+        "role",
+        "incoming",
+        questionIndex
+      ),
+    [respondents, selectedDepartment, questionIndex]
+  );
+  const flowGenerationRows = useMemo(
+    () =>
+      buildDepartmentSegmentSummary(
+        respondents,
+        selectedDepartment,
+        "generation",
+        "incoming",
+        questionIndex
+      ),
+    [respondents, selectedDepartment, questionIndex]
+  );
+  const flowTenureRows = useMemo(
+    () =>
+      buildDepartmentSegmentSummary(
+        respondents,
+        selectedDepartment,
+        "tenure",
+        "incoming",
+        questionIndex
+      ),
+    [respondents, selectedDepartment, questionIndex]
+  );
+
+  const flowCenterScore =
+    questionIndex === undefined
+      ? detail.collaborationIndex
+      : detail.questionScores[questionIndex]?.score ?? detail.collaborationIndex;
+
+  const selectedStatementLabel =
+    questionIndex === undefined
+      ? null
+      : succinctCiStatementLabel(detail.questionScores[questionIndex]?.question ?? "");
 
   const statementRows = detail.questionScores.map((question) => ({
     label: question.question,
@@ -1492,56 +1535,38 @@ export function DepartmentCiReportTab({
     .slice()
     .sort((left, right) => right.score - left.score)
     .map((question) => ({
-      name: shortQuestionLabel(question.question),
+      name: succinctCiStatementLabel(question.question),
       value: question.score,
     }));
-  const strongestStatement = detail.questionScores
-    .slice()
-    .sort((left, right) => right.score - left.score)[0];
-  const weakestStatement = detail.questionScores
-    .slice()
-    .sort((left, right) => left.score - right.score)[0];
+  const orgAverageCi = averageCollaborationIndex(data.departmentMetrics);
 
   return (
     <div className="space-y-6">
-      <Card className="border-border-strong">
-        <CardHeader>
-          <CardTitle>CI Report</CardTitle>
-          <CardDescription>
-            Collaboration Index detail for {selectedDepartment}, including the
-            strongest and weakest experience dimensions.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 pt-0 md:grid-cols-3">
-          <div
-            className="rounded-2xl border border-border-strong bg-surface-3 px-5 py-4"
-            style={getDataBoxSurfaceStyle()}
-          >
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-              Collaboration Index
-            </p>
-            <p className="mt-1 text-3xl font-extrabold text-text-primary">
-              {formatScoreForDisplay(detail.collaborationIndex)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border-strong bg-surface-2 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-              Strongest Statement
-            </p>
-            <p className="mt-1 text-sm font-semibold text-text-primary">
-              {strongestStatement?.question ?? "—"}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border-strong bg-surface-2 px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-text-muted">
-              Weakest Statement
-            </p>
-            <p className="mt-1 text-sm font-semibold text-text-primary">
-              {weakestStatement?.question ?? "—"}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <ReportSummaryHeader
+        title="CI Report"
+        description={
+          <>
+            Collaboration Index detail for{" "}
+            <span className="font-semibold text-text-primary">{selectedDepartment}</span>
+            , including statement-level scores ranked from strongest to weakest.
+          </>
+        }
+        metrics={[
+          {
+            label: "Responses",
+            value: detail.ciRaterCount,
+          },
+          {
+            label: "Collaboration Index",
+            value: formatScoreForDisplay(detail.collaborationIndex),
+          },
+          {
+            label: "Organization Average",
+            value: formatScoreForDisplay(orgAverageCi),
+            sublabel: "Top Flight average CI",
+          },
+        ]}
+      />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card className="border-border-strong">
@@ -1559,6 +1584,7 @@ export function DepartmentCiReportTab({
               minValue={3}
               midpoint={6}
               maxValue={9}
+              categoryAxisWidth={200}
             />
           </CardContent>
         </Card>
@@ -1573,6 +1599,28 @@ export function DepartmentCiReportTab({
           className="h-full"
         />
       </div>
+
+      {selectedStatementLabel ? (
+        <p className="text-sm text-text-secondary">
+          Flow chart:{" "}
+          <span className="font-semibold text-text-primary">{selectedStatementLabel}</span>
+        </p>
+      ) : null}
+
+      <RelationshipMap
+        variant="ci"
+        selectedDepartment={selectedDepartment}
+        incomingByDept={flowCiByDept}
+        outgoingByDept={[]}
+        incomingCDRS={flowCenterScore}
+        outgoingCDRS={flowCenterScore}
+        averageGap={0}
+        centerScore={flowCenterScore}
+        ciByDept={flowCiByDept}
+        roleRows={flowRoleRows}
+        generationRows={flowGenerationRows}
+        tenureRows={flowTenureRows}
+      />
     </div>
   );
 }
@@ -1580,16 +1628,32 @@ export function DepartmentCiReportTab({
 function StoryStatPill({
   label,
   value,
+  compact = false,
 }: {
   label: string;
   value: string;
+  compact?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-white/40 bg-white/75 p-4 text-right backdrop-blur-sm">
-      <p className="text-[13px] font-semibold uppercase tracking-[0.18em] text-text-muted">
+    <div
+      className={`rounded-xl border border-white/40 bg-white/75 text-right backdrop-blur-sm ${
+        compact ? "px-3 py-2" : "rounded-2xl p-4"
+      }`}
+    >
+      <p
+        className={`font-semibold uppercase tracking-[0.16em] text-text-muted ${
+          compact ? "text-[10px]" : "text-[13px] tracking-[0.18em]"
+        }`}
+      >
         {label}
       </p>
-      <p className="mt-1.5 text-lg font-semibold leading-snug text-text-primary">{value}</p>
+      <p
+        className={`font-semibold leading-snug text-text-primary ${
+          compact ? "mt-1 text-sm" : "mt-1.5 text-lg"
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -1740,32 +1804,42 @@ export function Department360Tab({
 
   return (
     <div className="space-y-6">
+      <ReportSummaryHeader
+        title="Dept 360"
+        description={
+          <>
+            Narrative summary for{" "}
+            <span className="font-semibold text-text-primary">{selectedDepartment}</span>
+            : how the department is experienced, where it stands versus the organization,
+            and where leaders should focus first.
+          </>
+        }
+        metrics={[
+          { label: "CDRS Responses", value: detail.responseCount },
+          { label: "CI Responses", value: detail.ciRaterCount },
+        ]}
+      />
+
       <Card className="border-border-strong">
-        <CardHeader className="pb-4">
-          <CardTitle>Dept 360</CardTitle>
-          <CardDescription>
-            A narrative-first summary of how {selectedDepartment} is being experienced,
-            where the department stands versus the organization, and where leaders
-            should focus first.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5 pt-0">
-          <div className="rounded-2xl border border-border-strong bg-gradient-to-br from-surface-2 via-white to-nsp-blue-50/40 px-6 py-6">
-            <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
+        <CardContent className="p-4">
+          <div className="rounded-xl border border-border-strong bg-gradient-to-br from-surface-2 via-white to-nsp-blue-50/40 px-4 py-3">
+            <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr] lg:items-start">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-nsp-orange-500">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-nsp-orange-500">
                   Department Story
                 </p>
-                <p className="mt-3 max-w-4xl text-2xl font-normal leading-snug text-text-primary">
+                <p className="mt-1.5 max-w-4xl text-base font-normal leading-snug text-text-primary">
                   {departmentStory}
                 </p>
               </div>
-              <div className="flex flex-col items-end gap-3">
+              <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-1 lg:justify-items-end">
                 <StoryStatPill
+                  compact
                   label="Strongest relationship"
                   value={strongestPartner?.partner ?? "No clear strength yet"}
                 />
                 <StoryStatPill
+                  compact
                   label="Main opportunity"
                   value={
                     weakestQuestion
@@ -1774,6 +1848,7 @@ export function Department360Tab({
                   }
                 />
                 <StoryStatPill
+                  compact
                   label="Biggest watchout"
                   value={highestAttentionPartner?.partner ?? "No clear watchout yet"}
                 />
@@ -1781,7 +1856,7 @@ export function Department360Tab({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <DepartmentBenchmarkCard
               label="Incoming CDRS"
               value={detail.incomingCDRS}
