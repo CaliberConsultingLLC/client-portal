@@ -57,6 +57,7 @@ export interface DemoScenario {
 }
 
 export interface DemoFilters {
+  department: string;
   role: DemoRole | "all";
   generation: DemoGeneration | "all";
   tenure: DemoTenureBand | "all";
@@ -137,7 +138,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     description:
       "A generally healthy organization with a few normal seams between fast-growing functions.",
     organizationName: "Summit Atlas Group",
-    campaignName: "Demo Collaboration Environment",
+    campaignName: "Collaboration",
     departments: [
       "Sales",
       "Marketing",
@@ -193,7 +194,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     description:
       "A transformation period where some departments are aligned, but execution handoffs are under pressure.",
     organizationName: "North Ridge Services",
-    campaignName: "Transformation Demo Environment",
+    campaignName: "Collaboration",
     departments: [
       "Commercial",
       "Revenue Operations",
@@ -252,7 +253,7 @@ export const DEMO_SCENARIOS: DemoScenario[] = [
     description:
       "A post-integration story with visible friction across legacy teams, but improving alignment in the center.",
     organizationName: "Orion Field Systems",
-    campaignName: "Integration Demo Environment",
+    campaignName: "Collaboration",
     departments: [
       "Field Operations",
       "Client Delivery",
@@ -683,6 +684,7 @@ export function filterDemoRespondents(
   filters: DemoFilters
 ) {
   return respondents.filter((respondent) => {
+    if (filters.department !== "all" && respondent.department !== filters.department) return false;
     if (filters.role !== "all" && respondent.role !== filters.role) return false;
     if (
       filters.generation !== "all" &&
@@ -707,15 +709,18 @@ export function buildDemoCollaborationData(
   const outgoingScores: Record<string, number[]> = {};
   const heatmapScores: Record<string, Record<string, number[]>> = {};
   const ciQuestionScores: Record<string, number[][]> = {};
+  const ciPairScores: Record<string, Record<string, number[]>> = {};
 
   for (const department of departments) {
     incomingScores[department] = [];
     outgoingScores[department] = [];
     heatmapScores[department] = {};
     ciQuestionScores[department] = DEMO_CI_QUESTIONS.map(() => []);
+    ciPairScores[department] = {};
 
     for (const target of departments) {
       heatmapScores[department][target] = [];
+      if (target !== department) ciPairScores[department][target] = [];
     }
   }
 
@@ -730,9 +735,16 @@ export function buildDemoCollaborationData(
         heatmapScores[respondent.department][target].push(cdrsScore);
       }
 
-      respondent.ciScores[target]?.forEach((score, questionIndex) => {
+      const ciScoresForTarget = respondent.ciScores[target];
+      ciScoresForTarget?.forEach((score, questionIndex) => {
         ciQuestionScores[target][questionIndex].push(score);
       });
+      if (
+        ciScoresForTarget?.length &&
+        departments.includes(respondent.department)
+      ) {
+        ciPairScores[target][respondent.department].push(...ciScoresForTarget);
+      }
     }
   }
 
@@ -785,6 +797,13 @@ export function buildDemoCollaborationData(
     const metrics = departmentMetrics.find(
       (metric) => metric.department === department
     );
+    const ciRaterIds = new Set<string>();
+    for (const respondent of respondents) {
+      if (respondent.department === department) continue;
+      if ((respondent.ciScores[department]?.length ?? 0) > 0) {
+        ciRaterIds.add(respondent.id);
+      }
+    }
 
     return {
       department,
@@ -792,6 +811,7 @@ export function buildDemoCollaborationData(
       outgoingCDRS: metrics?.outgoingCDRS ?? 0,
       collaborationIndex: metrics?.collaborationIndex ?? 0,
       responseCount: metrics?.incomingCount ?? 0,
+      ciRaterCount: ciRaterIds.size,
       incomingByDept: departments
         .filter((source) => source !== department)
         .map((source) => ({
@@ -807,6 +827,15 @@ export function buildDemoCollaborationData(
           department: target,
           score: round2(avg(heatmapScores[department][target])),
           count: heatmapScores[department][target].length,
+        }))
+        .filter((entry) => entry.count >= minimumResponses)
+        .sort((left, right) => right.score - left.score),
+      ciByDept: departments
+        .filter((source) => source !== department)
+        .map((source) => ({
+          department: source,
+          score: round2(avg(ciPairScores[department][source])),
+          count: ciPairScores[department][source].length,
         }))
         .filter((entry) => entry.count >= minimumResponses)
         .sort((left, right) => right.score - left.score),
