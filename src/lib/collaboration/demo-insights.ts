@@ -430,7 +430,7 @@ export function buildDepartmentCiByDept(
       score: round2(avg(values)),
       count: values.length,
     }))
-    .filter((entry) => entry.count >= 2)
+    .filter((entry) => entry.count >= 2 && entry.score > 0)
     .sort((left, right) => right.score - left.score);
 }
 

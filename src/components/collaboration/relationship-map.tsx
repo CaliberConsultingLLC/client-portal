@@ -440,21 +440,19 @@ export function RelationshipMap({
           }));
       }
 
-      // Only include departments where at least one side has a valid score
-      // (meets rule of two). The ?? 0 fallback must not create phantom zero
-      // entries for the missing side, so we only build nodes for departments
-      // that appear in BOTH maps — one-sided relationships are excluded.
+      // Only include departments that have valid (> 0) scores on BOTH sides.
+      // A missing score on either side means not enough data — the whole
+      // relationship node is suppressed rather than showing a phantom zero.
       const incomingMap = new Map(incomingByDept.filter((row) => row.score > 0).map((row) => [row.department, row.score]));
       const outgoingMap = new Map(outgoingByDept.filter((row) => row.score > 0).map((row) => [row.department, row.score]));
-      const validDepts = new Set([...incomingMap.keys(), ...outgoingMap.keys()]);
 
-      return Array.from(validDepts)
+      return Array.from(new Set([...incomingMap.keys(), ...outgoingMap.keys()]))
         .filter((label) => label !== selectedDepartment)
-        .filter((label) => incomingMap.has(label) || outgoingMap.has(label))
+        .filter((label) => incomingMap.has(label) && outgoingMap.has(label))
         .sort()
         .map((label) => {
-          const incoming = incomingMap.get(label) ?? 0;
-          const outgoing = outgoingMap.get(label) ?? 0;
+          const incoming = incomingMap.get(label) as number;
+          const outgoing = outgoingMap.get(label) as number;
           return {
             id: `department-${label}`,
             label,
