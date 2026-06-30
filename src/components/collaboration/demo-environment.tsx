@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { RefreshCw, Users, Layers, SlidersHorizontal } from "lucide-react";
 import { CollaborationDashboardClient } from "@/app/collaboration/[slug]/dashboard-client";
 import {
@@ -100,9 +101,9 @@ function buildCounts(
 }
 
 export function CollaborationDemoEnvironment() {
+  const searchParams = useSearchParams();
   const [scenarioId, setScenarioId] = useState(DEMO_SCENARIOS[0].id);
   const [seed, setSeed] = useState("northstar-demo-01");
-  const [showDemoLab, setShowDemoLab] = useState(false);
   const [departmentCountInput, setDepartmentCountInput] = useState("");
   const [respondentTargetInput, setRespondentTargetInput] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState(
@@ -112,11 +113,13 @@ export function CollaborationDemoEnvironment() {
     role: "all",
     generation: "all",
     tenure: "all",
+    department: "all",
   });
   const [filters, setFilters] = useState<DemoFilters>({
     role: "all",
     generation: "all",
     tenure: "all",
+    department: "all",
   });
   const [executiveRelationshipRanking, setExecutiveRelationshipRanking] = useState<
     string[]
@@ -245,36 +248,74 @@ export function CollaborationDemoEnvironment() {
     () => buildSegmentSummary(filteredRespondents, data, "tenure"),
     [filteredRespondents, data]
   );
-  const departmentRoleSummary = useMemo(
+  const departmentIncomingRoleSummary = useMemo(
     () =>
       buildDepartmentSegmentSummary(
         filteredRespondents,
         effectiveSelectedDepartment,
-        "role"
+        "role",
+        "incoming"
       ),
     [filteredRespondents, effectiveSelectedDepartment]
   );
-  const departmentGenerationSummary = useMemo(
+  const departmentIncomingGenerationSummary = useMemo(
     () =>
       buildDepartmentSegmentSummary(
         filteredRespondents,
         effectiveSelectedDepartment,
-        "generation"
+        "generation",
+        "incoming"
       ),
     [filteredRespondents, effectiveSelectedDepartment]
   );
-  const departmentTenureSummary = useMemo(
+  const departmentIncomingTenureSummary = useMemo(
     () =>
       buildDepartmentSegmentSummary(
         filteredRespondents,
         effectiveSelectedDepartment,
-        "tenure"
+        "tenure",
+        "incoming"
+      ),
+    [filteredRespondents, effectiveSelectedDepartment]
+  );
+  const departmentOutgoingRoleSummary = useMemo(
+    () =>
+      buildDepartmentSegmentSummary(
+        filteredRespondents,
+        effectiveSelectedDepartment,
+        "role",
+        "outgoing"
+      ),
+    [filteredRespondents, effectiveSelectedDepartment]
+  );
+  const departmentOutgoingGenerationSummary = useMemo(
+    () =>
+      buildDepartmentSegmentSummary(
+        filteredRespondents,
+        effectiveSelectedDepartment,
+        "generation",
+        "outgoing"
+      ),
+    [filteredRespondents, effectiveSelectedDepartment]
+  );
+  const departmentOutgoingTenureSummary = useMemo(
+    () =>
+      buildDepartmentSegmentSummary(
+        filteredRespondents,
+        effectiveSelectedDepartment,
+        "tenure",
+        "outgoing"
       ),
     [filteredRespondents, effectiveSelectedDepartment]
   );
   const actionPriorities = useMemo(
-    () => buildActionPriorities(departmentRows, questionInsights, departmentRoleSummary),
-    [departmentRows, questionInsights, departmentRoleSummary]
+    () =>
+      buildActionPriorities(
+        departmentRows,
+        questionInsights,
+        departmentOutgoingRoleSummary
+      ),
+    [departmentRows, questionInsights, departmentOutgoingRoleSummary]
   );
 
   const roleCounts = useMemo(
@@ -322,6 +363,7 @@ export function CollaborationDemoEnvironment() {
     { key: "generation", header: "Generation" },
     { key: "tenure", header: "Tenure" },
   ];
+  const showDemoLab = searchParams.get("demoLab") === "open";
 
   const updateExecutiveRelationshipRanking = (slot: number, value: string) => {
     setExecutiveRelationshipRanking((current) => {
@@ -630,15 +672,6 @@ export function CollaborationDemoEnvironment() {
       data={data}
       campaignName={scenario.campaignName}
       organizationName={scenario.organizationName}
-      headerAction={
-        <Button
-          variant="outline"
-          className="border-border-strong"
-          onClick={() => setShowDemoLab((current) => !current)}
-        >
-          {showDemoLab ? "Hide Demo Lab" : "Open Demo Lab"}
-        </Button>
-      }
       tabRowAction={
         <DepartmentSelector
           departments={scenario.departments}
@@ -673,7 +706,6 @@ export function CollaborationDemoEnvironment() {
             "department-360",
             "dept",
             "department-ci-report",
-            "department-segments",
             "action-priorities",
           ],
         },
@@ -718,9 +750,9 @@ export function CollaborationDemoEnvironment() {
             <DepartmentCdrsReportTab
               data={data}
               selectedDepartment={effectiveSelectedDepartment}
-              roleRows={departmentRoleSummary}
-              generationRows={departmentGenerationSummary}
-              tenureRows={departmentTenureSummary}
+              roleRows={departmentIncomingRoleSummary}
+              generationRows={departmentIncomingGenerationSummary}
+              tenureRows={departmentIncomingTenureSummary}
             />
           ),
         },
@@ -737,7 +769,6 @@ export function CollaborationDemoEnvironment() {
         "department-360",
         "dept",
         "department-ci-report",
-        "department-segments",
         "action-priorities",
       ]}
       extraTabs={[
@@ -791,18 +822,8 @@ export function CollaborationDemoEnvironment() {
             <DepartmentCiReportTab
               data={data}
               selectedDepartment={effectiveSelectedDepartment}
-            />
-          ),
-        },
-        {
-          id: "department-segments",
-          label: "Dept Segments",
-          content: (
-            <DepartmentSegmentLensTab
-              selectedDepartment={effectiveSelectedDepartment}
-              roleRows={departmentRoleSummary}
-              generationRows={departmentGenerationSummary}
-              tenureRows={departmentTenureSummary}
+              respondents={filteredRespondents}
+              departments={data.meta.departments}
             />
           ),
         },
@@ -832,4 +853,5 @@ export function CollaborationDemoEnvironment() {
     />
   );
 }
+
 
