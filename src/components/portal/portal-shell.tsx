@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Building2,
   Users,
   BarChart3,
   PanelsTopLeft,
-  FileText,
   NotebookPen,
   ClipboardList,
   Megaphone,
+  MapPin,
+  BookText,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -26,10 +27,12 @@ const navItems = [
   { label: "Users", href: "/portal/users", icon: Users },
   { label: "Dashboards", href: "/portal/dashboards", icon: BarChart3 },
   { label: "Insights", href: "/portal/insights", icon: NotebookPen },
-  { label: "Perspectives", href: "/portal/perspectives", icon: PanelsTopLeft },
-  { label: "Reports", href: "/portal/reports", icon: FileText },
+  { label: "Readouts", href: "/portal/readouts", icon: BookText },
+  { label: "Workspace Map", href: "/portal/workspace-map", icon: MapPin },
+  // Perspectives and Live Fielding temporarily hidden to reduce nav overflow
+  // { label: "Perspectives", href: "/portal/perspectives", icon: PanelsTopLeft },
   { label: "Census", href: "/portal/census", icon: ClipboardList },
-  { label: "Campaigns", href: "/portal/campaigns", icon: Megaphone },
+  // { label: "Live Fielding", href: "/portal/campaigns", icon: Megaphone },
 ];
 
 interface PortalShellProps {
@@ -54,6 +57,10 @@ function normalizeDashboardAssetId(assetId: string) {
   return assetId.split("--")[0] ?? assetId;
 }
 
+const DEMO_LAB_DISABLED_ASSET_IDS = new Set([
+  "employee-experience", // CSG production dashboard should never expose demo lab controls.
+]);
+
 function getDemoLabHrefForAsset(assetId: string) {
   switch (normalizeDashboardAssetId(assetId)) {
     case "collaboration-dashboard":
@@ -66,6 +73,49 @@ function getDemoLabHrefForAsset(assetId: string) {
     default:
       return null;
   }
+}
+
+interface DemoLabButtonProps {
+  pathname: string;
+  isDashboardLabRoute: boolean;
+  isDashboardRoute: boolean;
+  currentDashboardDemoLabHref: string | null;
+  defaultDemoLabHref: string;
+  showDemoLabButton: boolean;
+}
+
+function DemoLabButton({
+  pathname,
+  isDashboardLabRoute,
+  isDashboardRoute,
+  currentDashboardDemoLabHref,
+  defaultDemoLabHref,
+  showDemoLabButton,
+}: DemoLabButtonProps) {
+  const searchParams = useSearchParams();
+  const isDemoLabOpen = searchParams.get("demoLab") === "open";
+  const demoLabHref =
+    isDashboardLabRoute && isDemoLabOpen
+      ? pathname
+      : currentDashboardDemoLabHref
+        ? currentDashboardDemoLabHref
+        : isDashboardRoute && isDemoLabOpen
+          ? `${pathname}?${new URLSearchParams({ demoLab: "open" }).toString()}`
+          : defaultDemoLabHref;
+
+  if (!showDemoLabButton) {
+    return null;
+  }
+
+  return (
+    <Button
+      asChild
+      variant="outline"
+      className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
+    >
+      <Link href={demoLabHref}>{isDemoLabOpen ? "Hide Demo Lab" : "Open Demo Lab"}</Link>
+    </Button>
+  );
 }
 
 export function PortalShell({
@@ -81,14 +131,14 @@ export function PortalShell({
   defaultDemoLabHref = "/portal/dashboards/lab/collaboration?demoLab=open",
 }: PortalShellProps) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [isInsightsEditing, setIsInsightsEditing] = useState(false);
   // Internal-only top-nav. Clients reach their census through the campaign
   // card's "Census" button instead of a global Census tab.
   const internalOnlyNav = new Set([
     "/portal/clients",
+    "/portal/readouts",
+    "/portal/workspace-map",
     "/portal/perspectives",
-    "/portal/reports",
     "/portal/documents",
     "/portal/resources",
     "/portal/census",
@@ -99,7 +149,7 @@ export function PortalShell({
       return canSeeInternalNav;
     }
 
-    // Home, Users, Dashboards, and Campaigns are visible to everyone.
+    // Home, Users, Dashboards, and Live Fielding are visible to everyone.
     return true;
   });
   const dashboardPathParts = pathname.split("/").filter(Boolean);
@@ -118,17 +168,10 @@ export function PortalShell({
     ? getDemoLabHrefForAsset(currentDashboardAssetId)
     : null;
   const isDemoDashboardRoute = demoDashboardAssetIds.includes(currentDashboardAssetId);
-  const isDemoLabOpen = searchParams.get("demoLab") === "open";
-  const demoLabHref =
-    isDashboardLabRoute && isDemoLabOpen
-      ? pathname
-      : currentDashboardDemoLabHref
-        ? currentDashboardDemoLabHref
-        : isDashboardRoute && isDemoLabOpen
-        ? `${pathname}?${new URLSearchParams({ demoLab: "open" }).toString()}`
-        : defaultDemoLabHref;
   const showDemoLabButton =
-    isDashboardRoute && (isInternalUser || isDemoDashboardRoute || hasDemoWorkspaceAccess);
+    isDashboardRoute &&
+    !DEMO_LAB_DISABLED_ASSET_IDS.has(normalizeDashboardAssetId(currentDashboardAssetId)) &&
+    (isInternalUser || isDemoDashboardRoute || hasDemoWorkspaceAccess);
   const isInsightsRoute = pathname.startsWith("/portal/insights");
   const insightsEditing = isInsightsRoute ? isInsightsEditing : false;
 
@@ -150,17 +193,16 @@ export function PortalShell({
           exact: item.exact,
         }))}
       >
-        {showDemoLabButton ? (
-          <Button
-            asChild
-            variant="outline"
-            className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
-          >
-            <Link href={demoLabHref}>
-              {isDemoLabOpen ? "Hide Demo Lab" : "Open Demo Lab"}
-            </Link>
-          </Button>
-        ) : null}
+        <Suspense fallback={null}>
+          <DemoLabButton
+            pathname={pathname}
+            isDashboardLabRoute={isDashboardLabRoute}
+            isDashboardRoute={isDashboardRoute}
+            currentDashboardDemoLabHref={currentDashboardDemoLabHref}
+            defaultDemoLabHref={defaultDemoLabHref}
+            showDemoLabButton={showDemoLabButton}
+          />
+        </Suspense>
         <FirebaseSignOutButton
           redirectTo="/login"
           variant="outline"

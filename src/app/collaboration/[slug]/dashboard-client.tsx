@@ -193,7 +193,6 @@ export function CollaborationDashboardClient({
       </div>
     ) : undefined;
   const leftRail = leftRailOverride !== undefined ? leftRailOverride : builtInLeftRail;
-
   return (
     <>
       <DashboardRibbon
@@ -216,6 +215,7 @@ export function CollaborationDashboardClient({
         onPerspectiveChange={setActiveTab}
         legend={<ColorLegend />}
       />
+      <div>
       <DashboardCanvas
         leftRail={leftRail}
         rightRail={
@@ -246,6 +246,7 @@ export function CollaborationDashboardClient({
         {floatingPanel}
         {activeTabContent}
       </DashboardCanvas>
+      </div>
     </>
   );
 }
