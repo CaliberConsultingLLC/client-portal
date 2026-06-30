@@ -434,6 +434,7 @@ export function CollaborationDemoEnvironment() {
                   role: "all",
                   generation: "all",
                   tenure: "all",
+                  department: "all",
                 });
                 setExecutiveRelationshipRanking(["", "", ""]);
               }}
