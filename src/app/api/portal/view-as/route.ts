@@ -4,7 +4,7 @@ import {
   getOptionalFirebaseUser,
   isSuperAdmin,
 } from "@/lib/firebase/auth";
-import { getPortalClientById } from "@/lib/portal/clients";
+import { getFirebaseUserDoc } from "@/lib/firebase/user-store";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  let body: { enabled?: boolean; clientId?: string } = {};
+  let body: { enabled?: boolean; uid?: string } = {};
   try {
     body = await req.json();
   } catch {
@@ -26,14 +26,14 @@ export async function POST(req: NextRequest) {
   const response = NextResponse.json({ ok: true });
 
   if (body.enabled) {
-    const clientId = String(body.clientId ?? "").trim();
+    const uid = String(body.uid ?? "").trim();
 
-    // Only allow previewing as a known portal client.
-    if (!getPortalClientById(clientId)) {
-      return NextResponse.json({ error: "Unknown client" }, { status: 400 });
+    const targetUser = await getFirebaseUserDoc(uid);
+    if (!targetUser || !targetUser.isActive) {
+      return NextResponse.json({ error: "Unknown user" }, { status: 400 });
     }
 
-    response.cookies.set(PORTAL_VIEW_AS_COOKIE_NAME, clientId, {
+    response.cookies.set(PORTAL_VIEW_AS_COOKIE_NAME, uid, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

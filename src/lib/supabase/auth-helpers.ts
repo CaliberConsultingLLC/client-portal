@@ -3,7 +3,15 @@ import { redirect } from "next/navigation";
 import type { User } from "@/types/database";
 
 const ADMIN_ROLES = new Set(["super_admin", "admin", "analyst", "nsp_admin"]);
-const PORTAL_ROLES = new Set(["client_admin", "client_viewer", "super_admin", "admin", "analyst"]);
+const PORTAL_ROLES = new Set([
+  "client_admin",
+  "executive",
+  "management",
+  "employee",
+  "super_admin",
+  "admin",
+  "analyst",
+]);
 
 async function getCurrentAppUser(): Promise<User | null> {
   const supabase = await createServerClient();
@@ -42,7 +50,7 @@ export async function requireAdmin(): Promise<User> {
 export async function requirePortalUser(): Promise<User> {
   const user = await getCurrentAppUser();
   if (!user || !PORTAL_ROLES.has(user.role)) {
-    redirect("/portal-login");
+    redirect("/login");
   }
   return user;
 }

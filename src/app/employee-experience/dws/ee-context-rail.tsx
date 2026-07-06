@@ -30,12 +30,32 @@ export function EEContextRail({
   className,
   compact = false,
   extraLegend,
+  scoreLegendLabel,
+  scoreLegendGradient: scoreLegendGradientOverride,
+  scoreLegendMinLabel,
+  scoreLegendMaxLabel,
+  scoreLegendTicks,
+  scoreLegendBands,
+  deltaLegendGradient: deltaLegendGradientOverride,
+  scale,
 }: {
   howToRead: string;
   className?: string;
   compact?: boolean;
   extraLegend?: React.ReactNode;
+  scoreLegendLabel?: string;
+  scoreLegendGradient?: string;
+  scoreLegendMinLabel?: string;
+  scoreLegendMaxLabel?: string;
+  scoreLegendTicks?: React.ReactNode;
+  scoreLegendBands?: React.ReactNode;
+  deltaLegendGradient?: string;
+  scale?: { min: number; max: number };
 }) {
+  const scoreGradient = scoreLegendGradientOverride ?? "linear-gradient(90deg, #D7B35A 0%, #FFFFFF 50%, #3F5F86 100%)";
+  const deltaGradient = deltaLegendGradientOverride ?? "linear-gradient(90deg, #D46A6A 0%, #F5EFEF 50%, #59885D 100%)";
+  const scoreMinLabel = scoreLegendMinLabel ?? (scale ? String(scale.min) : "60");
+  const scoreMaxLabel = scoreLegendMaxLabel ?? (scale ? String(scale.max) : "85");
   return (
     <div className={className ?? "flex flex-col gap-3"}>
       <div className="overflow-hidden rounded-2xl bg-white" style={{ border: "1px solid #8798AA" }}>
@@ -46,23 +66,25 @@ export function EEContextRail({
         <div className="flex flex-col gap-3">
           <div>
             <p style={{ margin: "0 0 8px 0", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6E7E96" }}>
-              Score Scale (Blue-Red)
+              {scoreLegendLabel ?? "Score Scale"}
             </p>
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold text-[#6E7E96]">60</span>
-              <div className="h-3.5 flex-1 rounded-2xl border border-[#8798AA]" style={{ background: scoreScaleLegendGradient }} />
-              <span className="text-[11px] font-semibold text-[#6E7E96]">85</span>
+              <span className="text-[11px] font-semibold text-[#6E7E96]">{scoreMinLabel}</span>
+              <div className="h-3.5 flex-1 rounded-2xl border border-[#8798AA]" style={{ background: scoreGradient }} />
+              <span className="text-[11px] font-semibold text-[#6E7E96]">{scoreMaxLabel}</span>
             </div>
+            {scoreLegendTicks ? <div className="mt-1.5">{scoreLegendTicks}</div> : null}
+            {scoreLegendBands ? <div className="mt-2">{scoreLegendBands}</div> : null}
           </div>
           <div>
             <p style={{ margin: "0 0 8px 0", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6E7E96" }}>
-              Delta Scale (Red-Green)
+              Delta / Diff Scale
             </p>
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-semibold text-[#6E7E96]">Decline</span>
               <div
                 className="h-3.5 flex-1 rounded-2xl border border-[#8798AA]"
-                style={{ background: "linear-gradient(90deg,#B49F9C 0%,#C8B9B6 30%,#E2E8EF 50%,#B5C5BE 70%,#8BA399 100%)" }}
+                style={{ background: deltaGradient }}
               />
               <span className="text-[11px] font-semibold text-[#6E7E96]">Gain</span>
             </div>

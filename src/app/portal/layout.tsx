@@ -1,5 +1,16 @@
+import type { Metadata } from "next";
 import { PortalShell } from "@/components/portal/portal-shell";
-import { requireFirebasePortalUser } from "@/lib/firebase/auth";
+import {
+  isInternalFirebaseRole,
+  isSuperAdmin,
+  requireFirebasePortalUser,
+} from "@/lib/firebase/auth";
+import { getAccessibleDashboardAssignments, getAccessiblePortalClients } from "@/lib/firebase/portal-access";
+import { listAllFirebaseUsers } from "@/lib/firebase/user-store";
+
+export const metadata: Metadata = {
+  title: "Caliber Consulting LLC Portal",
+};
 
 export default async function PortalLayout({
   children,
@@ -7,17 +18,38 @@ export default async function PortalLayout({
   children: React.ReactNode;
 }) {
   const user = await requireFirebasePortalUser();
-  const roleLabel =
-    user.role === "super_admin" || user.role === "internal_admin"
-      ? "Internal Admin"
-      : user.role === "client_admin"
-      ? "Client Admin"
-      : user.role === "client_viewer"
-        ? "Client Viewer"
-        : "Internal Access";
+  const [clients, assignments] = await Promise.all([
+    getAccessiblePortalClients(user),
+    getAccessibleDashboardAssignments(user),
+  ]);
+  const demoClientIds = new Set(clients.filter((client) => client.isDemo).map((client) => client.id));
+  const demoAssignments = assignments.filter((assignment) => demoClientIds.has(assignment.clientId));
+  const defaultDemoLabHref = "/portal/dashboards/lab/collaboration?demoLab=open";
+
+  const canPreviewAsUser = isSuperAdmin(user);
+  const viewAsUsers = canPreviewAsUser
+    ? (await listAllFirebaseUsers())
+        .filter((entry) => entry.isActive)
+        .map((entry) => ({
+          uid: entry.uid,
+          name: entry.fullName || entry.email,
+          email: entry.email,
+          role: entry.role,
+        }))
+    : [];
 
   return (
-    <PortalShell userName={user.fullName ?? user.email} roleLabel={roleLabel}>
+    <PortalShell
+      userName={user.fullName ?? user.email}
+      isInternalUser={isInternalFirebaseRole(user.role)}
+      showViewAsToggle={canPreviewAsUser}
+      isViewingAsUser={Boolean(user.viewingAsUserUid)}
+      viewingAsUserUid={user.viewingAsUserUid}
+      viewAsUsers={viewAsUsers}
+      demoDashboardAssetIds={demoAssignments.map((assignment) => assignment.assetId)}
+      hasDemoWorkspaceAccess={demoClientIds.size > 0}
+      defaultDemoLabHref={defaultDemoLabHref}
+    >
       {children}
     </PortalShell>
   );

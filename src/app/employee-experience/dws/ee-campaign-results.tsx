@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
+import { EEReportStyles, BasinSurfaceStyles, SectionWithVerticalLabel, HeaderKpiPortal, dwsScoreColor, makeGradientColor } from "./ee-report-kit";
 import { EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
 import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import { useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
+import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Statement { text: string; current: number; comparisons: Record<string, number> }
@@ -119,8 +122,16 @@ function readableText(hex: string) {
 
 // ─── RailSection ──────────────────────────────────────────────────────────────
 
-function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+function RailSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="overflow-hidden rounded-2xl bg-white" style={{ border: "1px solid #8798AA" }}>
       <button type="button" onClick={() => setOpen(o => !o)} className="flex w-full items-center justify-between px-4 py-3">
@@ -230,6 +241,9 @@ export function EECampaignResults({
   onIndexId,
   compId: controlledCompId,
   onCompId,
+  chromeless = false,
+  headerPortalId,
+  basinReportSurface = false,
 }: {
   data: Data;
   dashboardInstanceId?: string;
@@ -239,34 +253,60 @@ export function EECampaignResults({
   onIndexId?: (value: string) => void;
   compId?: string;
   onCompId?: (value: string) => void;
+  chromeless?: boolean;
+  headerPortalId?: string;
+  /** Basin group surface treatment "1b" (DWS Field redesign pilot only):
+   * shared canvas tint, soft blue borders/shadows, and vertical section
+   * labels — see the matching prop on `EELocationComparison`. Every other
+   * caller leaves this unset and keeps the hard-edged default look. */
+  basinReportSurface?: boolean;
 }) {
   const { client, current, comparisons, scale, indexes } = data;
-  const sc = (v: number) => scoreScaleColor(v, scale.min, scale.mid, scale.max);
-  const [localIndexId, setLocalIndexId] = useState(indexes[0]?.id ?? "");
+  const sc = makeGradientColor(scale.min, scale.max);
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  const [localIndexId, setLocalIndexId] = useState("");
   const [localCompId, setLocalCompId] = useState(() => defaultComparisonId(comparisons));
-  const [openIndexId, setOpenIndexId] = useState(indexes[0]?.id ?? "");
+  const [openIndexId, setOpenIndexId] = useState(chromeless ? "" : indexes[0]?.id ?? "");
   const indexId = controlledIndexId ?? localIndexId;
   const setIndexId = onIndexId ?? setLocalIndexId;
   const compId = controlledCompId ?? localCompId;
   const setCompId = onCompId ?? setLocalCompId;
 
-  const idx  = indexes.find(i => i.id === indexId) ?? indexes[0];
+  const selectedIndexes = useMemo(() => {
+    if (!indexId) return indexes;
+    const selected = indexes.find((item) => item.id === indexId);
+    return selected ? [selected] : indexes;
+  }, [indexes, indexId]);
+  const idx  = selectedIndexes[0] ?? indexes[0];
   const comp = comparisons.find(c => c.id === compId) ?? comparisons[0];
+  const hasComparison = comparisons.length > 0;
+  const versusText = comp ? ` vs ${comp.label}` : "";
 
   const barAxis = useMemo(() => {
     const a = data.display?.barAxis ?? { min: scale.min - 4, max: scale.max - 5 };
     return { min: a.min, max: a.max, ticks: a.ticks ?? tensWithin(a.min, a.max) };
   }, [data.display?.barAxis, scale.min, scale.max]);
 
-  const rows = useMemo(() => (idx?.statements ?? []).map(s => {
-    const prev = Object.prototype.hasOwnProperty.call(s.comparisons, compId) ? s.comparisons[compId] : null;
-    return {
-      t: s.text,
-      v: s.current,
-      prev,
-      delta: prev == null ? null : r1(s.current - prev),
-    };
-  }), [idx, compId]);
+  const rows = useMemo(
+    () =>
+      selectedIndexes.flatMap((index) =>
+        (index.statements ?? []).map((statement, statementIndex) => {
+          const prev = Object.prototype.hasOwnProperty.call(statement.comparisons, compId)
+            ? statement.comparisons[compId]
+            : null;
+          return {
+            id: `${index.id}:${statementIndex}`,
+            t: statement.text,
+            v: statement.current,
+            prev,
+            delta: prev == null ? null : r1(statement.current - prev),
+          };
+        })
+      ),
+    [selectedIndexes, compId]
+  );
 
   const validDeltaRows = useMemo(() => rows.filter((row) => row.delta != null), [rows]);
 
@@ -286,9 +326,23 @@ export function EECampaignResults({
     return <div className="p-8 text-sm text-text-secondary">No detailed results are available for this dataset yet.</div>;
   }
 
-  return (
-    <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+  // Keep the composite export header in sync with the active perspective/filters.
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "Detailed Results",
+      filters: [idx?.name, current.labelLong || current.label].filter(
+        (value): value is string => Boolean(value)
+      ),
+    });
+  }
 
+  return (
+    <div
+      className={chromeless ? (basinReportSurface ? "canvas basin-surface-1b" : "canvas") : "block"}
+      style={chromeless ? { display: "block", background: basinReportSurface ? "#F4F4EF" : "#fff" } : EE_PERSPECTIVE_CANVAS_STYLE}
+    >
+      <EEReportStyles />
+      {basinReportSurface ? <BasinSurfaceStyles /> : null}
       {executiveRail}
 
       {!executiveRail ? (
@@ -308,21 +362,31 @@ export function EECampaignResults({
 
         {/* Client card */}
         <div className="rounded-[18px] bg-white p-4 text-center" style={{ border: "1px solid #8798AA", boxShadow: "0 2px 8px rgba(15,23,42,.07)" }}>
-          <img src={client.logoUrl ?? "/top-flight-logo.png"} alt={`${client.name} logo`} className="mx-auto h-auto w-[180px]" />
+          <img src={client.logoUrl ?? "/deep-well-services-logo.png"} alt={`${client.name} logo`} className="mx-auto h-auto w-[180px]" />
           <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>CAMPAIGN RESULTS</div>
           <div className="mt-0.5 italic" style={{ fontSize: 10.5, color: "#6E7E96" }}>{comp ? `(compared to ${comp.labelLong})` : ""}</div>
         </div>
 
-        <RailSection title="Campaign Comparison">
+        {hasComparison ? (
+        <RailSection title="Campaign Comparison" defaultOpen>
           <div className="flex flex-col gap-2">
             {[...comparisons].reverse().map(c => (
               <button key={c.id} type="button" onClick={() => setCompId(c.id)} className="w-full rounded-[11px] px-3 py-2.5 text-sm font-semibold transition-colors" {...btn(compId === c.id)}>{c.label}</button>
             ))}
           </div>
         </RailSection>
+        ) : null}
 
         <RailSection title="Index Selection">
           <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setIndexId("")}
+              className="w-full rounded-[11px] px-3 py-2.5 text-center text-sm font-semibold transition-colors"
+              {...btn(!indexId)}
+            >
+              All indexes
+            </button>
             {indexes.map(ix => (
               <button key={ix.id} type="button" onClick={() => setIndexId(ix.id)} className="w-full rounded-[11px] px-3 py-2.5 text-center text-sm font-semibold transition-colors" {...btn(indexId === ix.id)}>{ix.name}</button>
             ))}
@@ -331,21 +395,37 @@ export function EECampaignResults({
       </aside>
       ) : null}
 
-      <main className="flex flex-col gap-5" style={EE_PERSPECTIVE_MAIN_STYLE}>
+      <main
+        className="flex flex-col gap-5"
+        style={chromeless ? { background: basinReportSurface ? "#F4F4EF" : "#fff", overflowAnchor: "none" } : EE_PERSPECTIVE_MAIN_STYLE}
+      >
         <div style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }} className="flex flex-col gap-5">
 
           {/* Hero */}
+          {chromeless ? (
+            <HeaderKpiPortal
+              portalId={headerPortalId}
+              surfaceTreatment={basinReportSurface ? "1b" : undefined}
+              items={[
+                { label: "Index Average", value: curAvg.toFixed(1), color: avgColor },
+                ...(hasComparison
+                  ? [{ label: "Change YoY", value: yoy == null ? "—" : f1(yoy), color: yoy == null ? "#6E7E96" : yoy >= 0 ? "#9CB2A8" : "#C8B9B6" }]
+                  : []),
+                { label: "Response Rate", value: rrPct },
+              ]}
+            />
+          ) : (
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="font-bold uppercase" style={{ fontSize: 11, letterSpacing: "0.2em", color: "#6E7E96" }}>Detailed Results</p>
                 <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Detailed Results</h2>
-                <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong} · compared to {comp.label}</p>
+                <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong}{comp ? ` · compared to ${comp.label}` : ""}</p>
               </div>
               <div className="flex shrink-0 gap-3">
                 {([
                   ["Index Average", curAvg.toFixed(1),  avgColor],
-                  ["Change YoY",    yoy == null ? "—" : f1(yoy),             yoy == null ? "#6E7E96" : yoy >= 0 ? "#9CB2A8" : "#C8B9B6"],
+                  ...(hasComparison ? [["Change YoY", yoy == null ? "—" : f1(yoy), yoy == null ? "#6E7E96" : yoy >= 0 ? "#9CB2A8" : "#C8B9B6"]] as [string, string, string][] : []),
                   ["Response Rate", rrPct,               "#152238"],
                 ] as [string, string, string][]).map(([label, value, color]) => (
                   <div key={label} className="flex min-h-[76px] min-w-[104px] flex-col items-center justify-center gap-1 rounded-2xl px-4 py-2" style={{ border: "1px solid #8798AA", background: "rgba(255,255,255,.85)" }}>
@@ -356,11 +436,15 @@ export function EECampaignResults({
               </div>
             </div>
           </div>
+          )}
 
-          <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+          {(() => {
+            const statementResultsPanel = (
+          <RegisteredVisualExportFrame order={10} label="Download table" filename={buildDashboardExportFilename({ client: "dws", perspective: "detailed-results", campaign: current.label })}>
+          <div style={{ border: basinReportSurface ? "1px solid rgba(135,152,170,0.7)" : "1px solid #8798AA", borderRadius: 16, background: "#fff", boxShadow: basinReportSurface ? "0 2px 12px rgba(15,23,42,0.24), 0 1px 3px rgba(15,23,42,0.20)" : "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
             <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
               <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Statement Results</h3>
-              <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Expand one index at a time to review statement-level scores for {current.label} and change vs {comp.label}.</p>
+              <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Expand one index at a time to review statement-level scores for {current.label}{comp ? ` and change${versusText}` : ""}.</p>
             </div>
             <div className="px-6 py-5">
               <div style={{ overflow: "hidden", border: "1px solid #8798AA", borderRadius: 16 }}>
@@ -368,8 +452,8 @@ export function EECampaignResults({
                   <thead>
                     <tr>
                       <th style={{ background: "#E2E8EF", textAlign: "left", fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 14px", borderBottom: "1px solid #8798AA" }}>Expand an index for statements</th>
-                      <th style={{ background: "#E2E8EF", textAlign: "center", width: 84, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 8px", borderBottom: "1px solid #8798AA", borderRight: "3px solid #8798AA" }}>{current.label}</th>
-                      <th style={{ background: "#E2E8EF", textAlign: "center", width: 84, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 8px", borderBottom: "1px solid #8798AA", borderLeft: "3px solid #8798AA" }}>Delta</th>
+                      <th style={{ background: "#E2E8EF", textAlign: "center", width: 84, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 8px", borderBottom: "1px solid #8798AA", borderRight: hasComparison ? "3px solid #8798AA" : undefined }}>{current.label}</th>
+                      {hasComparison ? <th style={{ background: "#E2E8EF", textAlign: "center", width: 84, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96", padding: "11px 8px", borderBottom: "1px solid #8798AA", borderLeft: "3px solid #8798AA" }}>Delta</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -393,16 +477,16 @@ export function EECampaignResults({
                         <>
                           <tr onClick={() => setOpenIndexId(open ? "" : index.id)} style={{ cursor: "pointer", background: "#F1F4F7", borderTop: "1px solid #D3DDE7" }}>
                             <td style={{ padding: "9px 14px" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ width: 14, height: 14, color: "#6E7E96", transform: open ? "rotate(90deg)" : undefined, transition: "transform .2s" }}><ChevronRight className="h-4 w-4" /></span><span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "#152238" }}>{index.name}</span></div></td>
-                            <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderRight: "3px solid #8798AA", background: currentColor, color: readableText(currentColor) }}>{indexCurrent.toFixed(1)}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderLeft: "3px solid #8798AA", ...(indexDelta == null ? { color: "#6E7E96" } : { background: dStyle(indexDelta).bg, color: dStyle(indexDelta).fg }) }}>{indexDelta == null ? "—" : f1(indexDelta)}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderRight: hasComparison ? "3px solid #8798AA" : undefined, background: currentColor, color: readableText(currentColor) }}>{indexCurrent.toFixed(1)}</td>
+                            {hasComparison ? <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderLeft: "3px solid #8798AA", ...(indexDelta == null ? { color: "#6E7E96" } : { background: dStyle(indexDelta).bg, color: dStyle(indexDelta).fg }) }}>{indexDelta == null ? "—" : f1(indexDelta)}</td> : null}
                           </tr>
                           {open && statementRows.map((row) => {
                             const color = sc(row.current);
                             return (
                               <tr key={`${index.id}-${row.id}`} style={{ borderTop: "1px solid #D3DDE7" }}>
                                 <td style={{ padding: "7px 14px 7px 30px", color: "#3B4B63", fontWeight: 500, lineHeight: 1.34, fontSize: 12.5 }}>{row.text}</td>
-                                <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderRight: "3px solid #8798AA", background: color, color: readableText(color) }}>{row.current.toFixed(1)}</td>
-                                <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderLeft: "3px solid #8798AA", ...(row.delta == null ? { color: "#6E7E96" } : { background: dStyle(row.delta).bg, color: dStyle(row.delta).fg }) }}>{row.delta == null ? "—" : f1(row.delta)}</td>
+                                <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderRight: hasComparison ? "3px solid #8798AA" : undefined, background: color, color: readableText(color) }}>{row.current.toFixed(1)}</td>
+                                {hasComparison ? <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, fontSize: 12.5, borderLeft: "3px solid #8798AA", ...(row.delta == null ? { color: "#6E7E96" } : { background: dStyle(row.delta).bg, color: dStyle(row.delta).fg }) }}>{row.delta == null ? "—" : f1(row.delta)}</td> : null}
                               </tr>
                             );
                           })}
@@ -414,19 +498,34 @@ export function EECampaignResults({
               </div>
             </div>
           </div>
+          </RegisteredVisualExportFrame>
+            );
+            return chromeless ? (
+              basinReportSurface ? (
+                <SectionWithVerticalLabel label="Index and Statement Results">{statementResultsPanel}</SectionWithVerticalLabel>
+              ) : (
+                <>
+                  <p className="slabel" style={{ marginBottom: 8 }}>Index and Statement Results</p>
+                  {statementResultsPanel}
+                </>
+              )
+            ) : (
+              statementResultsPanel
+            );
+          })()}
 
         </div>
       </main>
 
       <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
         <div className="flex h-full flex-col gap-4 p-6">
-          <EEContextRail howToRead="Detailed Results lets you expand one index at a time and review statement-level current scores with delta vs the selected comparison campaign." />
+          <EEContextRail scale={scale} howToRead={hasComparison ? "Detailed Results lets you expand one index at a time and review statement-level current scores with delta vs the selected comparison campaign." : "Detailed Results lets you expand one index at a time and review statement-level current scores."} />
           {dashboardInstanceId ? (
             <GuidancePinRail
               dashboardInstanceId={dashboardInstanceId}
               perspectiveId="ee-campaign-results"
               campaignLabel={current.label}
-              filterKey={`${indexId || idx.id}|${compId || comp.id}`}
+              filterKey={`${indexId || "all-indexes"}|${compId || comp?.id || "no-comparison"}`}
               canEdit={canEditGuidance}
             />
           ) : null}
@@ -435,3 +534,4 @@ export function EECampaignResults({
     </div>
   );
 }
+

@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import path from "path";
+import { createHash } from "crypto";
 import { getFirebaseAdminStorage } from "@/lib/firebase/admin";
 import {
   filterExcludedDefinitions,
@@ -27,18 +28,36 @@ import type {
 
 const DATABASE_FILE_NAME = "DWSDatabase.csv";
 const STATEMENTS_FILE_NAME = "DWS 2024 Campaign Statements.csv";
+// Bump when the projection/parse logic changes shape so persistent caches recompute
+// even when the underlying source CSVs are unchanged.
+const DASHBOARD_SCHEMA_VERSION = "2026-06-30-field-segments";
 const DEFAULT_SOURCE_CLIENT_ID = "dws";
 const SOURCE_CLIENT_LABELS: Record<string, string> = {
   csg: "Canopy Services Group",
   dws: "Deep Well Services",
+  "dws-field": "Deep Well Services — Field",
 };
 const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string }> = {
   csg: {
     database: "Canopy Services Database.csv",
     statements: "Canopy Services Campaign Statements.csv",
   },
+  dws: {
+    database: "DWSDatabase.csv",
+    statements: "EE Statements.csv",
+  },
+  "dws-field": {
+    database: "Field Database.csv",
+    statements: "EE Field Statements.csv",
+  },
+};
+// Maps a logical sourceClientId to the Firebase Storage client folder when
+// data for that client lives inside a different client's storage bucket.
+const SOURCE_CLIENT_STORAGE_IDS: Record<string, string> = {
+  "dws-field": "dws",
 };
 const CSG_EXCLUDED_DIMENSION_IDS = ["integration"];
+const DWS_EXCLUDED_DIMENSION_IDS = ["acquisition"];
 const DEMO_DATABASE_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWSDatabase.csv");
 const DEMO_STATEMENTS_PATH = path.join(process.cwd(), "src/lib/employee-experience/demo-data/DWS 2024 Campaign Statements.csv");
 const DEMO_HIDDEN_DIMENSION_IDS = ["acquisition"];
@@ -879,7 +898,13 @@ function buildCommentThemes(entries: EmployeeExperienceVoiceEntry[]): EmployeeEx
     .slice(0, 6);
 }
 
-function parseStatements(statementsCsvText: string) {
+type CommentDefinition = { itemId: number; statement: string };
+type CommentIdMap = Record<keyof typeof COMMENT_ID_CANDIDATES, number[]>;
+
+function parseStatements(statementsCsvText: string): {
+  scoring: StatementDefinition[];
+  commentMap: CommentIdMap;
+} {
   const rows = parseCSV(statementsCsvText);
   const headers = rows[0] ?? [];
   const headerIndex = new Map(headers.map((header, index) => [header.trim().toLowerCase(), index]));
@@ -891,23 +916,108 @@ function parseStatements(statementsCsvText: string) {
     return row[index ?? fallbackIndex] ?? "";
   };
 
-  return rows
-    .slice(1)
-    .map((row) => ({
-      itemId: Number.parseInt(getValue(row, ["item", "item id", "itemId", "id"], 0), 10),
-      dimension: normalizeLabel(getValue(row, ["index", "dimension"], 1), "Uncategorized"),
-      statement: normalizeLabel(getValue(row, ["statement", "question", "item text"], 2), "Untitled statement"),
-    }))
-    .filter(
-      (row) =>
-        Number.isFinite(row.itemId) &&
-        row.dimension !== "Comment" &&
-        row.dimension !== "Ownership" &&
-        row.statement.length > 0
-    );
+  const isCommentFilterFlag = (value: string) => {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return !["0", "no", "false", "n"].includes(normalized);
+  };
+
+  const allRows = rows.slice(1).map((row) => ({
+    itemId: Number.parseInt(getValue(row, ["item", "item id", "itemId", "id"], 0), 10),
+    dimension: normalizeLabel(getValue(row, ["index", "dimension"], 1), "Uncategorized"),
+    statement: normalizeLabel(getValue(row, ["statement", "question", "item text"], 2), "Untitled statement"),
+    // Some statement files (e.g. DWS Field) carry no Comment dimension and instead flag
+    // open-text items with a dedicated column. Honor that so comments map correctly and
+    // open-text items never leak into scoring.
+    commentFlagged: isCommentFilterFlag(getValue(row, ["commentfilter", "comment filter", "comment flag", "is comment"], -1)),
+  }));
+
+  const isCommentRow = (row: (typeof allRows)[number]) =>
+    row.dimension === "Comment" || row.dimension === "Ownership" || row.commentFlagged;
+
+  const scoring = allRows.filter(
+    (row) => Number.isFinite(row.itemId) && !isCommentRow(row) && row.statement.length > 0
+  );
+
+  const commentRows: CommentDefinition[] = allRows.filter(
+    (row) => Number.isFinite(row.itemId) && isCommentRow(row) && row.statement.length > 0
+  );
+
+  // Match comment rows to comment keys by statement keywords.
+  // Falls back to hardcoded COMMENT_ID_CANDIDATES only when the statements CSV has no
+  // comment rows at all (legacy CSG/DWS-corporate contract). When the file flags its own
+  // comment items, assign keyword-matched first, then fill remaining keys positionally so
+  // every open-text question is surfaced.
+  const findIds = (keywords: string[]) =>
+    commentRows
+      .filter((c) => keywords.some((kw) => c.statement.toLowerCase().includes(kw)))
+      .map((c) => c.itemId);
+
+  const usesCommentFlags = allRows.some((row) => row.commentFlagged);
+
+  let commentMap: CommentIdMap;
+  if (usesCommentFlags) {
+    const orderedCommentIds = commentRows
+      .map((row) => row.itemId)
+      .sort((left, right) => left - right);
+    const keyOrder: Array<keyof CommentIdMap> = ["strengths", "improvement", "supervisor", "acquisition"];
+    const assignment: CommentIdMap = { strengths: [], improvement: [], supervisor: [], acquisition: [] };
+    orderedCommentIds.forEach((itemId, index) => {
+      const key = keyOrder[Math.min(index, keyOrder.length - 1)];
+      assignment[key].push(itemId);
+    });
+    commentMap = assignment;
+  } else {
+    commentMap = {
+      strengths: findIds(["strength", "great", "positive"]).length
+        ? findIds(["strength", "great", "positive"])
+        : [...COMMENT_ID_CANDIDATES.strengths],
+      improvement: findIds(["improv", "change", "suggest", "different", "better"]).length
+        ? findIds(["improv", "change", "suggest", "different", "better"])
+        : [...COMMENT_ID_CANDIDATES.improvement],
+      supervisor: findIds(["supervisor", "manager", "leader"]).length
+        ? findIds(["supervisor", "manager", "leader"])
+        : [...COMMENT_ID_CANDIDATES.supervisor],
+      acquisition: findIds(["acquisition"]).length
+        ? findIds(["acquisition"])
+        : [...COMMENT_ID_CANDIDATES.acquisition],
+    };
+  }
+
+  return { scoring, commentMap };
 }
 
-function parseRespondents(definitions: StatementDefinition[], databaseCsvText: string) {
+// Job Category ("field category") lives in a different column per client data
+// contract. CSG stores it in an unnamed column (positional col 13). DWS has no
+// broad Job Category column, so we group by the populated Job Title column and
+// must NOT fall back to col 13 (which is the Supervisor name for DWS).
+function resolveJobCategoryConfig(sourceClientId?: string): {
+  aliases: string[];
+  fallbackIndex: number | null;
+} {
+  const id = (sourceClientId ?? "").trim();
+  if (id === "dws" || id === "dws-field") {
+    return { aliases: ["Job Category", "Job Title", "Job Family", "Title"], fallbackIndex: null };
+  }
+  // CSG / default contract (unchanged).
+  return {
+    aliases: ["Job Category", "job category", "Field Category", "field category", "Category"],
+    fallbackIndex: 13,
+  };
+}
+
+function parseRespondents(
+  definitions: StatementDefinition[],
+  databaseCsvText: string,
+  commentMap?: CommentIdMap,
+  sourceClientId?: string
+) {
+  const resolvedCommentMap = commentMap ?? {
+    strengths: [...COMMENT_ID_CANDIDATES.strengths],
+    improvement: [...COMMENT_ID_CANDIDATES.improvement],
+    supervisor: [...COMMENT_ID_CANDIDATES.supervisor],
+    acquisition: [...COMMENT_ID_CANDIDATES.acquisition],
+  };
   const rows = parseCSV(databaseCsvText);
   const headers = rows[0] ?? [];
   const records = rows.slice(1);
@@ -936,17 +1046,16 @@ function parseRespondents(definitions: StatementDefinition[], databaseCsvText: s
     return typeof index === "number" ? row[index] ?? "" : "";
   };
 
+  const jobCategoryConfig = resolveJobCategoryConfig(sourceClientId);
   const getJobCategoryValue = (row: string[]) => {
-    const explicit = getAliasedValue(row, [
-      "Job Category",
-      "job category",
-      "Field Category",
-      "field category",
-      "Category",
-    ]);
-    if (explicit.trim()) return explicit;
-    // CSG data contract: column N stores Job Category.
-    return row[13] ?? "";
+    for (const name of jobCategoryConfig.aliases) {
+      const value = getAliasedValue(row, [name]);
+      if (value.trim()) return value;
+    }
+    if (jobCategoryConfig.fallbackIndex != null) {
+      return row[jobCategoryConfig.fallbackIndex] ?? "";
+    }
+    return "";
   };
 
   return records
@@ -973,6 +1082,7 @@ function parseRespondents(definitions: StatementDefinition[], databaseCsvText: s
         supervisor: normalizeLabel(getAliasedValue(row, ["Supervisor", "Manager"]), "Unknown Supervisor"),
         jobTitle: normalizeLabel(getAliasedValue(row, ["Job Title", "Job Family", "Title"]), "Unknown Job Title"),
         fieldCategory: normalizeLabel(getJobCategoryValue(row), "Unspecified"),
+        role: normalizeLabel(getAliasedValue(row, ["Role"]), "Unspecified"),
         leadership: normalizeLabel(getAliasedValue(row, ["Leadership", "Leadership Level"]), "Unspecified"),
         generation: normalizeLabel(getAliasedValue(row, ["Generation", "Generational Cohort"]), "Unspecified"),
         rateType: normalizeLabel(getAliasedValue(row, ["Rate Type", "Pay Type"]), "Unspecified"),
@@ -980,10 +1090,10 @@ function parseRespondents(definitions: StatementDefinition[], databaseCsvText: s
         rating: normalizeLabel(getAliasedValue(row, ["Rating", "Performance Rating"]), "Unspecified"),
         scores,
         comments: {
-          strengths: getRespondentComment(row, COMMENT_ID_CANDIDATES.strengths, getValue),
-          improvement: getRespondentComment(row, COMMENT_ID_CANDIDATES.improvement, getValue),
-          supervisor: getRespondentComment(row, COMMENT_ID_CANDIDATES.supervisor, getValue),
-          acquisition: getRespondentComment(row, COMMENT_ID_CANDIDATES.acquisition, getValue),
+          strengths: getRespondentComment(row, resolvedCommentMap.strengths, getValue),
+          improvement: getRespondentComment(row, resolvedCommentMap.improvement, getValue),
+          supervisor: getRespondentComment(row, resolvedCommentMap.supervisor, getValue),
+          acquisition: getRespondentComment(row, resolvedCommentMap.acquisition, getValue),
         },
       };
     })
@@ -1093,15 +1203,29 @@ function buildEmployeeExperienceDashboardData({
   organizationName,
   dataSourceLabel,
   definitions,
-  respondents,
+  respondents: allRespondents,
   hiddenDimensionIds = [],
+  partnerBrandLabels = [],
+  partnerLabel,
+  segmentFields,
 }: {
   organizationName: string;
   dataSourceLabel: string;
   definitions: StatementDefinition[];
   respondents: Respondent[];
   hiddenDimensionIds?: string[];
+  partnerBrandLabels?: string[];
+  partnerLabel?: string;
+  segmentFields?: EmployeeExperienceDashboardData["meta"]["segmentFields"];
 }): EmployeeExperienceDashboardData {
+  // Partner segments (e.g. AutoSEP) are third parties that must never contribute to
+  // org-wide scores or appear in shared views. We strip them from the working set used
+  // for every aggregate/projection and surface them only via `partnerRespondents`.
+  const partnerSet = new Set(partnerBrandLabels.map((label) => label.trim().toLowerCase()));
+  const isPartnerRespondent = (respondent: Respondent) =>
+    partnerSet.size > 0 && partnerSet.has((respondent.location ?? "").trim().toLowerCase());
+  const partnerRespondents = partnerSet.size > 0 ? allRespondents.filter(isPartnerRespondent) : [];
+  const respondents = partnerSet.size > 0 ? allRespondents.filter((r) => !isPartnerRespondent(r)) : allRespondents;
   const effectiveHiddenDimensionIds = mergeHiddenDimensionIds(hiddenDimensionIds);
   const enpsDefinitions = definitions.filter((definition) => isPlatformExcludedDimension(definition.dimension));
   const visibleDefinitions = filterHiddenDefinitions(definitions, hiddenDimensionIds);
@@ -1258,6 +1382,7 @@ function buildEmployeeExperienceDashboardData({
       totalSupervisors: new Set(currentRespondents.map((respondent) => respondent.supervisor)).size,
       campaigns,
       dataSourceLabel,
+      segmentFields,
     },
     settings: {
       minimumSegmentSize: MINIMUM_SEGMENT_SIZE,
@@ -1266,6 +1391,8 @@ function buildEmployeeExperienceDashboardData({
     questions: visibleDefinitions,
     enpsDefinitions,
     respondents,
+    partnerRespondents,
+    partnerLabel,
     overview: {
       experienceIndex: overviewScore,
       previousIndex: previousScore,
@@ -1353,7 +1480,180 @@ function buildSummary(
   return `${topDimension?.label ?? "The strongest dimension"} is currently the warmest part of the story, while ${bottomDimension?.label ?? "the coldest dimension"} remains the main drag. At the statement level, ${strongestQuestion?.statement.toLowerCase() ?? "the strongest signal"} is holding up better than ${weakestQuestion?.statement.toLowerCase() ?? "the weakest signal"}, which gives leaders a clearer path for where to protect momentum versus where to intervene.`;
 }
 
-export async function loadDwsEmployeeExperienceDashboardData({
+// ---------------------------------------------------------------------------
+// Phase 1 — "Prepare once, serve instantly" caching.
+//
+// The heavy work (download CSVs -> parse rows -> build every projection) used to
+// run on every single page view. We now:
+//   1. Validate the source CSVs with a cheap metadata signature (auto-busts the
+//      cache whenever a client uploads new data).
+//   2. Serve a warm in-memory copy when the signature matches (instant).
+//   3. Fall back to a durable JSON copy in Firebase Storage so even a cold/new
+//      serverless instance skips the parse + compute work.
+// Numbers and layouts are unchanged — we only avoid recomputing identical data.
+// ---------------------------------------------------------------------------
+
+interface DashboardCacheEntry {
+  signature: string;
+  data: EmployeeExperienceDashboardData;
+  cachedAt: number;
+}
+
+// Bump when the computation logic changes so stale cached copies are rebuilt
+// even though the underlying CSV files are unchanged.
+const DASHBOARD_CACHE_VERSION = "v2-jobcat";
+const DASHBOARD_MEMORY_CACHE = new Map<string, DashboardCacheEntry>();
+const SOURCE_SIGNATURE_TTL_MS = 60_000;
+const sourceSignatureCache = new Map<string, { signature: string; checkedAt: number }>();
+
+function hiddenDimensionSignature(ids: string[] | undefined): string {
+  if (!ids || ids.length === 0) {
+    return "none";
+  }
+  const cleaned = [...ids].map((id) => id.trim()).filter(Boolean).sort();
+  return cleaned.length > 0 ? cleaned.join(",") : "none";
+}
+
+async function getCsvSourceSignature(storagePaths: string[]): Promise<string> {
+  const cacheKey = storagePaths.join("|");
+  const now = Date.now();
+  const cached = sourceSignatureCache.get(cacheKey);
+  if (cached && now - cached.checkedAt < SOURCE_SIGNATURE_TTL_MS) {
+    return cached.signature;
+  }
+
+  const bucket = getFirebaseAdminStorage().bucket();
+  const parts = await Promise.all(
+    storagePaths.map(async (storagePath) => {
+      try {
+        const [meta] = await bucket.file(storagePath).getMetadata();
+        return `${meta.generation ?? ""}:${meta.updated ?? ""}:${meta.size ?? ""}`;
+      } catch {
+        return "missing";
+      }
+    })
+  );
+
+  const signature = `${DASHBOARD_CACHE_VERSION}::${parts.join("||")}`;
+  sourceSignatureCache.set(cacheKey, { signature, checkedAt: now });
+  return signature;
+}
+
+function persistentCachePath(storageClientId: string, cacheKey: string): string {
+  const hash = createHash("sha1").update(cacheKey).digest("hex").slice(0, 16);
+  return `clients/${storageClientId}/cache/ee-dashboard-${hash}.json`;
+}
+
+async function readPersistentDashboardCache(
+  storagePath: string,
+  signature: string
+): Promise<EmployeeExperienceDashboardData | null> {
+  try {
+    const bucket = getFirebaseAdminStorage().bucket();
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) {
+      return null;
+    }
+    const [buffer] = await file.download();
+    const parsed = JSON.parse(buffer.toString("utf8")) as {
+      signature?: string;
+      data?: EmployeeExperienceDashboardData;
+    };
+    if (!parsed?.data || parsed.signature !== signature) {
+      return null;
+    }
+    return parsed.data;
+  } catch (error) {
+    console.warn("EE dashboard cache read failed", error);
+    return null;
+  }
+}
+
+async function writePersistentDashboardCache(
+  storagePath: string,
+  signature: string,
+  data: EmployeeExperienceDashboardData
+): Promise<void> {
+  try {
+    const bucket = getFirebaseAdminStorage().bucket();
+    await bucket.file(storagePath).save(
+      JSON.stringify({ signature, data, cachedAt: new Date().toISOString() }),
+      { contentType: "application/json", resumable: false }
+    );
+  } catch (error) {
+    console.warn("EE dashboard cache write failed", error);
+  }
+}
+
+/** Drops cached copies so the next view recomputes from source CSVs. */
+export async function invalidateEmployeeExperienceDashboardCache(sourceClientId?: string): Promise<void> {
+  if (!sourceClientId) {
+    DASHBOARD_MEMORY_CACHE.clear();
+    sourceSignatureCache.clear();
+    return;
+  }
+  const safeId = sourceClientId.trim() || DEFAULT_SOURCE_CLIENT_ID;
+  for (const key of [...DASHBOARD_MEMORY_CACHE.keys()]) {
+    if (key.startsWith(`${safeId}::`)) {
+      DASHBOARD_MEMORY_CACHE.delete(key);
+    }
+  }
+  for (const key of [...sourceSignatureCache.keys()]) {
+    if (key.includes(`/${SOURCE_CLIENT_STORAGE_IDS[safeId] ?? safeId}/`)) {
+      sourceSignatureCache.delete(key);
+    }
+  }
+}
+
+export async function loadDwsEmployeeExperienceDashboardData(options: {
+  demo?: boolean;
+  hiddenDimensionIds?: string[];
+  sourceClientId?: string;
+} = {}): Promise<EmployeeExperienceDashboardData> {
+  const { demo = false, hiddenDimensionIds, sourceClientId = DEFAULT_SOURCE_CLIENT_ID } = options;
+
+  // Demo mode reads bundled local files (already fast) — skip the cache layer.
+  if (demo) {
+    return computeDwsEmployeeExperienceDashboardData({ demo, hiddenDimensionIds, sourceClientId });
+  }
+
+  const safeSourceClientId = sourceClientId.trim() || DEFAULT_SOURCE_CLIENT_ID;
+  const sourceFiles = SOURCE_CLIENT_FILES[safeSourceClientId] ?? {
+    database: DATABASE_FILE_NAME,
+    statements: STATEMENTS_FILE_NAME,
+  };
+  const storageClientId = SOURCE_CLIENT_STORAGE_IDS[safeSourceClientId] ?? safeSourceClientId;
+  const databaseStoragePath = `clients/${storageClientId}/data/${sourceFiles.database}`;
+  const statementsStoragePath = `clients/${storageClientId}/data/${sourceFiles.statements}`;
+
+  const cacheKey = `${safeSourceClientId}::${hiddenDimensionSignature(hiddenDimensionIds)}`;
+  const signature = `${DASHBOARD_SCHEMA_VERSION}::${await getCsvSourceSignature([databaseStoragePath, statementsStoragePath])}`;
+
+  const memory = DASHBOARD_MEMORY_CACHE.get(cacheKey);
+  if (memory && memory.signature === signature) {
+    return memory.data;
+  }
+
+  const cachePath = persistentCachePath(storageClientId, cacheKey);
+  const persisted = await readPersistentDashboardCache(cachePath, signature);
+  if (persisted) {
+    DASHBOARD_MEMORY_CACHE.set(cacheKey, { signature, data: persisted, cachedAt: Date.now() });
+    return persisted;
+  }
+
+  const data = await computeDwsEmployeeExperienceDashboardData({
+    demo: false,
+    hiddenDimensionIds,
+    sourceClientId: safeSourceClientId,
+  });
+
+  DASHBOARD_MEMORY_CACHE.set(cacheKey, { signature, data, cachedAt: Date.now() });
+  await writePersistentDashboardCache(cachePath, signature, data);
+  return data;
+}
+
+async function computeDwsEmployeeExperienceDashboardData({
   demo = false,
   hiddenDimensionIds,
   sourceClientId = DEFAULT_SOURCE_CLIENT_ID,
@@ -1364,8 +1664,9 @@ export async function loadDwsEmployeeExperienceDashboardData({
     database: DATABASE_FILE_NAME,
     statements: STATEMENTS_FILE_NAME,
   };
-  const databaseStoragePath = `clients/${safeSourceClientId}/data/${sourceFiles.database}`;
-  const statementsStoragePath = `clients/${safeSourceClientId}/data/${sourceFiles.statements}`;
+  const storageClientId = SOURCE_CLIENT_STORAGE_IDS[safeSourceClientId] ?? safeSourceClientId;
+  const databaseStoragePath = `clients/${storageClientId}/data/${sourceFiles.database}`;
+  const statementsStoragePath = `clients/${storageClientId}/data/${sourceFiles.statements}`;
   const [databaseCsvText, statementsCsvText] = demo
     ? [readCsvFromDemoFile(DEMO_DATABASE_PATH), readCsvFromDemoFile(DEMO_STATEMENTS_PATH)]
     : await Promise.all([
@@ -1373,8 +1674,8 @@ export async function loadDwsEmployeeExperienceDashboardData({
       readCsvFromStorage(statementsStoragePath),
     ]);
 
-  const definitions = parseStatements(statementsCsvText);
-  const respondents = parseRespondents(definitions, databaseCsvText);
+  const { scoring: definitions, commentMap } = parseStatements(statementsCsvText);
+  const respondents = parseRespondents(definitions, databaseCsvText, commentMap, safeSourceClientId);
   return buildEmployeeExperienceDashboardData({
     organizationName,
     dataSourceLabel: demo
@@ -1382,11 +1683,187 @@ export async function loadDwsEmployeeExperienceDashboardData({
       : `${organizationName} employee experience Firebase CSV workspace`,
     definitions,
     respondents,
+    // AutoSEP is a third-party partner basin: excluded from every org score/view and
+    // shown only in its own dedicated report.
+    partnerBrandLabels: safeSourceClientId === "dws-field" ? ["Autosep", "AutoSEP", "AutoCEP"] : [],
+    partnerLabel: safeSourceClientId === "dws-field" ? "AutoSEP" : undefined,
+    // The field database only carries these real demographic columns. Pin the
+    // "Results by Segment" dimensions to them so phantom segments (Generation,
+    // Employment/Rate Type, Leadership) never surface on the field dashboard.
+    segmentFields:
+      safeSourceClientId === "dws-field"
+        ? [
+            { id: "tenure", label: "Tenure", field: "tenure" },
+            { id: "role", label: "Role", field: "role" },
+            { id: "job-category", label: "Job Category", field: "fieldCategory" },
+            { id: "job-title", label: "Job Title", field: "jobTitle" },
+          ]
+        : undefined,
     hiddenDimensionIds: mergeHiddenDimensionIds([
       ...(hiddenDimensionIds ?? (demo ? DEMO_HIDDEN_DIMENSION_IDS : [])),
       ...(safeSourceClientId === "csg" ? CSG_EXCLUDED_DIMENSION_IDS : []),
+      ...(safeSourceClientId === "dws" || safeSourceClientId === "dws-field" ? DWS_EXCLUDED_DIMENSION_IDS : []),
     ]),
   });
+}
+
+export type EEDataMapCommentField = {
+  key: string;
+  label: string;
+  resolvedItemIds: number[];
+  resolvedFromCSV: boolean;
+  statementText: string | null;
+};
+
+export type EEDataMap = {
+  meta: {
+    organizationName: string;
+    respondentCount: number;
+    campaigns: string[];
+    dataFile: string;
+    statementsFile: string;
+    generatedAt: string;
+  };
+  questions: Array<{ itemId: number; dimension: string; statement: string }>;
+  commentFields: EEDataMapCommentField[];
+  demographics: Array<{
+    field: string;
+    label: string;
+    columnAliases: string[];
+    sampleValues: string[];
+    totalDistinct: number;
+  }>;
+};
+
+export async function loadDwsEEDataMap(sourceClientId?: string): Promise<EEDataMap> {
+  const safeId = (sourceClientId ?? DEFAULT_SOURCE_CLIENT_ID).trim() || DEFAULT_SOURCE_CLIENT_ID;
+  const organizationName = SOURCE_CLIENT_LABELS[safeId] ?? safeId;
+  const sourceFiles = SOURCE_CLIENT_FILES[safeId] ?? { database: DATABASE_FILE_NAME, statements: STATEMENTS_FILE_NAME };
+  const storageId = SOURCE_CLIENT_STORAGE_IDS[safeId] ?? safeId;
+
+  const [databaseCsvText, statementsCsvText] = await Promise.all([
+    readCsvFromStorage(`clients/${storageId}/data/${sourceFiles.database}`),
+    readCsvFromStorage(`clients/${storageId}/data/${sourceFiles.statements}`),
+  ]);
+
+  const { scoring, commentMap } = parseStatements(statementsCsvText);
+  const respondents = parseRespondents(scoring, databaseCsvText, commentMap, safeId);
+
+  // Build comment fields report
+  const COMMENT_FIELD_LABELS: Record<keyof CommentIdMap, string> = {
+    strengths: "Greatest Strengths",
+    improvement: "Desired Changes",
+    supervisor: "Supervisor Feedback",
+    acquisition: "Acquisition Comments",
+  };
+  const allCommentRows = (function extractCommentRows(csvText: string) {
+    const rows = csvText.split(/\r?\n/).map((row) => row.split(","));
+    const headers = rows[0] ?? [];
+    const headerIndex = new Map(headers.map((h, i) => [h.trim().toLowerCase(), i]));
+    const getVal = (row: string[], names: string[], fallback: number) => {
+      const idx = names.map((n) => headerIndex.get(n.toLowerCase())).find((c): c is number => typeof c === "number");
+      return row[idx ?? fallback] ?? "";
+    };
+    return rows.slice(1).map((row) => ({
+      itemId: Number.parseInt(getVal(row, ["item", "item id", "itemId", "id"], 0), 10),
+      dimension: (getVal(row, ["index", "dimension"], 1) || "").trim(),
+      statement: (getVal(row, ["statement", "question", "item text"], 2) || "").trim(),
+    })).filter((r) => Number.isFinite(r.itemId) && (r.dimension === "Comment" || r.dimension === "Ownership"));
+  })(statementsCsvText);
+
+  const commentFields: EEDataMapCommentField[] = (Object.keys(COMMENT_FIELD_LABELS) as Array<keyof CommentIdMap>).map((key) => {
+    const ids = commentMap[key];
+    const matched = allCommentRows.find((r) => ids.includes(r.itemId));
+    const fallbackIds = [...COMMENT_ID_CANDIDATES[key]];
+    const resolvedFromCSV = JSON.stringify(ids.sort()) !== JSON.stringify(fallbackIds.sort());
+    return {
+      key,
+      label: COMMENT_FIELD_LABELS[key],
+      resolvedItemIds: ids,
+      resolvedFromCSV,
+      statementText: matched?.statement ?? null,
+    };
+  });
+
+  // Demographic sampling
+  const uniq = <T>(arr: T[]) => Array.from(new Set(arr));
+  const sample = (values: string[], n = 5) =>
+    values.filter((v) => v && v !== "Unspecified" && v !== "Unknown Department" && v !== "Unknown Supervisor" && v !== "Unknown Job Title" && !v.startsWith("Unknown")).slice(0, n);
+
+  const campaigns = uniq(respondents.map((r) => r.campaignLabel)).sort();
+
+  const demographics: EEDataMap["demographics"] = [
+    {
+      field: "location",
+      label: "Basin / Location",
+      columnAliases: [...BRAND_SEGMENT_COLUMN_ALIASES],
+      sampleValues: sample(uniq(respondents.map((r) => r.location))),
+      totalDistinct: uniq(respondents.map((r) => r.location)).length,
+    },
+    {
+      field: "department",
+      label: "Department",
+      columnAliases: ["Department", "Dept"],
+      sampleValues: sample(uniq(respondents.map((r) => r.department))),
+      totalDistinct: uniq(respondents.map((r) => r.department)).length,
+    },
+    {
+      field: "division",
+      label: "Division",
+      columnAliases: ["Division", "Division Name"],
+      sampleValues: sample(uniq(respondents.map((r) => r.division))),
+      totalDistinct: uniq(respondents.map((r) => r.division)).length,
+    },
+    {
+      field: "supervisor",
+      label: "Supervisor",
+      columnAliases: ["Supervisor", "Manager"],
+      sampleValues: sample(uniq(respondents.map((r) => r.supervisor))),
+      totalDistinct: uniq(respondents.map((r) => r.supervisor)).length,
+    },
+    {
+      field: "leadership",
+      label: "Leadership Role",
+      columnAliases: ["Leadership", "Leadership Level"],
+      sampleValues: sample(uniq(respondents.map((r) => r.leadership))),
+      totalDistinct: uniq(respondents.map((r) => r.leadership)).length,
+    },
+    {
+      field: "fieldCategory",
+      label: "Job Category",
+      columnAliases: ["Job Category", "Field Category", "Category"],
+      sampleValues: sample(uniq(respondents.map((r) => r.fieldCategory))),
+      totalDistinct: uniq(respondents.map((r) => r.fieldCategory)).length,
+    },
+    {
+      field: "rateType",
+      label: "Rate Type",
+      columnAliases: ["Rate Type", "Pay Type"],
+      sampleValues: sample(uniq(respondents.map((r) => r.rateType))),
+      totalDistinct: uniq(respondents.map((r) => r.rateType)).length,
+    },
+    {
+      field: "tenure",
+      label: "Tenure",
+      columnAliases: ["Tenure", "Years of Service"],
+      sampleValues: sample(uniq(respondents.map((r) => r.tenure))),
+      totalDistinct: uniq(respondents.map((r) => r.tenure)).length,
+    },
+  ];
+
+  return {
+    meta: {
+      organizationName,
+      respondentCount: respondents.length,
+      campaigns,
+      dataFile: sourceFiles.database,
+      statementsFile: sourceFiles.statements,
+      generatedAt: new Date().toISOString(),
+    },
+    questions: scoring.map((q) => ({ itemId: q.itemId, dimension: q.dimension, statement: q.statement })),
+    commentFields,
+    demographics,
+  };
 }
 
 export async function loadEmployeeExperienceSyntheticDemoData({

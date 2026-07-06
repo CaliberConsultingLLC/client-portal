@@ -203,27 +203,34 @@ export function PortalShell({
             showDemoLabButton={showDemoLabButton}
           />
         </Suspense>
-        <FirebaseSignOutButton
-          redirectTo="/login"
-          variant="outline"
-          className="rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
-        />
-        <div className="flex flex-col items-end gap-1">
-          <div className="text-right">
+
+        {showViewAsToggle ? (
+          <ViewAsToggle
+            isViewingAsUser={isViewingAsUser}
+            viewingAsUserUid={viewingAsUserUid}
+            users={viewAsUsers}
+          />
+        ) : null}
+
+        <div className="flex items-center gap-2.5">
+          <div className="text-right leading-tight">
             <p className="text-sm font-semibold text-white">{userName || "Portal User"}</p>
+            <p className="text-[11px] font-medium text-white/55">
+              {isInternalUser ? "Caliber Consulting" : "\u00A0"}
+            </p>
             {isViewingAsUser ? (
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#E8CC70]">
                 User preview
               </p>
             ) : null}
           </div>
-          {showViewAsToggle ? (
-            <ViewAsToggle
-              isViewingAsUser={isViewingAsUser}
-              viewingAsUserUid={viewingAsUserUid}
-              users={viewAsUsers}
-            />
-          ) : null}
+          <FirebaseSignOutButton
+            redirectTo="/login"
+            label=""
+            variant="ghost"
+            className="h-9 w-9 shrink-0 rounded-full p-0 text-white/60 hover:bg-white/10 hover:text-white [&_svg]:size-[18px]"
+            title="Sign out"
+          />
         </div>
       </AppTopBanner>
 

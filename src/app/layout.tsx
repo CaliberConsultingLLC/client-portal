@@ -18,11 +18,11 @@ const playfair = Playfair_Display({
 
 export const metadata: Metadata = {
   title: {
-    default: "North Star Partners | People-Centered Consulting",
-    template: "%s | North Star Partners",
+    default: "Caliber Consulting LLC | People & Culture Solutions",
+    template: "%s | Caliber Consulting LLC",
   },
   description:
-    "Custom employee experience solutions — culture surveys, leadership development, sentiment analysis, and actionable reporting for organizations that invest in their people.",
+    "People and culture solutions including culture surveys, leadership development, sentiment analysis, and actionable reporting for organizations that invest in their people.",
   keywords: [
     "employee experience",
     "culture survey",
@@ -33,8 +33,13 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     type: "website",
-    siteName: "North Star Partners",
+    siteName: "Caliber Consulting LLC",
     locale: "en_US",
+  },
+  icons: {
+    icon: "/CClogo3.png",
+    shortcut: "/CClogo3.png",
+    apple: "/CClogo3.png",
   },
 };
 

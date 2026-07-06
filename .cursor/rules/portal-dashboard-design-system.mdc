@@ -1,0 +1,33 @@
+---
+description: Dashboard and portal design standards for client-facing work
+alwaysApply: true
+---
+
+# Portal Dashboard Design System
+
+- Design every client-facing page to inform, intrigue, and inspire: clarify the data, surface an interesting signal, and imply a useful next step.
+- Use the three-zone portal structure by default: left column for controls, center canvas for primary content, right column for insights, explanations, and recommendations.
+- Keep navigation and side columns visually stable. Top nav, secondary nav, left column, and right column should not shift or scroll unexpectedly on dashboard pages.
+- Collapse filters, dropdowns, selectors, and setup controls by default. Let users open controls when they need them.
+- Keep the center canvas clean, white, and primary. Do not let side content squeeze the main data view or create uneven page backgrounds.
+- Put insight callouts in the right column, not the main data canvas. Use expandable Insight Cards for items like Biggest Gain, Highest Department, Watch Area, and Momentum Signal.
+- The upper-left client card should consistently show the client logo and the current report or perspective context.
+- Avoid redundant titles. The client name belongs in the left identity card; the main title should name the active perspective or report.
+- Keep right-column guidance concise: a quick explanation, a legend only when it adds meaning, then the most useful data points or recommended actions.
+- Preserve readability over chart density. If a visual is crowded, give labels more room, wrap text, reduce compression, or split the view.
+- Bar charts must use compact, consistent row rhythm: equal row heights, tight even vertical gaps, aligned tracks, aligned value labels, and predictable axis spacing. Do not create oversized row spacing just to make rows equal.
+- Bar chart labels must not be clipped. Labels should wrap when needed, and the label column may use up to 50% of the chart width when statements are long.
+- Repeated visuals should have even spacing without feeling padded out. Rankings, bar charts, tables, insight cards, and card stacks should scan with a steady, efficient visual cadence.
+- Make comparisons effortless. Pair current score with movement, benchmark, prior campaign, or peer context whenever it improves interpretation.
+- Use progressive disclosure for complexity. Show the headline number and title first, then reveal the supporting index, statement, department, or explanation on expand.
+- Make insight cards editorial and specific, not generic. Prefer titles like Biggest Gain, Watch Area, Highest Department, Leading vs Peers, and Momentum Signal.
+- Avoid decoration that does not carry meaning. Gradients, shadows, borders, color bands, and icons should clarify hierarchy, state, or emphasis.
+- Create visual confidence through alignment. Card edges, chart starts, axes, headings, table columns, and rail content should line up intentionally.
+- Keep setup text short and utility-focused. The primary visual or report content should be immediately visible without scrolling past narrative framing.
+- Dashboard visuals may keep their own data color palettes, but portal chrome should remain consistent with the Caliber green, gold, black, white, and neutral gray system.
+- Use one container treatment across EE perspectives and reports: white background, `#8798AA` border, 16px rounded corners, and the standard EE panel shadow. Do not mix alternate card borders on the same dashboard.
+- Heatmaps and score tables share one format: `#8798AA` outer border, `#E2E8EF` header band, `#D3DDE7` grid lines, uppercase muted column labels, and bold centered score cells. Match the Department Report statement table everywhere.
+- Separate historical campaign score columns from delta and benchmark columns with a moderate `#8798AA` group divider (`col-group-end` / `col-group-start`).
+- Campaign order is chronological left to right and oldest to newest in charts; vertical selectors list the most recent campaign first. Default every perspective to the latest survey date and the most recent valid comparison.
+- Bars, lines, and delta labels must stay inside the chart frame. Clamp or expand axes as needed and use overflow clipping so nothing is cropped at the container edge.
+- Right-rail insight cards must surface editorial signals such as Biggest Gain, Steepest Decline, Leading vs Peers, and Focus vs Peers—not obvious rank labels like highest or lowest department.

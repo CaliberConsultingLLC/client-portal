@@ -4,14 +4,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all duration-[180ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nsp-green-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all duration-[180ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#386B45] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "bg-nsp-green-500 text-white shadow-sm hover:bg-nsp-green-600 active:bg-nsp-green-700",
+          "bg-[#2B2B2B] text-white shadow-sm hover:bg-[#386B45] active:bg-[#315F3D]",
         secondary:
-          "bg-nsp-orange-300 text-nsp-blue-900 shadow-sm hover:bg-nsp-orange-400 active:bg-nsp-orange-500",
+          "bg-[#D7B35A] text-[#2B2B2B] shadow-sm hover:bg-[#C9A446] active:bg-[#B89037]",
         outline:
           "border border-border-default bg-white text-text-primary shadow-sm hover:bg-surface-3 active:bg-surface-4",
         ghost:

@@ -22,6 +22,7 @@ interface HeatmapChartProps {
   abbreviateHeaders?: boolean;
   columnMinWidthClassName?: string;
   columnWidthClassName?: string;
+  scoreColorResolver?: (value: number | null) => string;
 }
 
 export function HeatmapChart({
@@ -37,9 +38,10 @@ export function HeatmapChart({
   abbreviateHeaders = false,
   columnMinWidthClassName = "min-w-[112px]",
   columnWidthClassName = "w-[112px]",
+  scoreColorResolver,
 }: HeatmapChartProps) {
-  const gridLineColor = "#7F91A8";
-  const strongGridLineColor = "#5E7898";
+  const gridLineColor = "#D3DDE7";
+  const strongGridLineColor = "#8798AA";
   const [hoveredCell, setHoveredCell] = useState<{
     row: number;
     col: number;
@@ -54,6 +56,9 @@ export function HeatmapChart({
     }
     return name.substring(0, 10);
   };
+
+  const resolveScoreColor = (value: number | null) =>
+    scoreColorResolver ? scoreColorResolver(value) : scoreScaleColor(value, minValue, midpoint, maxValue);
 
   const sortedData = useMemo(() => {
     return rows.map((dept) => {
@@ -102,7 +107,7 @@ export function HeatmapChart({
             ))}
             {rowTotals && (
               <th
-                className="min-w-[52px] bg-surface-3 p-2 text-center font-bold text-text-primary"
+                className="min-w-[52px] bg-[#E2E8EF] p-[11px_8px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]"
                 style={{ borderBottom: `1px solid ${strongGridLineColor}` }}
               >
                 Total
@@ -114,7 +119,7 @@ export function HeatmapChart({
           {sortedData.map((row, ri) => (
             <tr key={row.department}>
               <td
-                className="sticky left-0 z-10 bg-white p-2 font-medium text-text-primary"
+                className="sticky left-0 z-10 bg-white p-[9px_14px] text-[12.5px] font-medium text-[#152238]"
                 style={{
                   borderRight: `1px solid ${gridLineColor}`,
                   borderTop: `1px solid ${gridLineColor}`,
@@ -130,14 +135,14 @@ export function HeatmapChart({
                 return (
                   <td
                     key={col}
-                    className="p-2 text-center text-[11px] font-semibold transition-all"
+                    className="p-[6px_8px] text-center text-[12.5px] font-bold transition-all"
                     onMouseEnter={() => setHoveredCell({ row: ri, col: ci })}
                     onMouseLeave={() => setHoveredCell(null)}
                     title={`${row.department} → ${col}: ${val ? formatScoreForDisplay(val) : "N/A"}`}
                     style={{
                       backgroundColor: isSelf
                         ? "#EFE9DB"
-                        : scoreScaleColor(val, minValue, midpoint, maxValue),
+                        : resolveScoreColor(val),
                       color: "#1C252A",
                       opacity: isHovered ? 1 : 0.94,
                       borderRight: `1px solid ${gridLineColor}`,
@@ -150,14 +155,9 @@ export function HeatmapChart({
               })}
               {rowTotals && (
                 <td
-                  className="p-2 text-center text-[11px] font-bold"
+                  className="p-[6px_8px] text-center text-[12.5px] font-bold"
                   style={{
-                    backgroundColor: scoreScaleColor(
-                      rowTotals[row.department] ?? null,
-                      minValue,
-                      midpoint,
-                      maxValue
-                    ),
+                    backgroundColor: resolveScoreColor(rowTotals[row.department] ?? null),
                     color: "#1C252A",
                     borderTop: `1px solid ${gridLineColor}`,
                   }}
@@ -170,7 +170,7 @@ export function HeatmapChart({
           {columnTotals && (
             <tr>
               <td
-                className="sticky left-0 z-10 bg-surface-3 p-2 font-bold text-text-primary"
+                className="sticky left-0 z-10 bg-[#E2E8EF] p-[9px_14px] text-[12.5px] font-bold text-[#152238]"
                 style={{
                   borderTop: `2px solid ${strongGridLineColor}`,
                   borderRight: `1px solid ${gridLineColor}`,
@@ -181,14 +181,9 @@ export function HeatmapChart({
               {columns.map((col) => (
                 <td
                   key={col}
-                  className="p-2 text-center text-[11px] font-bold"
+                  className="p-[6px_8px] text-center text-[12.5px] font-bold"
                   style={{
-                    backgroundColor: scoreScaleColor(
-                      columnTotals[col] ?? null,
-                      minValue,
-                      midpoint,
-                      maxValue
-                    ),
+                    backgroundColor: resolveScoreColor(columnTotals[col] ?? null),
                     color: "#1C252A",
                     borderTop: `2px solid ${strongGridLineColor}`,
                     borderRight: `1px solid ${gridLineColor}`,
@@ -199,7 +194,7 @@ export function HeatmapChart({
               ))}
               {rowTotals && (
                 <td
-                  className="bg-surface-3"
+                  className="bg-[#E2E8EF]"
                   style={{ borderTop: `2px solid ${strongGridLineColor}` }}
                 />
               )}

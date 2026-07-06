@@ -7,11 +7,17 @@ import { isKnownBrandSegment } from "@/lib/employee-experience/brand-segment";
 
 export const REPORT_SCORE_SCALE = { min: 60, mid: 72.5, max: 85 } as const;
 
+type ScoreScale = { min: number; mid: number; max: number };
+
 type ProjectionOptions = {
   logoUrl?: string;
   tagline?: string;
   campaignLabel?: string;
+  // Optional per-dashboard score scale. When omitted, the default 60–85 scale is used.
+  scale?: ScoreScale;
 };
+
+const resolveScale = (options?: ProjectionOptions): ScoreScale => options?.scale ?? REPORT_SCORE_SCALE;
 
 export type EnpsGroupRow = {
   id: string;
@@ -36,6 +42,7 @@ export type EnpsReportProjection = {
   };
   brandRows: EnpsGroupRow[];
   departmentRows: EnpsGroupRow[];
+  supervisorRows: EnpsGroupRow[];
 };
 
 function resolveCampaignLabel(data: EmployeeExperienceDashboardData, options?: ProjectionOptions) {
@@ -98,11 +105,25 @@ function respondentsForCampaign(respondents: EmployeeExperienceRespondent[], cam
   return respondents.filter((respondent) => respondent.campaignLabel === campaignLabel);
 }
 
-function itemDisplayScore(respondents: EmployeeExperienceRespondent[], itemId: number) {
+// Blank supervisor values are normalized to "Unknown Supervisor" upstream. Those rows still
+// contribute to org-wide aggregates, but they must never be listed as a supervisor segment.
+function isKnownSupervisor(value: string) {
+  const normalized = value?.trim().toLowerCase();
+  return Boolean(normalized) && normalized !== "unknown supervisor";
+}
+
+function itemDisplayScore(respondents: EmployeeExperienceRespondent[], itemId: number): number {
   const values = respondents
     .map((respondent) => respondent.scores[itemId])
     .filter((value): value is number => value !== null);
   return values.length > 0 ? toDisplayScore(average(values)) : 0;
+}
+
+function itemDisplayScoreNullable(respondents: EmployeeExperienceRespondent[], itemId: number): number | null {
+  const values = respondents
+    .map((respondent) => respondent.scores[itemId])
+    .filter((value): value is number => value !== null);
+  return values.length > 0 ? toDisplayScore(average(values)) : null;
 }
 
 function enpsResponseScore(
@@ -254,13 +275,14 @@ function buildDepartments(
 function buildJobCategories(
   respondents: EmployeeExperienceRespondent[],
   currentLabel: string,
-  minimumSegmentSize: number
+  minimumSegmentSize: number,
+  groupField: "leadership" | "fieldCategory" = "fieldCategory"
 ) {
   const currentRespondents = respondentsForCampaign(respondents, currentLabel);
   const counts = new Map<string, number>();
   currentRespondents.forEach((respondent) => {
-    const category = respondent.fieldCategory?.trim();
-    if (!category) return;
+    const category = respondent[groupField]?.trim();
+    if (!category || category === "Unspecified" || category === "Unknown Job Title") return;
     counts.set(category, (counts.get(category) ?? 0) + 1);
   });
 
@@ -316,12 +338,54 @@ function buildByDeptStatements(
   }));
 }
 
+function buildBySupervisorStatements(
+  questions: EmployeeExperienceQuestionDefinition[],
+  respondents: EmployeeExperienceRespondent[],
+  campaigns: string[],
+  currentLabel: string,
+  supervisors: Array<{ id: string; name: string }>
+) {
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return Array.from(groupQuestionsByDimension(questions).entries()).map(([dimension, items]) => ({
+    id: slugify(dimension),
+    name: dimension,
+    statements: items.map((question, index) => {
+      const byDept: Record<string, { current: number; comparisons: Record<string, number> }> = {};
+      supervisors.forEach((supervisor) => {
+        const supRespondents = (campaignLabel: string) =>
+          respondentsForCampaign(respondents, campaignLabel).filter(
+            (respondent) => respondent.supervisor === supervisor.name
+          );
+
+        byDept[supervisor.id] = {
+          current: itemDisplayScore(supRespondents(currentLabel), question.itemId),
+          comparisons: Object.fromEntries(
+            comparisons.map((comparison) => {
+              const priorLabel =
+                campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
+              return [comparison.id, itemDisplayScore(supRespondents(priorLabel), question.itemId)];
+            })
+          ),
+        };
+      });
+
+      return {
+        id: `${slugify(dimension)}-${index + 1}`,
+        text: question.statement,
+        byDept,
+      };
+    }),
+  }));
+}
+
 function buildByJobCategoryStatements(
   questions: EmployeeExperienceQuestionDefinition[],
   respondents: EmployeeExperienceRespondent[],
   campaigns: string[],
   currentLabel: string,
-  jobCategories: Array<{ id: string; name: string }>
+  jobCategories: Array<{ id: string; name: string }>,
+  groupField: "leadership" | "fieldCategory" | "division" = "fieldCategory"
 ) {
   const comparisons = buildComparisons(campaigns, currentLabel);
 
@@ -333,7 +397,7 @@ function buildByJobCategoryStatements(
       jobCategories.forEach((category) => {
         const categoryRespondents = (campaignLabel: string) =>
           respondentsForCampaign(respondents, campaignLabel).filter(
-            (respondent) => respondent.fieldCategory === category.name
+            (respondent) => respondent[groupField] === category.name
           );
 
         byDept[category.id] = {
@@ -377,6 +441,70 @@ function buildLocations(
       name,
       responses,
     }));
+}
+
+function buildDivisions(
+  respondents: EmployeeExperienceRespondent[],
+  currentLabel: string,
+  minimumSegmentSize: number
+) {
+  const currentRespondents = respondentsForCampaign(respondents, currentLabel);
+  const counts = new Map<string, number>();
+  currentRespondents.forEach((respondent) => {
+    const div = respondent.division?.trim();
+    if (!div || div.toLowerCase().includes("unknown")) return;
+    counts.set(div, (counts.get(div) ?? 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .filter(([, count]) => count >= minimumSegmentSize)
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([name, responses]) => ({
+      id: slugify(name),
+      name,
+      responses,
+    }));
+}
+
+function buildByDivisionStatements(
+  questions: EmployeeExperienceQuestionDefinition[],
+  respondents: EmployeeExperienceRespondent[],
+  campaigns: string[],
+  currentLabel: string,
+  divisions: Array<{ id: string; name: string }>
+) {
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return Array.from(groupQuestionsByDimension(questions).entries()).map(([dimension, items]) => ({
+    id: slugify(dimension),
+    name: dimension,
+    statements: items.map((question, index) => {
+      const byLocation: Record<string, { current: number; comparisons: Record<string, number> }> = {};
+      divisions.forEach((division) => {
+        const divRespondents = (campaignLabel: string) =>
+          respondentsForCampaign(respondents, campaignLabel).filter(
+            (respondent) => respondent.division === division.name
+          );
+
+        byLocation[division.id] = {
+          current: itemDisplayScore(divRespondents(currentLabel), question.itemId),
+          comparisons: Object.fromEntries(
+            comparisons.map((comparison) => {
+              const priorLabel =
+                campaigns.find((label) => campaignId(label) === comparison.id) ?? comparison.label;
+              return [comparison.id, itemDisplayScore(divRespondents(priorLabel), question.itemId)];
+            })
+          ),
+        };
+      });
+
+      return {
+        id: `${slugify(dimension)}-${index + 1}`,
+        text: question.statement,
+        byLocation,
+      };
+    }),
+  }));
 }
 
 function buildBrands(
@@ -472,11 +600,16 @@ function buildByBrandStatements(
   }));
 }
 
-const SEGMENT_FIELDS = [
-  { id: "generation", label: "Generation", field: "generation" as const },
-  { id: "tenure", label: "Tenure", field: "tenure" as const },
-  { id: "role", label: "Role", field: "jobTitle" as const },
+type SegmentFieldDef = { id: string; label: string; field: keyof EmployeeExperienceRespondent };
+
+const SEGMENT_FIELDS: SegmentFieldDef[] = [
+  { id: "generation", label: "Generation", field: "generation" },
+  { id: "tenure", label: "Tenure", field: "tenure" },
+  { id: "role", label: "Role", field: "jobTitle" },
 ];
+
+const segmentValue = (respondent: EmployeeExperienceRespondent, field: keyof EmployeeExperienceRespondent) =>
+  String(respondent[field] ?? "");
 
 function buildSegments(
   respondents: EmployeeExperienceRespondent[],
@@ -484,15 +617,16 @@ function buildSegments(
   currentLabel: string,
   groups: Array<{ id: string; name: string }>,
   minimumSegmentSize: number,
-  groupField: "department" | "fieldCategory" = "department"
+  groupField: "department" | "fieldCategory" | "leadership" | "division" | "supervisor" = "department",
+  segmentFields: SegmentFieldDef[] = SEGMENT_FIELDS
 ) {
   const comparisons = buildComparisons(campaigns, currentLabel);
 
-  return SEGMENT_FIELDS.map((dimension) => {
+  return segmentFields.map((dimension) => {
     const groupNames = Array.from(
       new Set(
         respondentsForCampaign(respondents, currentLabel)
-          .map((respondent) => respondent[dimension.field])
+          .map((respondent) => segmentValue(respondent, dimension.field))
           .filter((value) => value && value !== "Unspecified" && value !== "Unknown Job Title")
       )
     ).sort((left, right) => left.localeCompare(right));
@@ -559,19 +693,20 @@ function buildBrandSegments(
   campaigns: string[],
   currentLabel: string,
   brands: Array<{ id: string; name: string }>,
-  minimumSegmentSize: number
+  minimumSegmentSize: number,
+  segmentFields?: SegmentFieldDef[]
 ) {
   const comparisons = buildComparisons(campaigns, currentLabel);
-  const brandSegmentFields = [
+  const brandSegmentFields: SegmentFieldDef[] = segmentFields ?? [
     ...SEGMENT_FIELDS,
-    { id: "job-category", label: "Job Category", field: "fieldCategory" as const },
+    { id: "job-category", label: "Job Category", field: "fieldCategory" },
   ];
 
   return brandSegmentFields.map((dimension) => {
     const groupNames = Array.from(
       new Set(
         respondentsForCampaign(respondents, currentLabel)
-          .map((respondent) => respondent[dimension.field])
+          .map((respondent) => segmentValue(respondent, dimension.field))
           .filter((value) => value && value !== "Unspecified" && value !== "Unknown Job Title")
       )
     ).sort((left, right) => left.localeCompare(right));
@@ -651,6 +786,7 @@ function buildSupervisors(
   const counts = new Map<string, { name: string; dept: string; responses: number }>();
 
   currentRespondents.forEach((respondent) => {
+    if (!isKnownSupervisor(respondent.supervisor)) return;
     const existing = counts.get(respondent.supervisor);
     if (existing) {
       existing.responses += 1;
@@ -690,21 +826,23 @@ export function projectCampaignResultsData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons,
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     indexes: buildStatementProjections(data.questions, data.respondents, campaigns, currentLabel),
   };
 }
 
 export function projectDepartmentComparisonData(
   data: EmployeeExperienceDashboardData,
-  options?: ProjectionOptions
+  options?: ProjectionOptions,
+  groupField: "leadership" | "fieldCategory" = "fieldCategory"
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
   const campaigns = sortedCampaigns(data.meta.campaigns);
   const jobCategories = buildJobCategories(
     data.respondents,
     currentLabel,
-    data.settings.minimumSegmentSize
+    data.settings.minimumSegmentSize,
+    groupField
   );
 
   return {
@@ -715,7 +853,7 @@ export function projectDepartmentComparisonData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons: buildComparisons(campaigns, currentLabel),
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     display: {
       barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
       deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
@@ -726,7 +864,8 @@ export function projectDepartmentComparisonData(
       data.respondents,
       campaigns,
       currentLabel,
-      jobCategories
+      jobCategories,
+      groupField
     ),
   };
 }
@@ -751,7 +890,7 @@ export function projectLocationComparisonData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons: buildComparisons(campaigns, currentLabel),
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     display: {
       barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
       deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
@@ -767,13 +906,49 @@ export function projectLocationComparisonData(
   };
 }
 
-export function projectJobCategoryReportData(
+export function projectDivisionComparisonData(
   data: EmployeeExperienceDashboardData,
   options?: ProjectionOptions
 ) {
   const currentLabel = resolveCampaignLabel(data, options);
   const campaigns = sortedCampaigns(data.meta.campaigns);
-  const jobCategories = buildJobCategories(
+  const divisions = buildDivisions(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize
+  );
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons: buildComparisons(campaigns, currentLabel),
+    scale: resolveScale(options),
+    display: {
+      barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
+      deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
+    },
+    locations: divisions.map((div) => ({ id: div.id, name: div.name })),
+    indexes: buildByDivisionStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      divisions
+    ),
+  };
+}
+
+export function projectDivisionReportData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const divisions = buildDivisions(
     data.respondents,
     currentLabel,
     data.settings.minimumSegmentSize
@@ -788,14 +963,61 @@ export function projectJobCategoryReportData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons,
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
+    departments: divisions,
+    indexes: buildByJobCategoryStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      divisions,
+      "division"
+    ),
+    segments: buildSegments(
+      data.respondents,
+      campaigns,
+      currentLabel,
+      divisions,
+      data.settings.minimumSegmentSize,
+      "division",
+      data.meta.segmentFields
+    ),
+    segmentMinResponses: data.settings.minimumSegmentSize,
+  };
+}
+
+export function projectJobCategoryReportData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions,
+  groupField: "leadership" | "fieldCategory" = "fieldCategory"
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const jobCategories = buildJobCategories(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize,
+    groupField
+  );
+  const comparisons = buildComparisons(campaigns, currentLabel);
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons,
+    scale: resolveScale(options),
     departments: jobCategories,
     indexes: buildByJobCategoryStatements(
       data.questions,
       data.respondents,
       campaigns,
       currentLabel,
-      jobCategories
+      jobCategories,
+      groupField
     ),
     segments: buildSegments(
       data.respondents,
@@ -803,7 +1025,8 @@ export function projectJobCategoryReportData(
       currentLabel,
       jobCategories,
       data.settings.minimumSegmentSize,
-      "fieldCategory"
+      groupField,
+      data.meta.segmentFields
     ),
     segmentMinResponses: data.settings.minimumSegmentSize,
   };
@@ -830,7 +1053,7 @@ export function projectDepartmentReportData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons,
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     departments,
     indexes: buildByDeptStatements(
       data.questions,
@@ -845,7 +1068,8 @@ export function projectDepartmentReportData(
       currentLabel,
       departments,
       data.settings.minimumSegmentSize,
-      "department"
+      "department",
+      data.meta.segmentFields
     ),
     segmentMinResponses: data.settings.minimumSegmentSize,
   };
@@ -871,7 +1095,7 @@ export function projectDepartmentComparisonByDepartmentData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons: buildComparisons(campaigns, currentLabel),
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     display: {
       barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
       deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
@@ -899,6 +1123,10 @@ export function projectBrandReportData(
     data.settings.minimumSegmentSize
   );
   const comparisons = buildComparisons(campaigns, currentLabel);
+  const supervisorDimension = findSupervisorDimension(data.questions);
+  const supervisorQuestions = data.questions.filter(
+    (question) => question.dimension === supervisorDimension
+  );
   const enpsItemIds = (data.enpsDefinitions ?? []).map((definition) => definition.itemId);
   const enpsByDept: Record<string, { current: number | null; comparisons: Record<string, number | null> }> =
     Object.fromEntries(
@@ -926,6 +1154,45 @@ export function projectBrandReportData(
         ];
       })
     );
+  const supervisorHeatmapByDept = Object.fromEntries(
+    brands.map((brand) => {
+      const brandCurrentRespondents = respondentsForCampaign(data.respondents, currentLabel).filter(
+        (respondent) => respondent.location === brand.name
+      );
+      const supervisorCounts = new Map<string, number>();
+      brandCurrentRespondents.forEach((respondent) => {
+        if (!isKnownSupervisor(respondent.supervisor)) return;
+        supervisorCounts.set(
+          respondent.supervisor,
+          (supervisorCounts.get(respondent.supervisor) ?? 0) + 1
+        );
+      });
+      const supervisors = Array.from(supervisorCounts.entries())
+        .filter(([, count]) => count >= data.settings.minimumSegmentSize)
+        .sort((left, right) => left[0].localeCompare(right[0]))
+        .map(([name, responses]) => ({
+          id: `${brand.id}-${slugify(name)}`,
+          name,
+          responses,
+        }));
+      const statements = supervisorQuestions.map((question, index) => ({
+        id: `lead-${index + 1}`,
+        text: question.statement,
+        scoresBySupervisor: Object.fromEntries(
+          supervisors.map((supervisor) => {
+            const score = itemDisplayScore(
+              brandCurrentRespondents.filter(
+                (respondent) => `${brand.id}-${slugify(respondent.supervisor)}` === supervisor.id
+              ),
+              question.itemId
+            );
+            return [supervisor.id, score];
+          })
+        ) as Record<string, number>,
+      }));
+      return [brand.id, { supervisors, statements }];
+    })
+  );
 
   return {
     client: buildClient(data, options),
@@ -935,7 +1202,7 @@ export function projectBrandReportData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons,
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     departments: brands,
     indexes: buildByBrandStatements(
       data.questions,
@@ -949,10 +1216,148 @@ export function projectBrandReportData(
       campaigns,
       currentLabel,
       brands,
-      data.settings.minimumSegmentSize
+      data.settings.minimumSegmentSize,
+      data.meta.segmentFields
     ),
     enpsByDept,
+    supervisorHeatmap: {
+      indexName: supervisorDimension,
+      byDept: supervisorHeatmapByDept,
+    },
     segmentMinResponses: data.settings.minimumSegmentSize,
+  };
+}
+
+export interface SegmentBreakdownValue {
+  key: string;
+  label: string;
+  n: number;
+}
+
+export interface SegmentBreakdownIndexRef {
+  id: string;
+  name: string;
+  score: number;
+}
+
+export interface SegmentBreakdownStatementRow {
+  text: string;
+  scores: Record<string, number>;
+  overall: number;
+}
+
+export interface SegmentBreakdownUnit {
+  respondents: number;
+  segments: SegmentBreakdownValue[];
+  indexes: SegmentBreakdownIndexRef[];
+  funnelByIndex: Record<string, Record<string, number>>;
+  statementsByIndex: Record<string, SegmentBreakdownStatementRow[]>;
+}
+
+export interface SegmentBreakdownProjection {
+  client: ReturnType<typeof buildClient>;
+  current: { id: string; label: string; labelLong: string };
+  scale: ScoreScale;
+  segmentLabel: string;
+  departments: Array<{ id: string; name: string; location?: string; responses: number }>;
+  byUnit: Record<string, SegmentBreakdownUnit>;
+}
+
+// Segment Breakdown (DWS Field redesign pilot only): for each basin, scores a
+// segment dimension (Job Category by default — Greenhat, Leadhand, Roughneck,
+// Operator, Supervisor, …) per index (funnel) and per statement (heatmap), so a
+// leader can compare how the segment performs within their own unit. Unlike
+// `buildBrandSegments` (a single blended score per group), this keeps the full
+// index/statement grain so the funnel and heatmap can both re-score together
+// when the rail index changes. Reuses the same respondent slicing and
+// `itemDisplayScore` math as every other report projector in this file.
+export function projectSegmentBreakdownData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions,
+  segmentField: keyof EmployeeExperienceRespondent = "fieldCategory",
+  segmentLabel = "Job Category"
+): SegmentBreakdownProjection {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const minimumSegmentSize = data.settings.minimumSegmentSize;
+  const brands = buildBrands(data.respondents, currentLabel, minimumSegmentSize);
+  const currentRespondents = respondentsForCampaign(data.respondents, currentLabel);
+  const indexDefs = Array.from(groupQuestionsByDimension(data.questions).entries()).map(
+    ([name, items]) => ({ id: slugify(name), name, items })
+  );
+
+  const byUnit: Record<string, SegmentBreakdownUnit> = {};
+
+  brands.forEach((brand) => {
+    const unitRespondents = currentRespondents.filter((respondent) => respondent.location === brand.name);
+
+    const counts = new Map<string, number>();
+    unitRespondents.forEach((respondent) => {
+      const value = String(respondent[segmentField] ?? "").trim();
+      if (!value || value === "Unspecified" || value === "Unknown Job Title") return;
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+    });
+    const segments: SegmentBreakdownValue[] = Array.from(counts.entries())
+      .filter(([, n]) => n >= minimumSegmentSize)
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([name, n]) => ({ key: slugify(name), label: name, n }));
+
+    const respondentsForSegment = (key: string) =>
+      unitRespondents.filter((respondent) => slugify(String(respondent[segmentField] ?? "")) === key);
+
+    const indexes: SegmentBreakdownIndexRef[] = indexDefs.map((def) => {
+      const values = def.items
+        .map((question) => itemDisplayScoreNullable(unitRespondents, question.itemId))
+        .filter((value): value is number => value != null);
+      return { id: def.id, name: def.name, score: values.length > 0 ? round1(average(values)) : 0 };
+    });
+
+    const funnelByIndex: Record<string, Record<string, number>> = {};
+    const statementsByIndex: Record<string, SegmentBreakdownStatementRow[]> = {};
+
+    indexDefs.forEach((def) => {
+      const funnelRow: Record<string, number> = {};
+      segments.forEach((segment) => {
+        const segmentRespondents = respondentsForSegment(segment.key);
+        const values = def.items
+          .map((question) => itemDisplayScoreNullable(segmentRespondents, question.itemId))
+          .filter((value): value is number => value != null);
+        funnelRow[segment.key] = values.length > 0 ? round1(average(values)) : 0;
+      });
+      funnelByIndex[def.id] = funnelRow;
+
+      statementsByIndex[def.id] = def.items.map((question) => {
+        const scores: Record<string, number> = {};
+        segments.forEach((segment) => {
+          scores[segment.key] = itemDisplayScore(respondentsForSegment(segment.key), question.itemId);
+        });
+        return {
+          text: question.statement,
+          scores,
+          overall: itemDisplayScore(unitRespondents, question.itemId),
+        };
+      });
+    });
+
+    byUnit[brand.id] = {
+      respondents: unitRespondents.length,
+      segments,
+      indexes,
+      funnelByIndex,
+      statementsByIndex,
+    };
+  });
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    scale: resolveScale(options),
+    segmentLabel,
+    departments: brands,
+    byUnit,
   };
 }
 
@@ -1024,7 +1429,7 @@ export function projectSupervisorReportData(
       labelLong: currentLabel.toUpperCase(),
     },
     comparisons,
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     display: { barAxis: { min: 55, max: 100, ticks: [60, 70, 80, 90, 100] } },
     supervisors,
     index: {
@@ -1032,6 +1437,89 @@ export function projectSupervisorReportData(
       name: supervisorDimension,
       statements,
     },
+  };
+}
+
+// Supervisor treated as a normal segment (like department) across ALL indexes,
+// rendered by the department report component (field dashboard).
+export function projectSupervisorSegmentReportData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const comparisons = buildComparisons(campaigns, currentLabel);
+  const supervisors = buildSupervisors(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize
+  );
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons,
+    scale: resolveScale(options),
+    departments: supervisors,
+    indexes: buildBySupervisorStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      supervisors
+    ),
+    segments: buildSegments(
+      data.respondents,
+      campaigns,
+      currentLabel,
+      supervisors,
+      data.settings.minimumSegmentSize,
+      "supervisor",
+      data.meta.segmentFields
+    ),
+    segmentMinResponses: data.settings.minimumSegmentSize,
+  };
+}
+
+// Supervisor comparison across ALL indexes, rendered by the department
+// comparison component (field dashboard).
+export function projectSupervisorComparisonData(
+  data: EmployeeExperienceDashboardData,
+  options?: ProjectionOptions
+) {
+  const currentLabel = resolveCampaignLabel(data, options);
+  const campaigns = sortedCampaigns(data.meta.campaigns);
+  const supervisors = buildSupervisors(
+    data.respondents,
+    currentLabel,
+    data.settings.minimumSegmentSize
+  );
+
+  return {
+    client: buildClient(data, options),
+    current: {
+      id: campaignId(currentLabel),
+      label: currentLabel,
+      labelLong: currentLabel.toUpperCase(),
+    },
+    comparisons: buildComparisons(campaigns, currentLabel),
+    scale: resolveScale(options),
+    display: {
+      barAxis: { min: 30, max: 90, ticks: [40, 60, 80] },
+      deltaAxis: { min: -10, max: 10, ticks: [-10, 0, 10] },
+    },
+    departments: supervisors.map((supervisor) => ({ id: supervisor.id, name: supervisor.name })),
+    indexes: buildBySupervisorStatements(
+      data.questions,
+      data.respondents,
+      campaigns,
+      currentLabel,
+      supervisors
+    ),
   };
 }
 
@@ -1081,6 +1569,7 @@ export function projectEnpsReportData(
       },
       brandRows: [],
       departmentRows: [],
+      supervisorRows: [],
     };
   }
 
@@ -1130,6 +1619,13 @@ export function projectEnpsReportData(
       data.settings.minimumSegmentSize,
       (respondent) => respondent.department
     ),
+    supervisorRows: buildEnpsRows(
+      currentRespondents,
+      previousRespondents,
+      itemIds,
+      data.settings.minimumSegmentSize,
+      (respondent) => respondent.supervisor
+    ),
   };
 }
 
@@ -1177,19 +1673,22 @@ export function projectHistoricalData(
     month: index * 5,
   }));
 
-  const indexes = Array.from(groupQuestionsByDimension(data.questions).entries()).map(
+  const latestCampaignLabel = campaigns[campaigns.length - 1] ?? "";
+  const latestCampaignId = campaignId(latestCampaignLabel);
+
+  const unsortedIndexes = Array.from(groupQuestionsByDimension(data.questions).entries()).map(
     ([dimension, items]) => ({
       id: slugify(dimension),
       name: dimension,
       statements: items.map((question, index) => {
-        const byDept: Record<string, Record<string, number>> = {};
+        const byDept: Record<string, Record<string, number | null>> = {};
         departments.forEach((department) => {
-          const series: Record<string, number> = {};
+          const series: Record<string, number | null> = {};
           campaigns.forEach((campaignLabel) => {
             const deptRespondents = respondentsForCampaign(data.respondents, campaignLabel).filter(
               (respondent) => respondent.department === department.name
             );
-            series[campaignId(campaignLabel)] = itemDisplayScore(deptRespondents, question.itemId);
+            series[campaignId(campaignLabel)] = itemDisplayScoreNullable(deptRespondents, question.itemId);
           });
           byDept[department.id] = series;
         });
@@ -1202,9 +1701,22 @@ export function projectHistoricalData(
     })
   );
 
+  // Sort indexes by their avg score in the latest campaign, highest first.
+  const indexes = [...unsortedIndexes].sort((a, b) => {
+    const scoreForIndex = (idx: typeof a) => {
+      const allScores = idx.statements.flatMap((stmt) =>
+        departments
+          .map((dept) => stmt.byDept[dept.id]?.[latestCampaignId])
+          .filter((v): v is number => v != null)
+      );
+      return allScores.length > 0 ? average(allScores) : 0;
+    };
+    return scoreForIndex(b) - scoreForIndex(a);
+  });
+
   return {
     client: buildClient(data, options),
-    scale: REPORT_SCORE_SCALE,
+    scale: resolveScale(options),
     departments,
     campaigns: historyCampaigns,
     indexes,
@@ -1220,10 +1732,25 @@ export function buildEmployeeExperienceReportBundle(
     departmentComparison: projectDepartmentComparisonData(data, options),
     departmentComparisonByDepartment: projectDepartmentComparisonByDepartmentData(data, options),
     locationComparison: projectLocationComparisonData(data, options),
+    divisionComparison: projectDivisionComparisonData(data, options),
     brandReport: projectBrandReportData(data, options),
+    // Segment Breakdown (DWS Field redesign pilot): one stacked section per
+    // demographic dimension, all sharing the same basin picker. Order here is
+    // the render order on the page.
+    segmentBreakdowns: [
+      projectSegmentBreakdownData(data, options, "fieldCategory", "Job Category"),
+      projectSegmentBreakdownData(data, options, "department", "Department"),
+      projectSegmentBreakdownData(data, options, "role", "Role"),
+      projectSegmentBreakdownData(data, options, "tenure", "Tenure"),
+    ],
+    divisionReport: projectDivisionReportData(data, options),
     jobCategoryReport: projectJobCategoryReportData(data, options),
+    leadershipReport: projectJobCategoryReportData(data, options, "leadership"),
+    leadershipComparison: projectDepartmentComparisonData(data, options, "leadership"),
     departmentReport: projectDepartmentReportData(data, options),
     supervisorReport: projectSupervisorReportData(data, options),
+    supervisorSegmentReport: projectSupervisorSegmentReportData(data, options),
+    supervisorComparison: projectSupervisorComparisonData(data, options),
     enpsReport: projectEnpsReportData(data, options),
     historicalReport: projectHistoricalData(data, options),
   };

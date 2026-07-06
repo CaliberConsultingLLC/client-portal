@@ -8,14 +8,18 @@ import {
   DateHead,
   EEReportStyles,
   RailSection,
-  deltaStyle,
   f1,
   isLightBand,
-  makeScoreColor,
+  dwsScoreColor,
+  makeGradientColor,
+  dwsDeltaStyle,
   mean,
   round1,
 } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import { useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
+import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 
 const REPORT_DATA = toSupervisorReportData();
 const ORG_MARKER = "#152238";
@@ -68,7 +72,7 @@ function SupBarChart({ rows, axis, scoreColor }) {
             <div className="sr-row" key={row.id}>
               <div className="bar-label" title={row.text} style={{ whiteSpace: "normal" }}>{row.text}</div>
               <div className="sr-track">
-                <div className="sr-bar" style={{ width: `${pct(row.value)}%`, background: color }}><div className="sr-chip">{row.value.toFixed(1)}</div></div>
+                <div className="sr-bar" style={{ width: `${pct(row.value)}%`, background: color, outline: "1px solid rgba(0,0,0,0.18)" }}><div className="sr-chip">{row.value.toFixed(1)}</div></div>
                 <div className="sr-org" style={{ left: `${pct(row.org)}%` }} />
                 <div className="sr-org-dot" style={{ left: `${pct(row.org)}%` }} />
               </div>
@@ -86,10 +90,20 @@ function SupBarChart({ rows, axis, scoreColor }) {
   );
 }
 
-export function EESupervisorReport({ data }: { data: any }) {
+export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout = false }: { data: any; benchmarkLabel?: string; fieldLayout?: boolean }) {
   const { client, current, comparisons, scale, supervisors = [], index, display } = data;
-  const scoreColor = makeScoreColor(scale);
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  // No prior campaign → suppress all delta / YoY / campaign-selection UI.
+  const hasComparison = comparisons.length > 0;
+  const scoreColor = makeGradientColor(scale.min, scale.max);
   const barAxis = display?.barAxis ?? { min: 55, max: 100, ticks: [60, 70, 80, 90, 100] };
+  const [stmtSort, setStmtSort] = useState<{ col: "score" | "vsorg"; dir: "desc" | "asc" }>({ col: "score", dir: "desc" });
+  const toggleStmtSort = (col: "score" | "vsorg") =>
+    setStmtSort((prev) => (prev.col === col ? { col, dir: prev.dir === "desc" ? "asc" : "desc" } : { col, dir: "desc" }));
+  const sortArrow = (col: "score" | "vsorg") =>
+    fieldLayout && stmtSort.col === col ? (stmtSort.dir === "desc" ? " ↓" : " ↑") : "";
   const [supervisorId, setSupervisorId] = useState(supervisors[0]?.id ?? "");
   const [currentCampaignId, setCurrentCampaignId] = useState(() => {
     const preferredCurrent = [current, ...comparisons].find((campaign) => campaignMatches(campaign, PREFERRED_CURRENT_CAMPAIGN));
@@ -134,6 +148,13 @@ export function EESupervisorReport({ data }: { data: any }) {
         : [],
     [hasData, index?.statements, supervisorId, curCamp]
   );
+  const statementRows = useMemo(() => {
+    if (!fieldLayout) return barRows;
+    const metric = (row) => (stmtSort.col === "vsorg" ? row.value - row.org : row.value);
+    return [...barRows].sort((left, right) =>
+      stmtSort.dir === "desc" ? metric(right) - metric(left) : metric(left) - metric(right)
+    );
+  }, [barRows, fieldLayout, stmtSort]);
 
   if (!hasData) {
     return (
@@ -165,17 +186,27 @@ export function EESupervisorReport({ data }: { data: any }) {
   const overallDelta =
     supervisorOverall == null || supervisorPrevious == null ? null : round1(supervisorOverall - supervisorPrevious);
   const vsOrg = supervisorOverall == null || orgOverall == null ? null : round1(supervisorOverall - orgOverall);
+  const supExportFile = (section: string) =>
+    buildDashboardExportFilename({ client: "dws", perspective: `supervisor-report-${section}`, campaign: curCamp?.label });
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "Supervisor Report",
+      filters: [supervisor?.name, curCamp?.labelLong || curCamp?.label].filter((value) => Boolean(value)),
+    });
+  }
+
   return (
     <div className="canvas">
       <EEReportStyles />
       <aside className="rail left">
         <div className="client-card"><ClientMark client={client} /><div className="client-head">SUPERVISOR REPORT</div></div>
-        <RailSection title="Supervisor">
+        <RailSection title="Supervisor" defaultOpen>
           <select className="rail-select" value={supervisorId} onChange={(event) => setSupervisorId(event.target.value)}>
             {supervisors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
           <p className="rs-hint">{supervisor.dept} · {supervisor.responses} responses</p>
         </RailSection>
+        {hasComparison ? (
         <RailSection title="Campaign Selection">
           <div className="flex flex-col gap-3">
             <div>
@@ -192,6 +223,7 @@ export function EESupervisorReport({ data }: { data: any }) {
             </div>
           </div>
         </RailSection>
+        ) : null}
       </aside>
 
       <main className="center">
@@ -200,26 +232,29 @@ export function EESupervisorReport({ data }: { data: any }) {
             <div><h2>{supervisor.name}</h2><p className="hero-sub">{curCamp.labelLong}{previous ? ` (trend vs ${previous.label})` : ""}</p></div>
             <div className="kpi-strip">
               <div className="kpi"><div className="k-label">{index.name} Index</div><div className="k-value">{supervisorOverall == null ? "N/A" : supervisorOverall.toFixed(1)}</div></div>
-              <div className="kpi"><div className="k-label">vs Org</div><div className="k-value" style={{ color: vsOrg == null ? "#6E7E96" : vsOrg >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{vsOrg == null ? "N/A" : f1(vsOrg)}</div></div>
-              <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }}>{overallDelta == null ? "—" : f1(overallDelta)}</div></div>
+              <div className="kpi"><div className="k-label">vs Org</div><div className="k-value" style={{ color: vsOrg == null ? "#6E7E96" : vsOrg >= 0 ? "#59885D" : "#D46A6A" }}>{vsOrg == null ? "N/A" : f1(vsOrg)}</div></div>
+              {hasComparison ? <div className="kpi"><div className="k-label">Change YoY</div><div className="k-value" style={{ color: overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#59885D" : "#D46A6A" }}>{overallDelta == null ? "—" : f1(overallDelta)}</div></div> : null}
               <div className="kpi"><div className="k-label">Responses</div><div className="k-value">{supervisor.responses}</div></div>
             </div>
           </div>
 
+          <RegisteredVisualExportFrame order={10} label="Download chart" filename={supExportFile("leadership-effectiveness")}>
           <div className="card" style={{ marginBottom: 18 }}>
             <div className="card-head flex items-center justify-between gap-4">
               <h3 className="card-title">Leadership Effectiveness</h3>
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to {benchmarkLabel}</span>
             </div>
             <div className="card-body"><SupBarChart rows={barRows} axis={barAxis} scoreColor={scoreColor} /></div>
           </div>
+          </RegisteredVisualExportFrame>
 
+          <RegisteredVisualExportFrame order={20} label="Download table" filename={supExportFile("statement-results")}>
           <p className="slabel" style={{ marginBottom: 8 }}>Statement Results · {curCamp.label}{previous ? ` vs ${previous.label}` : ""}</p>
           <div className="stmt-wrap">
             <table className="stmt-table">
-              <thead><tr><th>Manager statement</th>{campaigns.map((campaign) => <th key={campaign.id} className="num"><DateHead campaign={campaign} /></th>)}<th className="num">Delta</th><th className="num">vs Org</th></tr></thead>
+              <thead><tr><th>Manager statement</th>{campaigns.map((campaign) => <th key={campaign.id} className="num" onClick={fieldLayout ? () => toggleStmtSort("score") : undefined} style={fieldLayout ? { cursor: "pointer", userSelect: "none" } : undefined}><DateHead campaign={campaign} />{sortArrow("score")}</th>)}{hasComparison ? <th className="num col-group-start">Delta</th> : null}<th className="num col-group-start" onClick={fieldLayout ? () => toggleStmtSort("vsorg") : undefined} style={fieldLayout ? { cursor: "pointer", userSelect: "none" } : undefined}>vs Org{sortArrow("vsorg")}</th></tr></thead>
               <tbody>
-                {barRows.map((row) => {
+                {statementRows.map((row) => {
                   const statement = index.statements.find((item) => item.id === row.id);
                   const currentValue = supervisorValue(statement, curCamp);
                   const previousValue = previous ? supervisorValue(statement, previous) : null;
@@ -242,19 +277,21 @@ export function EESupervisorReport({ data }: { data: any }) {
                         const color = scoreColor(value);
                         return <td key={campaign.id} className="cell" style={{ background: color, color: textFor(color) }}>{value.toFixed(1)}</td>;
                       })}
-                      <td className="cell" style={change == null ? { color: "#6E7E96" } : { background: deltaStyle(change).bg, color: deltaStyle(change).text }}>{change == null ? "—" : f1(change)}</td>
-                      <td className="cell" style={orgGap == null ? { color: "#6E7E96" } : { background: deltaStyle(orgGap).bg, color: deltaStyle(orgGap).text }}>{orgGap == null ? "N/A" : f1(orgGap)}</td>
+                      {hasComparison ? <td className="cell col-group-start col-group-end" style={change == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(change).bg, color: dwsDeltaStyle(change).text }}>{change == null ? "—" : f1(change)}</td> : null}
+                      <td className="cell col-group-start" style={orgGap == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(orgGap).bg, color: dwsDeltaStyle(orgGap).text }}>{orgGap == null ? "N/A" : f1(orgGap)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+          </RegisteredVisualExportFrame>
         </div>
       </main>
 
       <aside className="rail right">
         <EEContextRail
+          scale={scale}
           howToRead="Bar length and bar value show supervisor score. The vertical line and dot mark the organization average, and Org Comparison shows the score gap versus that marker."
           extraLegend={(
             <div className="flex items-center gap-2 text-[12px] text-[#3B4B63]">
@@ -268,3 +305,4 @@ export function EESupervisorReport({ data }: { data: any }) {
     </div>
   );
 }
+

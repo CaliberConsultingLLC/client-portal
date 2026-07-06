@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createFirebasePortalUser, type FirebasePortalRole } from "@/lib/firebase/user-store";
+import {
+  createFirebasePortalUser,
+} from "@/lib/firebase/user-store";
+import { FIREBASE_PORTAL_ROLES, type FirebasePortalRole } from "@/lib/firebase/roles";
 import { seedDefaultPortalCollections } from "@/lib/firebase/portal-store";
 
 function assertDevelopmentOnly() {
@@ -8,12 +11,7 @@ function assertDevelopmentOnly() {
   }
 }
 
-const ALLOWED_ROLES = new Set<FirebasePortalRole>([
-  "super_admin",
-  "internal_admin",
-  "client_admin",
-  "client_viewer",
-]);
+const ALLOWED_ROLES = new Set<FirebasePortalRole>(FIREBASE_PORTAL_ROLES);
 
 export async function POST(request: NextRequest) {
   try {

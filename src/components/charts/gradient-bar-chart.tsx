@@ -29,6 +29,7 @@ interface GradientBarChartProps {
   midpoint?: number;
   showAvgLine?: boolean;
   className?: string;
+  categoryAxisWidth?: number;
 }
 
 export function GradientBarChart({
@@ -40,8 +41,9 @@ export function GradientBarChart({
   midpoint = 6.0,
   showAvgLine = true,
   className,
+  categoryAxisWidth = 180,
 }: GradientBarChartProps) {
-  const chartHeight = height || Math.max(400, data.length * 28);
+  const chartHeight = height || Math.max(400, data.length * 32);
 
   return (
     <div className={className}>
@@ -63,10 +65,11 @@ export function GradientBarChart({
           <YAxis
             dataKey="name"
             type="category"
-            tick={{ fontSize: 12, fill: "#334155", fontWeight: 500 }}
-            width={180}
+            tick={{ fontSize: 11, fill: "#334155", fontWeight: 500 }}
+            width={categoryAxisWidth}
             axisLine={false}
             tickLine={false}
+            interval={0}
           />
           <Tooltip
             contentStyle={{

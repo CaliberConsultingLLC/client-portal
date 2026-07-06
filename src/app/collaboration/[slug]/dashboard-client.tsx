@@ -6,6 +6,13 @@ import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { ScoreTable } from "@/components/collaboration/score-table";
 import { ColorLegend } from "@/components/collaboration/color-legend";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
+import {
+  VisualExportProvider,
+  VisualExportMetaSetter,
+} from "@/components/dashboard/visual-export-registry";
+import { CompositeVisualExportButton } from "@/components/dashboard/composite-visual-export-button";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
 import { ReportSummaryHeader } from "@/components/collaboration/demo-report-tabs";
@@ -193,8 +200,16 @@ export function CollaborationDashboardClient({
       </div>
     ) : undefined;
   const leftRail = leftRailOverride !== undefined ? leftRailOverride : builtInLeftRail;
+  const activeTabLabel =
+    visibleTabs.find((tab) => tab.id === resolvedActiveTabId)?.label ?? "Dashboard";
+  const exportFilename = buildDashboardExportFilename({
+    client: organizationName || "collaboration",
+    perspective: activeTabLabel,
+    campaign: campaignName,
+  });
   return (
-    <>
+    <VisualExportProvider active client={organizationName}>
+      <VisualExportMetaSetter title={activeTabLabel} filters={[campaignName]} />
       <DashboardRibbon
         title={campaignName}
         categories={(modeSections ?? []).map((section) => ({ id: section.id, label: section.label }))}
@@ -213,7 +228,12 @@ export function CollaborationDashboardClient({
         perspectives={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
         activePerspectiveId={resolvedActiveTabId}
         onPerspectiveChange={setActiveTab}
-        legend={<ColorLegend />}
+        legend={
+          <div className="flex items-center gap-2.5">
+            <ColorLegend />
+            <CompositeVisualExportButton filename={exportFilename} />
+          </div>
+        }
       />
       <div>
       <DashboardCanvas
@@ -247,7 +267,7 @@ export function CollaborationDashboardClient({
         {activeTabContent}
       </DashboardCanvas>
       </div>
-    </>
+    </VisualExportProvider>
   );
 }
 
@@ -263,6 +283,12 @@ function OverviewTab({ data }: { data: CollaborationData }) {
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <RegisteredVisualExportFrame
+          order={10}
+          label="Download card"
+          filename={buildDashboardExportFilename({ client: "collaboration", perspective: "overview-cdrs" })}
+          className="h-full"
+        >
         <Card title="CDRS Overview" className="h-full text-center">
           <p className="mb-3 text-center text-[13px] leading-relaxed text-text-secondary">
             The Cross-Department Relationship Score (CDRS) measures how strongly
@@ -298,7 +324,14 @@ function OverviewTab({ data }: { data: CollaborationData }) {
             of the impact its approach is having on others.
           </p>
         </Card>
+        </RegisteredVisualExportFrame>
 
+        <RegisteredVisualExportFrame
+          order={20}
+          label="Download card"
+          filename={buildDashboardExportFilename({ client: "collaboration", perspective: "overview-ci" })}
+          className="h-full"
+        >
         <Card title="Collaboration Index Overview" className="flex h-full flex-col justify-center text-center">
           <p className="mb-3 text-center text-[13px] leading-relaxed text-text-secondary">
             The Collaboration Index (CI) is a deeper, department-specific measure
@@ -331,6 +364,7 @@ function OverviewTab({ data }: { data: CollaborationData }) {
             targeted action plans.
           </p>
         </Card>
+        </RegisteredVisualExportFrame>
       </div>
     </div>
   );
@@ -408,25 +442,39 @@ function CdrsTab({ data }: { data: CollaborationData }) {
 
       {/* Center: Incoming CDRS bar chart */}
       <div className="lg:col-span-5">
-        <Card title="Incoming CDRS" className="h-full">
-          <GradientBarChart
-            data={incomingData}
-            average={data.meta.dwsAverageIncoming}
-          />
-          <p className="mt-2 text-center text-xs text-text-muted">
-            Average: {formatScoreForDisplay(data.meta.dwsAverageIncoming)}
-          </p>
-        </Card>
+        <RegisteredVisualExportFrame
+          order={10}
+          label="Download chart"
+          filename={buildDashboardExportFilename({ client: "collaboration", perspective: "cdrs-incoming" })}
+          className="h-full"
+        >
+          <Card title="Incoming CDRS" className="h-full">
+            <GradientBarChart
+              data={incomingData}
+              average={data.meta.dwsAverageIncoming}
+            />
+            <p className="mt-2 text-center text-xs text-text-muted">
+              Average: {formatScoreForDisplay(data.meta.dwsAverageIncoming)}
+            </p>
+          </Card>
+        </RegisteredVisualExportFrame>
       </div>
 
       {/* Right: Outgoing CDRS table */}
       <div className="lg:col-span-4">
-        <ScoreTable
-          title="Outgoing CDRS"
-          headers={["Dept", "Score"]}
-          rows={outgoingData}
+        <RegisteredVisualExportFrame
+          order={20}
+          label="Download table"
+          filename={buildDashboardExportFilename({ client: "collaboration", perspective: "cdrs-outgoing" })}
           className="h-full"
-        />
+        >
+          <ScoreTable
+            title="Outgoing CDRS"
+            headers={["Dept", "Score"]}
+            rows={outgoingData}
+            className="h-full"
+          />
+        </RegisteredVisualExportFrame>
       </div>
     </div>
   );
@@ -510,32 +558,46 @@ function CiTab({ data }: { data: CollaborationData }) {
 
         {/* Center: CI bar chart */}
         <div className="lg:col-span-5">
-          <Card title="Departmental Collaboration Index" className="h-full">
-            <GradientBarChart
-              data={ciData}
-              average={ciAverage}
-              minValue={3}
-              midpoint={6}
-              maxValue={9}
-            />
-            <p className="mt-2 text-center text-xs text-text-muted">
-              Average: {formatScoreForDisplay(ciAverage)}
-            </p>
-          </Card>
+          <RegisteredVisualExportFrame
+            order={10}
+            label="Download chart"
+            filename={buildDashboardExportFilename({ client: "collaboration", perspective: "ci-index" })}
+            className="h-full"
+          >
+            <Card title="Departmental Collaboration Index" className="h-full">
+              <GradientBarChart
+                data={ciData}
+                average={ciAverage}
+                minValue={3}
+                midpoint={6}
+                maxValue={9}
+              />
+              <p className="mt-2 text-center text-xs text-text-muted">
+                Average: {formatScoreForDisplay(ciAverage)}
+              </p>
+            </Card>
+          </RegisteredVisualExportFrame>
         </div>
 
         {/* Right: CI Statements table */}
         <div className="lg:col-span-4">
-          <ScoreTable
-            title="CI Statements"
-            headers={["Statement", "Collab Index"]}
-            rows={aggregatedQuestions}
-            showIndicator
-            minValue={3}
-            midpoint={6}
-            maxValue={9}
+          <RegisteredVisualExportFrame
+            order={20}
+            label="Download table"
+            filename={buildDashboardExportFilename({ client: "collaboration", perspective: "ci-statements" })}
             className="h-full"
-          />
+          >
+            <ScoreTable
+              title="CI Statements"
+              headers={["Statement", "Collab Index"]}
+              rows={aggregatedQuestions}
+              showIndicator
+              minValue={3}
+              midpoint={6}
+              maxValue={9}
+              className="h-full"
+            />
+          </RegisteredVisualExportFrame>
         </div>
       </div>
 
@@ -581,6 +643,11 @@ function CdrsHeatmapTab({ data }: { data: CollaborationData }) {
         ]}
       />
 
+      <RegisteredVisualExportFrame
+        order={10}
+        label="Download heat map"
+        filename={buildDashboardExportFilename({ client: "collaboration", perspective: "cdrs-heatmap" })}
+      >
       <Card
         title="Cross-Department Relational Strength Heatmap"
         subtitle="Each cell shows the average score that the row department received from the column department"
@@ -593,6 +660,7 @@ function CdrsHeatmapTab({ data }: { data: CollaborationData }) {
         rowTotals={rowTotals}
       />
     </Card>
+    </RegisteredVisualExportFrame>
     </div>
   );
 }
@@ -630,6 +698,11 @@ function CiHeatmapTab({ data }: { data: CollaborationData }) {
   );
 
   return (
+    <RegisteredVisualExportFrame
+      order={30}
+      label="Download heat map"
+      filename={buildDashboardExportFilename({ client: "collaboration", perspective: "ci-heatmap" })}
+    >
     <Card
       title="Collaboration Index Heatmap"
       subtitle="Each row shows a department's average score on each CI statement"
@@ -645,6 +718,7 @@ function CiHeatmapTab({ data }: { data: CollaborationData }) {
         maxValue={9}
       />
     </Card>
+    </RegisteredVisualExportFrame>
   );
 }
 
@@ -678,9 +752,12 @@ function DeptTab({
     score: q.score,
   }));
 
+  const deptFile = (section: string) =>
+    buildDashboardExportFilename({ client: "collaboration", perspective: `dept-${selectedDept}-${section}` });
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start gap-4">
+        <RegisteredVisualExportFrame order={10} label="Download summary" filename={deptFile("summary")} className="flex-1">
         <Card className="flex-1">
           <div className="flex flex-wrap items-center gap-6">
             <div>
@@ -714,49 +791,56 @@ function DeptTab({
             </div>
           </div>
         </Card>
+        </RegisteredVisualExportFrame>
       </div>
 
       {/* Body: Overview + Charts */}
       <div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
         <div className="lg:col-span-3">
-          <ScoreTable
-            title="Collaboration Index — Statements"
-            headers={["Statement", "Score"]}
-            rows={questionRows}
-            showIndicator
-            minValue={3}
-            midpoint={6}
-            maxValue={9}
-            className="h-full"
-          />
+          <RegisteredVisualExportFrame order={20} label="Download table" filename={deptFile("statements")} className="h-full">
+            <ScoreTable
+              title="Collaboration Index — Statements"
+              headers={["Statement", "Score"]}
+              rows={questionRows}
+              showIndicator
+              minValue={3}
+              midpoint={6}
+              maxValue={9}
+              className="h-full"
+            />
+          </RegisteredVisualExportFrame>
         </div>
 
         <div className="lg:col-span-5">
-          <Card title="Incoming CDRS" className="h-full">
-            <GradientBarChart data={incomingBars} />
-            <ColorLegend className="mt-3 justify-center" />
-          </Card>
+          <RegisteredVisualExportFrame order={30} label="Download chart" filename={deptFile("incoming")} className="h-full">
+            <Card title="Incoming CDRS" className="h-full">
+              <GradientBarChart data={incomingBars} />
+              <ColorLegend className="mt-3 justify-center" />
+            </Card>
+          </RegisteredVisualExportFrame>
         </div>
 
         <div className="lg:col-span-4">
-          <Card title={`Outgoing CDRS — ${selectedDept}`} className="h-full">
-            <ScoreTable
-              title="Scores"
-              headers={["Dept", "CDRS"]}
-              rows={outgoingRows}
-            />
-            <div
-              className="mt-4 rounded-2xl border border-border-strong bg-white px-4 py-3"
-              style={getDataBoxSurfaceStyle()}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-text-primary">Total</span>
-                <span className="text-lg font-bold text-text-primary">
-                  {formatScoreForDisplay(detail.outgoingCDRS)}
-                </span>
+          <RegisteredVisualExportFrame order={40} label="Download table" filename={deptFile("outgoing")} className="h-full">
+            <Card title={`Outgoing CDRS — ${selectedDept}`} className="h-full">
+              <ScoreTable
+                title="Scores"
+                headers={["Dept", "CDRS"]}
+                rows={outgoingRows}
+              />
+              <div
+                className="mt-4 rounded-2xl border border-border-strong bg-white px-4 py-3"
+                style={getDataBoxSurfaceStyle()}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-text-primary">Total</span>
+                  <span className="text-lg font-bold text-text-primary">
+                    {formatScoreForDisplay(detail.outgoingCDRS)}
+                  </span>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </RegisteredVisualExportFrame>
         </div>
       </div>
     </div>

@@ -36,7 +36,7 @@ export function Logo({
 
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <NspLogoMark size={markSize} />
+      <NspLogoMark size={markSize} variant={variant} />
       {showText && (
         <div className="flex flex-col leading-none">
           <span
@@ -55,7 +55,7 @@ export function Logo({
               mutedColor
             )}
           >
-            Est 2025
+            People & Culture Solutions
           </span>
         </div>
       )}

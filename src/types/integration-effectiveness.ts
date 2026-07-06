@@ -79,6 +79,19 @@ export interface IntegrationBrandReport {
   };
 }
 
+export interface IntegrationLongitudinalSeries {
+  id: string;
+  label: string;
+  campaign1: number | null;
+  campaign2: number | null;
+  campaign3: number | null;
+}
+
+export interface IntegrationLongitudinalScope {
+  organization: IntegrationLongitudinalSeries;
+  brands: IntegrationLongitudinalSeries[];
+}
+
 export interface IntegrationDashboardData {
   meta: {
     organizationName: string;
@@ -112,6 +125,11 @@ export interface IntegrationDashboardData {
     campaignDates: IntegrationHeatmap;
   };
   brandReports: IntegrationBrandReport[];
+  longitudinal?: {
+    overall: IntegrationLongitudinalScope;
+    statements: Record<string, IntegrationLongitudinalScope>;
+    departments: Record<string, IntegrationLongitudinalScope>;
+  };
   priorities: IntegrationPriority[];
   strengths: IntegrationPriority[];
   commentThemes: IntegrationCommentTheme[];

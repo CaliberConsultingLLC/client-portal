@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
+import { EEReportStyles, BasinSurfaceStyles, SectionWithVerticalLabel, HeaderKpiPortal, dwsScoreColor, makeGradientColor, BrandComparisonChart } from "./ee-report-kit";
 import { EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
 import { clampDeltaVisual, computeDeltaAxis, defaultComparisonId } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
 import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
+import { IndexToggleColumn, ComparisonHeatmap } from "./ee-comparison-heatmap";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import { useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
+import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -149,12 +153,6 @@ const r1    = (n: number) => Math.round(n * 10) / 10;
 const mean  = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
 const f1    = (n: number) => (n >= 0 ? "+" : "") + n.toFixed(1);
 
-function tensWithin(min: number, max: number) {
-  const out: number[] = [];
-  for (let v = Math.ceil(min / 10) * 10; v <= max; v += 10) out.push(v);
-  return out;
-}
-
 function dStyle(d: number) {
   if (d >= 6)     return { bg: "#8BA399", fg: "#fff" };
   if (d >= 4)     return { bg: "#9CB2A8", fg: "#fff" };
@@ -177,8 +175,16 @@ function readableText(hex: string) {
 
 // ─── RailSection ──────────────────────────────────────────────────────────────
 
-function RailSection({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+function RailSection({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="overflow-hidden rounded-2xl bg-white" style={{ border: "1px solid #8798AA" }}>
       <button type="button" onClick={() => setOpen(o => !o)} className="flex w-full items-center justify-between px-4 py-3">
@@ -192,57 +198,6 @@ function RailSection({ title, children }: { title: string; children: React.React
 
 
 // ─── Charts ───────────────────────────────────────────────────────────────────
-
-function OrgComparisonBarChart({ rows, axis, color }: {
-  rows: { id: string; name: string; value: number; org: number; delta: number }[];
-  axis: { min: number; max: number; ticks: number[] };
-  color: (v: number) => string;
-}) {
-  const pct = (value: number) =>
-    ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
-  return (
-    <div className="chart" style={{ ["--label-col" as any]: "300px", ["--gap-col" as any]: "140px" }}>
-      <style>{`
-        .cmp-track{height:24px;background:#F1F4F7;border-radius:0 7px 7px 0;position:relative}
-        .cmp-bar{position:absolute;left:0;top:0;bottom:0;border-radius:0 7px 7px 0}
-        .cmp-chip{position:absolute;left:8px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.95);color:#152238;border:1px solid rgba(21,34,56,.16);font-size:12px;font-weight:800;padding:3px 8px;border-radius:6px}
-        .cmp-org{position:absolute;top:2px;bottom:2px;width:0;border-left:2.5px solid rgba(21,34,56,.55);z-index:5}
-        .cmp-row{display:grid;grid-template-columns:minmax(0,min(var(--label-col),50%)) minmax(0,1fr) var(--gap-col);align-items:center;column-gap:16px;min-height:34px;padding:2px 0}
-        .cmp-gap-col{display:flex;align-items:center;justify-content:center;padding-left:10px}
-        .cmp-gap-pill{min-width:96px;padding:4px 10px;border-radius:999px;text-align:center;font-size:13px;font-weight:900;border:1px solid}
-      `}</style>
-      <div className="plot">
-        <div className="grid-overlay" style={{ right: "var(--gap-col)" }}>
-          {axis.ticks.map((tick) => (
-            <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />
-          ))}
-        </div>
-        {rows.map((row) => {
-          const gapTone =
-            row.delta >= 0
-              ? { bg: "#DCEFE2", fg: "#2F6A45", border: "#9BC6A9" }
-              : { bg: "#F4DEDD", fg: "#8A3D3A", border: "#D5A3A0" };
-          return (
-            <div key={row.id} className="cmp-row">
-              <div className="bar-label" title={row.name} style={{ whiteSpace: "normal" }}>{row.name}</div>
-              <div className="cmp-track">
-                <div className="cmp-bar" style={{ width: `${pct(row.value)}%`, background: color(row.value) }}>
-                  <div className="cmp-chip">{row.value.toFixed(1)}</div>
-                </div>
-                <div className="cmp-org" style={{ left: `${pct(row.org)}%` }} />
-              </div>
-              <div className="cmp-gap-col">
-                <div className="cmp-gap-pill" style={{ background: gapTone.bg, color: gapTone.fg, borderColor: gapTone.border }}>
-                  {f1(row.delta)}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function DeptDeltaChart({ rows, axis }: { rows: { name: string; delta: number }[]; axis: { min: number; max: number; ticks: number[] } }) {
   const ROW_HEIGHT = 34;
@@ -297,6 +252,10 @@ const ALL = "__ALL__";
 export function EEDepartmentComparison({
   data,
   secondaryData,
+  title = "Department Comparison",
+  primaryLabel = "Department",
+  primaryFilterValue = "",
+  secondaryFilterValue = "",
   dashboardInstanceId,
   canEditGuidance = false,
   executiveRail,
@@ -306,9 +265,21 @@ export function EEDepartmentComparison({
   onCompId,
   statementId: controlledStatementId,
   onStatementId,
+  benchmarkLabel = "CSG",
+  fieldLayout = false,
+  compact = false,
+  showStatementHeatmap = true,
+  chromeless = false,
+  headerPortalId,
+  basinReportSurface = false,
 }: {
   data: Data;
   secondaryData?: Data;
+  title?: string;
+  primaryLabel?: string;
+  benchmarkLabel?: string;
+  primaryFilterValue?: string;
+  secondaryFilterValue?: string;
   dashboardInstanceId?: string;
   canEditGuidance?: boolean;
   executiveRail?: React.ReactNode;
@@ -317,15 +288,32 @@ export function EEDepartmentComparison({
   compId?: string;
   onCompId?: (value: string) => void;
   statementId?: string;
+  chromeless?: boolean;
+  headerPortalId?: string;
   onStatementId?: (value: string) => void;
+  fieldLayout?: boolean;
+  compact?: boolean;
+  showStatementHeatmap?: boolean;
+  /** Basin group surface treatment "1b" (DWS Field redesign pilot only):
+   * shared canvas tint, soft blue borders/shadows, and vertical section
+   * labels — see the matching prop on `EELocationComparison`. Every other
+   * caller leaves this unset and keeps the hard-edged default look. */
+  basinReportSurface?: boolean;
 }) {
   const { client, current, comparisons, scale, indexes, departments } = data;
-  const sc = (v: number) => scoreScaleColor(v, scale.min, scale.mid, scale.max);
+  const sc = makeGradientColor(scale.min, scale.max);
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  const exportFile = (section: string) =>
+    buildDashboardExportFilename({ client: "dws", perspective: `${title}-${section}`, campaign: current.label });
 
   const [localIndexId, setLocalIndexId] = useState("");
   const [localCompId, setLocalCompId] = useState(() => defaultComparisonId(comparisons));
-  const indexId = controlledIndexId ?? localIndexId;
+  const indexIdRaw = controlledIndexId ?? localIndexId;
   const setIndexId = onIndexId ?? setLocalIndexId;
+  // Field layout drives one index at a time via an inline toggle (no "All indexes").
+  const indexId = fieldLayout ? (indexIdRaw || indexes[0]?.id || "") : indexIdRaw;
   const compId = controlledCompId ?? localCompId;
   const setCompId = onCompId ?? setLocalCompId;
   const [localStatementId, setLocalStatementId] = useState(ALL);
@@ -339,6 +327,9 @@ export function EEDepartmentComparison({
   }, [indexes, indexId]);
   const idx = selectedIndexes[0] ?? indexes[0];
   const comp = comparisons.find(c => c.id === compId) ?? comparisons[0];
+  const hasComparison = Boolean(comp);
+  const comparedToText = comp ? ` · compared to ${comp.label}` : "";
+  const versusText = comp ? ` vs ${comp.label}` : "";
 
   // changing index falls back to the index-average view
   useEffect(() => { setStatementId(ALL); }, [indexId, setStatementId]);
@@ -346,11 +337,6 @@ export function EEDepartmentComparison({
   const activeStatement = statementId === ALL || selectedIndexes.length !== 1
     ? null
     : idx.statements.find((statement) => statement.id === statementId) ?? null;
-
-  const barAxis = useMemo(() => {
-    const a = data.display?.barAxis ?? { min: scale.min - 4, max: scale.max - 5 };
-    return { min: a.min, max: a.max, ticks: a.ticks ?? tensWithin(a.min, a.max) };
-  }, [data.display?.barAxis, scale.min, scale.max]);
 
   const rows = useMemo(() => departments.map(d => {
     let cur: number, prev: number | null;
@@ -374,31 +360,34 @@ export function EEDepartmentComparison({
     return { id: d.id, name: d.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
   }), [departments, selectedIndexes, activeStatement, compId]);
 
+  const primaryFilteredRows = useMemo(
+    () => (primaryFilterValue ? rows.filter((row) => row.name === primaryFilterValue) : rows),
+    [rows, primaryFilterValue]
+  );
   const deltaAxis = useMemo(() => {
     const fallback = data.display?.deltaAxis
       ? { ...data.display.deltaAxis, ticks: data.display.deltaAxis.ticks ?? [-10, 0, 10] }
       : { min: -10, max: 10, ticks: [-10, 0, 10] };
-    const validRows = rows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
+    const validRows = primaryFilteredRows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
     return computeDeltaAxis(validRows, fallback);
-  }, [data.display?.deltaAxis, rows]);
-
-  const overallAvg = r1(mean(rows.map(r => r.value)));
-  const priorRows = rows.filter((row) => row.prev != null).map((row) => row.prev as number);
+  }, [data.display?.deltaAxis, primaryFilteredRows]);
+  const overallAvg = r1(mean(primaryFilteredRows.map((row) => row.value)));
+  const priorRows = primaryFilteredRows.filter((row) => row.prev != null).map((row) => row.prev as number);
   const overallPrev = priorRows.length > 0 ? r1(mean(priorRows)) : null;
   const overallDelta = overallPrev == null ? null : r1(overallAvg - overallPrev);
   const rowsByValueDesc = useMemo(
-    () => [...rows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
-    [rows]
+    () => [...primaryFilteredRows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
+    [primaryFilteredRows]
   );
   const rowsByDeltaDesc = useMemo(
     () =>
-      rows
+      primaryFilteredRows
         .filter((row) => row.delta != null)
         .sort(
           (left, right) =>
             (right.delta as number) - (left.delta as number) || left.name.localeCompare(right.name)
         ) as Array<{ id: string; name: string; value: number; prev: number | null; delta: number }>,
-    [rows]
+    [primaryFilteredRows]
   );
 
   const rrPct = current.responseRate != null ? `${Math.round(current.responseRate * 100)}%` : "—";
@@ -444,35 +433,74 @@ export function EEDepartmentComparison({
       return { id: department.id, name: department.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
     });
   }, [secondaryData, indexId, statementId, compId]);
+  const secondaryFilteredRows = useMemo(
+    () => (secondaryFilterValue ? secondaryRows.filter((row) => row.name === secondaryFilterValue) : secondaryRows),
+    [secondaryRows, secondaryFilterValue]
+  );
   const secondaryRowsByValueDesc = useMemo(
-    () => [...secondaryRows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
-    [secondaryRows]
+    () => [...secondaryFilteredRows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
+    [secondaryFilteredRows]
   );
   const secondaryRowsByDeltaDesc = useMemo(
     () =>
-      secondaryRows
+      secondaryFilteredRows
         .filter((row) => row.delta != null)
         .sort(
           (left, right) =>
             (right.delta as number) - (left.delta as number) || left.name.localeCompare(right.name)
         ) as Array<{ id: string; name: string; value: number; prev: number | null; delta: number }>,
-    [secondaryRows]
+    [secondaryFilteredRows]
   );
   const secondaryOverallAvg = useMemo(
-    () => (secondaryRows.length > 0 ? r1(mean(secondaryRows.map((row) => row.value))) : overallAvg),
-    [secondaryRows, overallAvg]
+    () => (secondaryFilteredRows.length > 0 ? r1(mean(secondaryFilteredRows.map((row) => row.value))) : overallAvg),
+    [secondaryFilteredRows, overallAvg]
   );
+
+  // Same 5-point floor/ceil rounding as the Basin Report's bar chart, sized
+  // to whatever's actually on screen (both rows sets + their averages)
+  // rather than a fixed wide window — keeps every "compare rows to an
+  // average" chart across the dashboard pixel-for-pixel consistent.
+  const barAxis = useMemo(() => {
+    const allValues = [
+      ...primaryFilteredRows.map((row) => row.value),
+      overallAvg,
+      ...secondaryFilteredRows.map((row) => row.value),
+      secondaryOverallAvg,
+    ];
+    const rawMin = Math.min(...allValues);
+    const rawMax = Math.max(...allValues);
+    const min = Number.isFinite(rawMin) ? Math.floor((rawMin - 2) / 5) * 5 : 0;
+    const max = Number.isFinite(rawMax) ? Math.ceil((rawMax + 2) / 5) * 5 : 100;
+    const ticks: number[] = [];
+    for (let tick = min; tick <= max; tick += 5) ticks.push(tick);
+    return { min, max, ticks: ticks.length > 0 ? ticks : [0, 20, 40, 60, 80, 100] };
+  }, [primaryFilteredRows, overallAvg, secondaryFilteredRows, secondaryOverallAvg]);
   const secondaryDeltaAxis = useMemo(() => {
     if (!secondaryData) return deltaAxis;
     const fallback = secondaryData.display?.deltaAxis
       ? { ...secondaryData.display.deltaAxis, ticks: secondaryData.display.deltaAxis.ticks ?? [-10, 0, 10] }
       : { min: -10, max: 10, ticks: [-10, 0, 10] };
-    const validRows = secondaryRows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
+    const validRows = secondaryFilteredRows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
     return computeDeltaAxis(validRows, fallback);
-  }, [secondaryData, secondaryRows, deltaAxis]);
+  }, [secondaryData, secondaryFilteredRows, deltaAxis]);
+
+  // Keep the composite export header in sync with the active perspective/filters.
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title,
+      filters: [idx?.name, current.labelLong || current.label].filter(
+        (value): value is string => Boolean(value)
+      ),
+    });
+  }
 
   return (
-    <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+    <div
+      className={chromeless ? (basinReportSurface ? "canvas basin-surface-1b" : "canvas") : "block"}
+      style={chromeless ? { display: "block", background: basinReportSurface ? "#F4F4EF" : "#fff" } : EE_PERSPECTIVE_CANVAS_STYLE}
+    >
+      <EEReportStyles />
+      {basinReportSurface ? <BasinSurfaceStyles /> : null}
       {executiveRail}
 
       {!executiveRail ? (
@@ -491,12 +519,13 @@ export function EEDepartmentComparison({
       >
 
         <div className="rounded-[18px] bg-white p-4 text-center" style={{ border: "1px solid #8798AA", boxShadow: "0 2px 8px rgba(15,23,42,.07)" }}>
-          <img src={client.logoUrl ?? "/top-flight-logo.png"} alt={`${client.name} logo`} className="mx-auto h-auto w-[180px]" />
+          <img src={client.logoUrl ?? "/deep-well-services-logo.png"} alt={`${client.name} logo`} className="mx-auto h-auto w-[180px]" />
           <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>{current.label.toUpperCase()} JOB / DEPARTMENT COMPARISON</div>
-          <div className="mt-0.5 italic" style={{ fontSize: 10.5, color: "#6E7E96" }}>(compared to {comp.labelLong})</div>
+          {comp ? <div className="mt-0.5 italic" style={{ fontSize: 10.5, color: "#6E7E96" }}>(compared to {comp.labelLong})</div> : null}
         </div>
 
-        <RailSection title="Campaign Comparison">
+        {hasComparison ? (
+        <RailSection title="Campaign Comparison" defaultOpen>
           <div className="flex flex-col gap-2">
             {[...comparisons].reverse().map(c => {
               const active = compId === c.id;
@@ -507,6 +536,7 @@ export function EEDepartmentComparison({
             })}
           </div>
         </RailSection>
+        ) : null}
 
         <RailSection title="Index Selection">
           <div className="flex flex-col gap-2">
@@ -545,20 +575,36 @@ export function EEDepartmentComparison({
       </aside>
       ) : null}
 
-      <main className="flex flex-col gap-5" style={EE_PERSPECTIVE_MAIN_STYLE}>
+      <main
+        className="flex flex-col gap-5"
+        style={chromeless ? { background: basinReportSurface ? "#F4F4EF" : "#fff", overflowAnchor: "none" } : EE_PERSPECTIVE_MAIN_STYLE}
+      >
         <div style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }} className="flex flex-col gap-5">
 
           {/* Hero */}
+          {chromeless ? (
+            <HeaderKpiPortal
+              portalId={headerPortalId}
+              surfaceTreatment={basinReportSurface ? "1b" : undefined}
+              items={[
+                { label: "Company Avg", value: overallAvg.toFixed(1), color: avgColor },
+                ...(hasComparison
+                  ? [{ label: "Change YoY", value: overallDelta == null ? "—" : f1(overallDelta), color: overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6" }]
+                  : []),
+                { label: "Response Rate", value: rrPct },
+              ]}
+            />
+          ) : (
           <div className="rounded-2xl p-5" style={{ border: "1px solid #8798AA", background: "linear-gradient(135deg,#fff 0%,#F1F4F7 55%,rgba(238,243,248,.5) 100%)" }}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>Job / Department Comparison</h2>
-                <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong} · compared to {comp.label} · {scopeLabel}</p>
+                <h2 className="mt-1 font-extrabold" style={{ fontSize: 27, letterSpacing: "-0.02em", color: "#152238" }}>{title}</h2>
+                <p className="mt-0.5 font-semibold" style={{ fontSize: 14, color: "#3B4B63" }}>{current.labelLong}{comparedToText} · {scopeLabel}</p>
               </div>
               <div className="flex shrink-0 gap-3">
                 {([
                   ["Company Avg",   overallAvg.toFixed(1), avgColor],
-                  ["Change YoY",    overallDelta == null ? "—" : f1(overallDelta),      overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6"],
+                  ...(hasComparison ? [["Change YoY", overallDelta == null ? "—" : f1(overallDelta), overallDelta == null ? "#6E7E96" : overallDelta >= 0 ? "#9CB2A8" : "#C8B9B6"]] as [string, string, string][] : []),
                   ["Response Rate", rrPct,                 "#152238"],
                 ] as [string, string, string][]).map(([label, value, color]) => (
                   <div key={label} className="flex min-h-[76px] min-w-[104px] flex-col items-center justify-center gap-1 rounded-2xl px-4 py-2" style={{ border: "1px solid #8798AA", background: "rgba(255,255,255,.85)" }}>
@@ -569,50 +615,261 @@ export function EEDepartmentComparison({
               </div>
             </div>
           </div>
+          )}
 
-          <div className="flex flex-col gap-4">
-            <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
-              <div className="px-6 py-4 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
-                <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign — Job Category</h3>
-                <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
+          <div className={chromeless ? "flex flex-col gap-8" : "flex flex-col gap-4"}>
+            {fieldLayout ? (
+              (() => {
+                const indexComparisonRow = (
+              <div style={{ display: "flex", gap: 0, alignItems: "stretch" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0, width: compact ? 150 : 168, flexShrink: 0, paddingTop: compact ? 12 : 16, paddingBottom: compact ? 12 : 16 }}>
+                  {indexes.map((index, indexIndex) => {
+                    const active = indexId === index.id;
+                    return (
+                      <button
+                        key={index.id}
+                        type="button"
+                        onClick={() => setIndexId(index.id)}
+                        style={{
+                          flex: 1,
+                          minHeight: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          textAlign: "center",
+                          padding: compact ? "0 10px" : "0 12px",
+                          borderTopLeftRadius: 12,
+                          borderBottomLeftRadius: 12,
+                          borderTopRightRadius: 0,
+                          borderBottomRightRadius: 0,
+                          cursor: "pointer",
+                          fontSize: compact ? 12 : 13,
+                          lineHeight: 1.15,
+                          transition: "all .16s",
+                          position: "relative",
+                          marginBottom: indexIndex === indexes.length - 1 ? 0 : -1,
+                          ...(active
+                            ? {
+                                background: "#fff",
+                                color: "#1E2329",
+                                fontWeight: 800,
+                                border: basinReportSurface ? "1px solid rgba(135,152,170,0.7)" : "1px solid #8798AA",
+                                borderRight: "none",
+                                marginRight: -1,
+                                zIndex: 2,
+                                boxShadow: "-1px 0 3px rgba(15,23,42,.05)",
+                              }
+                            : {
+                                background: "#EEF2F6",
+                                color: "#5A6B82",
+                                fontWeight: 700,
+                                border: "1px solid #D4DAD6",
+                                zIndex: 1,
+                              }),
+                        }}
+                      >
+                        {index.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                <RegisteredVisualExportFrame order={10} label="Download chart" filename={exportFile("current-chart")} style={{ flex: 1, minWidth: 0 }}>
+                <div className="card relative" style={{ flex: 1, minWidth: 0 }}>
+                  <div className="card-head flex items-center justify-between gap-4">
+                    <h3 className="card-title">Current Campaign — {primaryLabel}{idx ? ` · ${idx.name}` : ""}</h3>
+                  </div>
+                  <div className="card-body">
+                    <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} uniform compact={compact} />
+                  </div>
+                </div>
+                </RegisteredVisualExportFrame>
               </div>
-              <div className="px-6 py-5">
-                <OrgComparisonBarChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} color={sc} />
+                );
+                return chromeless ? (
+                  basinReportSurface ? (
+                    <SectionWithVerticalLabel label="Index Comparison">{indexComparisonRow}</SectionWithVerticalLabel>
+                  ) : (
+                    <>
+                      <p className="slabel" style={{ marginBottom: 8 }}>Index Comparison</p>
+                      {indexComparisonRow}
+                    </>
+                  )
+                ) : (
+                  indexComparisonRow
+                );
+              })()
+            ) : (
+              <RegisteredVisualExportFrame order={10} label="Download chart" filename={exportFile("current-chart")}>
+              <div className="card relative">
+                <div className="card-head flex items-center justify-between gap-4">
+                  <h3 className="card-title">Current Campaign — {primaryLabel}</h3>
+                </div>
+                <div className="card-body">
+                  <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} />
+                </div>
               </div>
-            </div>
+              </RegisteredVisualExportFrame>
+            )}
 
-            <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+            {fieldLayout && idx && showStatementHeatmap ? (
+              (() => {
+                const statementHeatmapPanel = (
+              <RegisteredVisualExportFrame order={20} label="Download heat map" filename={exportFile("statement-heatmap")}>
+              <div style={{ border: basinReportSurface ? "1px solid rgba(135,152,170,0.7)" : "1px solid #8798AA", borderRadius: 16, background: "#fff", boxShadow: basinReportSurface ? "0 2px 12px rgba(15,23,42,0.24), 0 1px 3px rgba(15,23,42,0.20)" : "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+                <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
+                  <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>{idx.name} Statement Heat Map</h3>
+                  <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Rows are {idx.name} statements; columns are each {primaryLabel.toLowerCase()} for {current.label}.</p>
+                </div>
+                <div className="px-6 py-5">
+                  <ComparisonHeatmap
+                    statements={idx.statements}
+                    columns={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name }))}
+                    getValue={(statementId, columnId) => idx.statements.find((s) => s.id === statementId)?.byDept[columnId]?.current ?? null}
+                    scoreColor={sc}
+                    columnHeader={`${idx.name} Statement`}
+                  />
+                </div>
+              </div>
+              </RegisteredVisualExportFrame>
+                );
+                return chromeless ? (
+                  basinReportSurface ? (
+                    <SectionWithVerticalLabel label="Statement Heat Map">{statementHeatmapPanel}</SectionWithVerticalLabel>
+                  ) : (
+                    <>
+                      <p className="slabel" style={{ marginBottom: 8 }}>Statement Heat Map</p>
+                      {statementHeatmapPanel}
+                    </>
+                  )
+                ) : (
+                  statementHeatmapPanel
+                );
+              })()
+            ) : null}
+
+            {hasComparison ? (
+              (() => {
+                const pointDifferencePanel = (
+            <RegisteredVisualExportFrame order={30} label="Download chart" filename={exportFile("point-difference")}>
+            <div style={{ border: basinReportSurface ? "1px solid rgba(135,152,170,0.7)" : "1px solid #8798AA", borderRadius: 16, background: "#fff", boxShadow: basinReportSurface ? "0 2px 12px rgba(15,23,42,0.24), 0 1px 3px rgba(15,23,42,0.20)" : "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
               <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
                 <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Point Difference (YoY)</h3>
-                <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by job category vs {comp.label} · gains in green, declines in red.</p>
+                  <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by {primaryLabel.toLowerCase()}{versusText} · gains in green, declines in red.</p>
               </div>
               <div className="px-6 py-5">
                 <DeptDeltaChart rows={rowsByDeltaDesc.map(r => ({ name: r.name, delta: r.delta }))} axis={deltaAxis} />
               </div>
             </div>
+            </RegisteredVisualExportFrame>
+                );
+                return chromeless ? (
+                  basinReportSurface ? (
+                    <SectionWithVerticalLabel label="Point Difference">{pointDifferencePanel}</SectionWithVerticalLabel>
+                  ) : (
+                    <>
+                      <p className="slabel" style={{ marginBottom: 8 }}>Point Difference</p>
+                      {pointDifferencePanel}
+                    </>
+                  )
+                ) : (
+                  pointDifferencePanel
+                );
+              })()
+            ) : null}
 
             {secondaryRows.length > 0 ? (
               <>
                 <div style={{ height: 1, width: "100%", background: "#D3DDE7", margin: "4px 0" }} />
-                <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
-                  <div className="px-6 py-4 flex items-center justify-between gap-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
-                    <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Current Campaign — Department</h3>
-                    <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#6E7E96]">Comparison to CSG</span>
+                {(() => {
+                  const departmentChartPanel = (
+                <RegisteredVisualExportFrame order={40} label="Download chart" filename={exportFile("department-chart")}>
+                <div className="card relative">
+                  <div className="card-head flex items-center justify-between gap-4">
+                    <h3 className="card-title">Current Campaign — Department</h3>
                   </div>
-                  <div className="px-6 py-5">
-                    <OrgComparisonBarChart rows={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: secondaryOverallAvg, delta: r1(row.value - secondaryOverallAvg) }))} axis={barAxis} color={sc} />
+                  <div className="card-body">
+                    <BrandComparisonChart rows={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: secondaryOverallAvg, delta: r1(row.value - secondaryOverallAvg) }))} axis={barAxis} scoreColor={sc} uniform={fieldLayout} />
                   </div>
                 </div>
+                </RegisteredVisualExportFrame>
+                  );
+                  return chromeless ? (
+                    basinReportSurface ? (
+                      <SectionWithVerticalLabel label="Index Comparison — Department">{departmentChartPanel}</SectionWithVerticalLabel>
+                    ) : (
+                      <>
+                        <p className="slabel" style={{ marginBottom: 8 }}>Index Comparison — Department</p>
+                        {departmentChartPanel}
+                      </>
+                    )
+                  ) : (
+                    departmentChartPanel
+                  );
+                })()}
 
-                <div style={{ border: "1px solid #8798AA", borderRadius: 16, boxShadow: "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+                {fieldLayout && secondaryData ? (() => {
+                  const secondaryIdx = secondaryData.indexes.find((item) => item.id === indexId) ?? secondaryData.indexes[0];
+                  if (!secondaryIdx) return null;
+                  const departmentHeatmapPanel = (
+                    <RegisteredVisualExportFrame order={50} label="Download heat map" filename={exportFile("department-heatmap")}>
+                    <div style={{ border: basinReportSurface ? "1px solid rgba(135,152,170,0.7)" : "1px solid #8798AA", borderRadius: 16, background: "#fff", boxShadow: basinReportSurface ? "0 2px 12px rgba(15,23,42,0.24), 0 1px 3px rgba(15,23,42,0.20)" : "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
+                      <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
+                        <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>{secondaryIdx.name} Statement Heat Map — Department</h3>
+                        <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Rows are {secondaryIdx.name} statements; columns are each department for {current.label}.</p>
+                      </div>
+                      <div className="px-6 py-5">
+                        <ComparisonHeatmap
+                          statements={secondaryIdx.statements}
+                          columns={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name }))}
+                          getValue={(statementId, columnId) => secondaryIdx.statements.find((s) => s.id === statementId)?.byDept[columnId]?.current ?? null}
+                          scoreColor={sc}
+                          columnHeader={`${secondaryIdx.name} Statement`}
+                        />
+                      </div>
+                    </div>
+                    </RegisteredVisualExportFrame>
+                  );
+                  return chromeless ? (
+                    basinReportSurface ? (
+                      <SectionWithVerticalLabel label="Statement Heat Map — Department">{departmentHeatmapPanel}</SectionWithVerticalLabel>
+                    ) : (
+                      <>
+                        <p className="slabel" style={{ marginBottom: 8 }}>Statement Heat Map — Department</p>
+                        {departmentHeatmapPanel}
+                      </>
+                    )
+                  ) : (
+                    departmentHeatmapPanel
+                  );
+                })() : null}
+
+                {hasComparison ? (() => {
+                  const departmentPointDifferencePanel = (
+                <RegisteredVisualExportFrame order={60} label="Download chart" filename={exportFile("department-point-difference")}>
+                <div style={{ border: basinReportSurface ? "1px solid rgba(135,152,170,0.7)" : "1px solid #8798AA", borderRadius: 16, background: "#fff", boxShadow: basinReportSurface ? "0 2px 12px rgba(15,23,42,0.24), 0 1px 3px rgba(15,23,42,0.20)" : "7px 9px 20px rgba(15,23,42,.09), 2px 3px 6px rgba(15,23,42,.05)", overflow: "hidden" }}>
                   <div className="px-6 py-4" style={{ borderBottom: "1px solid #E2E8EF" }}>
                     <h3 className="font-bold" style={{ fontSize: 15, color: "#152238" }}>Point Difference (YoY) — Department</h3>
-                    <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by department vs {comp.label} · gains in green, declines in red.</p>
+                    <p className="mt-1 text-[12px]" style={{ color: "#6E7E96" }}>Change in points by department{versusText} · gains in green, declines in red.</p>
                   </div>
                   <div className="px-6 py-5">
                     <DeptDeltaChart rows={secondaryRowsByDeltaDesc.map((row) => ({ name: row.name, delta: row.delta }))} axis={secondaryDeltaAxis} />
                   </div>
                 </div>
+                </RegisteredVisualExportFrame>
+                  );
+                  return chromeless ? (
+                    basinReportSurface ? (
+                      <SectionWithVerticalLabel label="Point Difference — Department">{departmentPointDifferencePanel}</SectionWithVerticalLabel>
+                    ) : (
+                      <>
+                        <p className="slabel" style={{ marginBottom: 8 }}>Point Difference — Department</p>
+                        {departmentPointDifferencePanel}
+                      </>
+                    )
+                  ) : (
+                    departmentPointDifferencePanel
+                  );
+                })() : null}
               </>
             ) : null}
           </div>
@@ -621,7 +878,7 @@ export function EEDepartmentComparison({
       </main>
 
       <aside className="hidden xl:flex xl:flex-col xl:gap-4 xl:p-6" style={EE_GUIDANCE_RAIL_STYLE}>
-        <EEContextRail howToRead="Each row is a job category for the selected index or statement. Dashed line marks company average, and Point Difference shows movement vs compared campaign." />
+        <EEContextRail scale={scale} howToRead={hasComparison ? `Each row is a ${primaryLabel.toLowerCase()} for the selected index or statement. Dashed line marks company average, and Point Difference shows movement vs compared campaign.` : `Each row is a ${primaryLabel.toLowerCase()} for the selected index or statement. Dashed line marks company average.`} />
         {dashboardInstanceId ? (
           <GuidancePinRail
             dashboardInstanceId={dashboardInstanceId}
@@ -636,3 +893,4 @@ export function EEDepartmentComparison({
     </div>
   );
 }
+

@@ -1,0 +1,12 @@
+---
+description: ENPS is excluded from all campaign views; only a dedicated ENPS page may show it
+alwaysApply: true
+---
+
+# Employee Experience — ENPS Exclusion
+
+- **ENPS never belongs in shared campaign analytics.** Exclude the ENPS index from campaign scoring, experience index, dimension rollups, department/supervisor aggregates, index heatmaps, comparison visuals, trend lines, bar charts, rankings, and every other report/perspective except a future dedicated ENPS page.
+- **ENPS is platform-excluded by default.** Treat `ENPS`, `eNPS`, `Employee NPS`, and slug `enps` as the same index. Apply exclusion in shared helpers (`excluded-dimensions.ts`, `filterExcludedDefinitions`, merged `hiddenDimensionIds`) before metrics, heatmaps, and report projections are built.
+- **No mixed views.** Do not show ENPS as a selectable index, heatmap row/column, comparison series, insight card input, or hidden contributor to headline KPIs. If a visual compares indexes or statements, ENPS must not appear.
+- **Dedicated ENPS only.** ENPS may appear only on an explicitly ENPS-only perspective with its own calculation (promoter / passive / detractor or client-defined ENPS math). Do not reuse campaign score color scales or campaign average helpers for ENPS.
+- **When adding perspectives or loaders:** If code loops “all indexes” or “all dimensions,” verify ENPS is filtered out unless the file is ENPS-specific. Never reintroduce ENPS through demo fixtures, live projections, or instance settings alone — platform exclusion must remain in force.

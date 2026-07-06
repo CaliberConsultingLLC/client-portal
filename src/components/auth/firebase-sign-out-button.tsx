@@ -12,13 +12,15 @@ interface FirebaseSignOutButtonProps {
   label?: string;
   className?: string;
   variant?: "default" | "secondary" | "outline" | "ghost" | "link";
+  title?: string;
 }
 
 export function FirebaseSignOutButton({
-  redirectTo = "/portal-login",
+  redirectTo = "/login",
   label = "Sign Out",
   className,
   variant = "ghost",
+  title,
 }: FirebaseSignOutButtonProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +45,8 @@ export function FirebaseSignOutButton({
       onClick={handleSignOut}
       disabled={isLoading}
       className={className}
+      title={title ?? (label || "Sign out")}
+      aria-label={title ?? (label || "Sign out")}
     >
       <LogOut className="h-4 w-4" />
       {isLoading ? "Signing Out..." : label}

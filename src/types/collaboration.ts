@@ -43,9 +43,14 @@ export interface DepartmentDetail {
   incomingCDRS: number;
   outgoingCDRS: number;
   collaborationIndex: number;
+  /** Incoming CDRS rater count (other departments who rated this team). */
   responseCount: number;
+  /** Unique raters who answered any CI question about this department (excl. self). */
+  ciRaterCount: number;
   incomingByDept: DeptBreakdown[];
   outgoingByDept: DeptBreakdown[];
+  /** Average CI from each rater department about this team (excl. self). */
+  ciByDept: DeptBreakdown[];
   questionScores: QuestionScore[];
 }
 

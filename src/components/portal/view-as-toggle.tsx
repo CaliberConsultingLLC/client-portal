@@ -5,22 +5,23 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export interface ViewAsClientOption {
-  id: string;
+export interface ViewAsUserOption {
+  uid: string;
   name: string;
-  isDemo?: boolean;
+  email: string;
+  role: string;
 }
 
 interface ViewAsToggleProps {
-  isViewingAsClient: boolean;
-  viewingAsClientId?: string | null;
-  clients: ViewAsClientOption[];
+  isViewingAsUser: boolean;
+  viewingAsUserUid?: string | null;
+  users: ViewAsUserOption[];
 }
 
 export function ViewAsToggle({
-  isViewingAsClient,
-  viewingAsClientId,
-  clients,
+  isViewingAsUser,
+  viewingAsUserUid,
+  users,
 }: ViewAsToggleProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -29,9 +30,9 @@ export function ViewAsToggle({
   const [error, setError] = useState<string | null>(null);
 
   const busy = saving || isPending;
-  const activeClient = clients.find((client) => client.id === viewingAsClientId) ?? null;
+  const activeUser = users.find((item) => item.uid === viewingAsUserUid) ?? null;
 
-  async function apply(enabled: boolean, clientId?: string) {
+  async function apply(enabled: boolean, uid?: string) {
     setOpen(false);
     setError(null);
     setSaving(true);
@@ -39,11 +40,11 @@ export function ViewAsToggle({
       const response = await fetch("/api/portal/view-as", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, clientId }),
+        body: JSON.stringify({ enabled, uid }),
         cache: "no-store",
       });
       if (!response.ok) {
-        throw new Error("Failed to switch client view");
+        throw new Error("Failed to switch user view");
       }
       // Role is resolved server-side, so refresh and land on Home to reflect it.
       startTransition(() => {
@@ -51,32 +52,33 @@ export function ViewAsToggle({
         router.refresh();
       });
     } catch {
-      setError("Unable to update client view.");
+      setError("Unable to update user view.");
     } finally {
       setSaving(false);
     }
   }
 
-  const label = isViewingAsClient
-    ? `Viewing as: ${activeClient?.name ?? "Client"}`
-    : "View as client";
+  const label = isViewingAsUser
+    ? (activeUser?.name ?? "User")
+    : "View as";
 
   return (
     <div className="relative">
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
+        size="sm"
         onClick={() => setOpen((value) => !value)}
         disabled={busy}
         className={
-          isViewingAsClient
-            ? "rounded-full border-[#D7B35A] bg-[#D7B35A] px-4 text-[#242424] hover:bg-[#E8CC70]"
-            : "rounded-full border-[#D7B35A]/35 bg-white/8 px-4 text-white hover:bg-[#386B45]"
+          isViewingAsUser
+            ? "rounded-xl border border-[#D7B35A] bg-[#D7B35A] px-3 text-[13px] text-[#242424] hover:bg-[#E8CC70]"
+            : "rounded-xl border border-transparent px-3 text-[13px] text-white/70 hover:border-[#386B45] hover:bg-[#386B45] hover:text-white"
         }
       >
-        {isViewingAsClient ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        {isViewingAsUser ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
         {busy ? "Switching…" : label}
-        <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+        <ChevronDown className="h-3 w-3 opacity-70" />
       </Button>
 
       {open ? (
@@ -91,32 +93,28 @@ export function ViewAsToggle({
           />
           <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-[#363636] bg-[#242424] py-2 shadow-[0_18px_48px_rgba(0,0,0,0.32)]">
             <p className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">
-              Preview portal as
+              Preview as user
             </p>
             <div className="max-h-72 overflow-y-auto py-1">
-              {clients.map((client) => {
-                const isActive = isViewingAsClient && client.id === viewingAsClientId;
+              {users.map((item) => {
+                const isActive = isViewingAsUser && item.uid === viewingAsUserUid;
                 return (
                   <button
-                    key={client.id}
+                    key={item.uid}
                     type="button"
-                    onClick={() => apply(true, client.id)}
+                    onClick={() => apply(true, item.uid)}
                     className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm text-white/84 hover:bg-[#386B45] hover:text-white"
                   >
-                    <span className="truncate">
-                      {client.name}
-                      {client.isDemo ? (
-                        <span className="ml-2 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-white/60">
-                          Demo
-                        </span>
-                      ) : null}
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{item.name}</span>
+                      <span className="block truncate text-[11px] text-white/60">{item.email}</span>
                     </span>
                     {isActive ? <Check className="h-4 w-4 shrink-0 text-[#E8CC70]" /> : null}
                   </button>
                 );
               })}
             </div>
-            {isViewingAsClient ? (
+            {isViewingAsUser ? (
               <div className="mt-1 border-t border-white/10 pt-1">
                 <button
                   type="button"
@@ -124,7 +122,7 @@ export function ViewAsToggle({
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-[#E8CC70] hover:bg-[#386B45] hover:text-white"
                 >
                   <EyeOff className="h-4 w-4" />
-                  Exit client view
+                  Exit user view
                 </button>
               </div>
             ) : null}

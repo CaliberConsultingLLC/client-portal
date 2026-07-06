@@ -4,25 +4,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Building2,
-  Megaphone,
-  ClipboardList,
-  Database,
-  Settings,
   GitCompareArrows,
+  Database,
+  MapPin,
+  BookText,
 } from "lucide-react";
 import { Logo } from "@/components/shared/logo";
-import { SupabaseSignOutButton } from "@/components/auth/supabase-sign-out-button";
+import { AppTopBanner } from "@/components/shared/app-top-banner";
+import { FirebaseSignOutButton } from "@/components/auth/firebase-sign-out-button";
 import { cn } from "@/lib/utils";
 
 const sidebarLinks = [
-  { label: "Overview", href: "/admin", icon: LayoutDashboard },
-  { label: "Clients", href: "/admin/clients", icon: Building2 },
-  { label: "Campaigns", href: "/admin/campaigns", icon: Megaphone },
-  { label: "Collab", href: "/admin/collab", icon: GitCompareArrows },
-  { label: "Surveys", href: "/admin/surveys", icon: ClipboardList },
-  { label: "Data", href: "/admin/data", icon: Database },
-  { label: "Settings", href: "/admin/settings", icon: Settings },
+  { label: "Portal home", href: "/portal", icon: LayoutDashboard },
+  { label: "Workspace map", href: "/portal/workspace-map", icon: MapPin },
+  { label: "Readouts", href: "/portal/readouts", icon: BookText },
+  { label: "Collab pipeline", href: "/admin/collab", icon: GitCompareArrows },
+  { label: "Data workspaces", href: "/portal/workspace-map", icon: Database },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -32,7 +29,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-surface-2">
       <aside className="fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-border-default bg-white">
         <div className="flex h-16 items-center px-5">
-          <Link href="/admin">
+          <Link href="/portal">
             <Logo size="sm" />
           </Link>
         </div>
@@ -61,8 +58,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-border-subtle px-3 py-4">
-          <SupabaseSignOutButton
-            redirectTo="/sign-in"
+          <FirebaseSignOutButton
+            redirectTo="/login"
             variant="ghost"
             className="w-full justify-start px-3 py-2.5 text-sm font-medium text-text-secondary hover:bg-surface-3 hover:text-text-primary"
           />
@@ -70,6 +67,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex-1 pl-60">
+        <AppTopBanner
+          homeHref="/portal"
+          eyebrow="Legacy admin tools"
+          items={sidebarLinks.map((link) => ({ label: link.label, href: link.href }))}
+        >
+          <FirebaseSignOutButton
+            redirectTo="/login"
+            variant="outline"
+            className="rounded-full border-[#C9D2D8] bg-white px-4 text-[#102533] hover:bg-[#F5F8FA]"
+          />
+        </AppTopBanner>
         <main className="mx-auto max-w-6xl px-8 py-8">{children}</main>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CampaignStatusBadge } from "@/components/portal/campaign-status-badge";
@@ -66,22 +66,33 @@ export function CampaignList({ campaigns, clientNamesById }: CampaignListProps) 
                   <CampaignStatusBadge status={campaign.status} />
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-[#60727D]">
-                  {clientNamesById[campaign.clientId] ?? campaign.clientId} · SM Survey {campaign.smSurveyId}
+                  {clientNamesById[campaign.clientId] ?? campaign.clientId}
                 </p>
               </div>
-              <Button asChild className="rounded-full bg-[#2B2B2B] text-white hover:bg-[#386B45]">
-                <Link href={`/portal/campaigns/${campaign.id}`}>
-                  View Campaign
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="rounded-full border-[#C9D2D8] text-[#2B2B2B] hover:bg-[#F3F5F1]"
+                >
+                  <Link href={`/portal/campaigns/${campaign.id}/census`}>
+                    <ClipboardList className="h-4 w-4" />
+                    Census
+                  </Link>
+                </Button>
+                <Button asChild className="rounded-full bg-[#2B2B2B] text-white hover:bg-[#386B45]">
+                  <Link href={`/portal/campaigns/${campaign.id}`}>
+                    View Campaign
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
             </div>
 
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
               <Metric label="Response Rate" value={`${campaign.responseRate}%`} />
-              <Metric label="Responded" value={`${campaign.respondedCount}/${campaign.totalRecipients}`} />
-              <Metric label="Reminders" value={campaign.config.reminderSchedule.remindersSent} />
-              <Metric label="Window Ends" value={formatDate(campaign.config.surveyWindowEnd)} />
+              <Metric label="Open Date" value={formatDate(campaign.config.surveyWindowStart)} />
+              <Metric label="Close Date" value={formatDate(campaign.config.surveyWindowEnd)} />
             </div>
           </CardContent>
         </Card>

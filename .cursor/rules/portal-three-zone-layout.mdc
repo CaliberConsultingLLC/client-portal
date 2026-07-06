@@ -1,0 +1,14 @@
+---
+description: Use a full-width three-zone layout across the portal
+alwaysApply: true
+---
+
+# Portal Three-Zone Layout
+
+- For this portal project, treat the usable page width under the top banner as the real layout boundary.
+- Default portal pages to a three-zone frame: left utility rail, stable center canvas, right utility rail.
+- Keep the center canvas clean and width-stable for data content; do not shrink it just because side content exists.
+- Put filters, search, selectors, and setup controls in the left rail when they are present.
+- Put notes, recommendations, calls to action, explanations, or user guidance in the right rail when they are present.
+- If a side rail has no content, keep the structural space so it reads as intentional margin rather than collapsing the page inward.
+- Do not solve width requests by compacting the main content inside an inherited max-width container when the page should instead expand to the full banner-aligned frame.

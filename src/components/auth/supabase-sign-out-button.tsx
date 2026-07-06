@@ -14,7 +14,7 @@ interface SupabaseSignOutButtonProps {
 }
 
 export function SupabaseSignOutButton({
-  redirectTo = "/portal-login",
+  redirectTo = "/login",
   label = "Sign Out",
   className,
   variant = "ghost",

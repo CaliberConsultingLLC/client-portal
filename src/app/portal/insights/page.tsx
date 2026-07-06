@@ -70,13 +70,22 @@ export default async function PortalInsightsPage({
               : `There is no published insight readout for ${activeClient.name} right now.`}
           </p>
           {isInternalUser ? (
-            <div className="mt-6 flex justify-center">
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button
                 asChild
                 variant="outline"
                 className="rounded-full border-[#C9D2D8] bg-white text-[#355365] hover:bg-[#F5F8FA]"
               >
-                <Link href="/admin/readouts">Open Readout Manager</Link>
+                <Link href="/portal/readouts">Open Readout Manager</Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="rounded-full border-[#C9D2D8] bg-white text-[#355365] hover:bg-[#F5F8FA]"
+              >
+                <Link href={`/portal/insights?clientId=${encodeURIComponent(activeClient.id)}`}>
+                  Refresh Insights
+                </Link>
               </Button>
             </div>
           ) : null}

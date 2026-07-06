@@ -53,10 +53,30 @@ const outcomes = [
 
 export default function HomePage() {
   return (
-    <>
-      <Navbar />
+    <div className="relative">
+      <div className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-5 px-6 text-center">
+          <div className="rounded-[32px] border border-[#D6DEE3] bg-white px-10 py-12 shadow-[0_20px_60px_rgba(16,35,51,0.12)]">
+            <p className="text-sm font-medium uppercase tracking-[0.22em] text-[#60727D]">
+              Client Portal
+            </p>
+            <p className="mt-4 max-w-md text-base leading-relaxed text-[#102533]">
+              Access the secure portal workspace using the login page below.
+            </p>
+            <Button size="lg" className="mt-8 min-w-[220px] gap-2" asChild>
+              <Link href="/login">
+                Go To Login
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
 
-      <main className="relative overflow-hidden bg-gradient-to-b from-white via-[#f6f1e6] via-45% via-[#ead7ab] via-70% to-[#0b0b0d]">
+      <div aria-hidden="true">
+        <Navbar />
+
+        <main className="relative overflow-hidden bg-gradient-to-b from-white via-[#f6f1e6] via-45% via-[#ead7ab] via-70% to-[#0b0b0d]">
         <div className="pointer-events-none absolute -left-56 -top-44 z-30">
           <NspLogoMark
             size={640}
@@ -260,9 +280,10 @@ export default function HomePage() {
             </Button>
           </div>
         </section>
-      </main>
+        </main>
 
-      <Footer />
-    </>
+        <Footer />
+      </div>
+    </div>
   );
 }

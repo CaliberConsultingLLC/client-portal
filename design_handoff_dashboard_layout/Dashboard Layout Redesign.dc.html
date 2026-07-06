@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: "Montserrat","Segoe UI",sans-serif; color: #152238; -webkit-font-smoothing: antialiased; }
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #C7D0D8; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #8798AA; }
+  @keyframes pulseGreen { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</helmet>
+
+<!-- ROOT -->
+<div style="height:100vh; display:flex; flex-direction:column; overflow:hidden; position:relative; background:#EEF2EE;">
+
+  <!-- ═══ CHROME: single dark banner — hideable ═══ -->
+  <div style="flex-shrink:0; overflow:hidden; max-height:{{ chromeMaxH }}; transition:max-height 0.38s cubic-bezier(0.4,0,0.2,1); position:relative; z-index:50;">
+    <header style="height:60px; background:linear-gradient(100deg,#242424 0%,#2B2B2B 60%,#2F4A38 150%); display:flex; align-items:center; gap:14px; padding:0 16px 0 22px;">
+      <div style="display:flex; align-items:center; gap:9px; flex-shrink:0;">
+        <div style="width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; color:#242424; font-family:inherit;">C</div>
+        <span style="color:#fff; font-weight:700; letter-spacing:0.22em; font-size:12px;">CALIBER</span>
+      </div>
+      <div style="width:1px; height:22px; background:rgba(255,255,255,0.14); flex-shrink:0;"></div>
+      <nav style="display:flex; align-items:center; gap:1px; flex:1; overflow:hidden; min-width:0;">
+        <a href="#" style="padding:5px 11px; border-radius:99px; font-size:12px; font-weight:500; color:rgba(255,255,255,0.6); text-decoration:none; white-space:nowrap;">Home</a>
+        <a href="#" style="padding:5px 11px; border-radius:99px; font-size:12px; font-weight:600; color:#fff; text-decoration:none; white-space:nowrap; background:rgba(232,204,112,0.14); border:1px solid rgba(232,204,112,0.22);">Dashboards</a>
+        <a href="#" style="padding:5px 11px; border-radius:99px; font-size:12px; font-weight:500; color:rgba(255,255,255,0.6); text-decoration:none; white-space:nowrap;">Insights</a>
+        <a href="#" style="padding:5px 11px; border-radius:99px; font-size:12px; font-weight:500; color:rgba(255,255,255,0.6); text-decoration:none; white-space:nowrap;">Reports</a>
+        <a href="#" style="padding:5px 11px; border-radius:99px; font-size:12px; font-weight:500; color:rgba(255,255,255,0.6); text-decoration:none; white-space:nowrap;">Census</a>
+      </nav>
+      <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+        <div style="text-align:right;">
+          <p style="font-size:12px; font-weight:600; color:#fff; line-height:1.25; margin:0;">Dana Whitfield</p>
+          <p style="font-size:10px; font-weight:600; color:rgba(232,204,112,0.82); letter-spacing:0.14em; text-transform:uppercase; line-height:1.25; margin:0;">Top Flight · HR</p>
+        </div>
+        <div style="width:1px; height:22px; background:rgba(255,255,255,0.14);"></div>
+        <button onClick="{{ toggleChrome }}" title="Hide bar" style="width:30px; height:30px; border-radius:9px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); display:flex; align-items:center; justify-content:center; cursor:pointer; color:#E8CC70; font-size:14px; font-family:inherit; transition:all 0.15s;">⌃</button>
+      </div>
+    </header>
+  </div>
+
+  <!-- ═══ REVEAL TAB ═══ -->
+  <div style="position:absolute; top:0; left:50%; transform:translateX(-50%); z-index:60; opacity:{{ revealOpacity }}; transition:opacity 0.25s; pointer-events:{{ revealEvents }};">
+    <button onClick="{{ showChrome }}" style="display:flex; align-items:center; gap:5px; padding:4px 16px 7px; border-radius:0 0 14px 14px; background:linear-gradient(110deg,#242424,#2F4A38); color:#E8CC70; font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; border:none; cursor:pointer; font-family:inherit; box-shadow:0 4px 18px rgba(0,0,0,0.3); white-space:nowrap;">
+      ▾ Menu
+    </button>
+  </div>
+
+  <!-- ═══ CONTENT ROW ═══ -->
+  <div style="flex:1; display:flex; overflow:hidden; min-height:0;">
+
+    <!-- LEFT RAIL -->
+    <div style="width:{{ leftW }}px; flex-shrink:0; overflow:hidden; background:#E8ECE9; border-right:1px solid #D4DAD6; position:relative; transition:width 0.32s cubic-bezier(0.4,0,0.2,1); display:flex; flex-direction:column;">
+
+      <!-- Expanded -->
+      <sc-if value="{{ leftExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="width:260px; flex:1; overflow-y:auto; padding:16px 13px 60px; display:flex; flex-direction:column; gap:12px;">
+
+          <!-- Client card -->
+          <div style="border-radius:16px; border:1px solid #8798AA; background:#fff; padding:14px 14px; text-align:center; box-shadow:0 1px 3px rgba(15,23,42,0.07); flex-shrink:0;">
+            <div style="width:40px; height:40px; border-radius:11px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:15px; color:#242424; margin:0 auto 9px; font-family:inherit;">TF</div>
+            <p style="font-size:11px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:#152238; line-height:1.3;">Top Flight Industries</p>
+            <p style="font-size:10.5px; color:#6E7E96; font-weight:500; margin-top:3px;">Collaboration Index · Fall 2024</p>
+          </div>
+
+          <!-- Current report marker -->
+          <div style="border-radius:13px; border:1px solid #E3D3A6; border-left:3px solid #C99A3C; background:linear-gradient(180deg,#FCF7EA,#FBF3DF); padding:11px 13px; flex-shrink:0;">
+            <p style="font-size:9px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#A47C2F; margin-bottom:3px;">{{ activeViewLabel }}</p>
+            <p style="font-size:13px; font-weight:700; color:#152238; line-height:1.25;">{{ activeReportLabel }}</p>
+          </div>
+
+          <!-- Views label -->
+          <div style="padding:2px 2px 0; flex-shrink:0;">
+            <span style="font-size:9.5px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:#8798AA;">Views</span>
+          </div>
+
+          <!-- Views accordion -->
+          <div style="display:flex; flex-direction:column; gap:3px;">
+            <sc-for list="{{ views }}" as="v" hint-placeholder-count="3">
+              <div>
+                <button onClick="{{ v.onToggle }}" style="display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:10px; cursor:pointer; font-family:inherit; width:100%; background:{{ v.headerBg }}; border:none; transition:all 0.15s;">
+                  <span style="flex:1; text-align:left; font-size:12.5px; font-weight:{{ v.headerWeight }}; color:{{ v.headerText }};">{{ v.label }}</span>
+                  <span style="font-size:10px; font-weight:700; color:#8798AA; background:#DDE3DE; border-radius:99px; padding:1px 7px;">{{ v.count }}</span>
+                  <span style="font-size:11px; color:#8798AA; transition:transform 0.2s; transform:{{ v.chevron }}; display:block;">▾</span>
+                </button>
+                <sc-if value="{{ v.open }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; flex-direction:column; gap:2px; padding:3px 0 5px; margin:2px 0 2px 15px; border-left:1px solid #CDD6CF;">
+                    <sc-for list="{{ v.reports }}" as="r" hint-placeholder-count="3">
+                      <button onClick="{{ r.onSelect }}" style="display:flex; align-items:center; gap:9px; padding:8px 10px 8px 12px; border-radius:9px; cursor:pointer; font-family:inherit; width:100%; text-align:left; background:{{ r.bg }}; border:1px solid {{ r.border }}; box-shadow:{{ r.shadow }}; transition:all 0.15s;">
+                        <span style="width:5px; height:5px; border-radius:99px; background:{{ r.dot }}; flex-shrink:0; display:block;"></span>
+                        <span style="flex:1; font-size:12px; font-weight:{{ r.weight }}; color:{{ r.text }};">{{ r.label }}</span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+
+        </div>
+      </sc-if>
+
+      <!-- Collapsed strip -->
+      <sc-if value="{{ leftCollapsed }}" hint-placeholder-val="{{ false }}">
+        <div style="width:44px; flex:1; display:flex; flex-direction:column; align-items:center; padding:16px 0; gap:10px;">
+          <div style="width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:10px; color:#242424; font-family:inherit;">TF</div>
+          <div style="width:20px; height:1px; background:#C8D2CF;"></div>
+          <div style="width:30px; height:30px; border-radius:9px; background:#fff; border:1px solid #C8D2CF; display:flex; align-items:center; justify-content:center; font-size:14px; color:#59675C;" title="Views &amp; reports">☰</div>
+        </div>
+      </sc-if>
+
+      <!-- Rail toggle -->
+      <div style="position:absolute; right:-15px; top:50%; transform:translateY(-50%); z-index:10;">
+        <button onClick="{{ toggleLeft }}" style="width:30px; height:30px; border-radius:99px; background:#fff; border:1px solid #8798AA; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 8px rgba(15,23,42,0.14); color:#3B4B63; font-size:15px; font-family:inherit; transition:all 0.18s;">{{ leftToggle }}</button>
+      </div>
+    </div>
+
+    <!-- CENTER -->
+    <div style="flex:1; overflow-y:auto; overflow-x:hidden; background:#fff; min-width:0;" onScroll="{{ onScroll }}">
+      <div style="padding:22px 28px 52px; max-width:1200px; margin:0 auto;">
+
+        <!-- Content title header (replaces the old ribbon) -->
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; padding-bottom:18px; border-bottom:1px solid #EEF1EE;">
+          <div style="min-width:0;">
+            <p style="font-size:10px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:#8798AA; margin-bottom:6px;">{{ activeViewLabel }} · Fall 2024 · Full Organization</p>
+            <h1 style="font-size:25px; font-weight:800; color:#152238; letter-spacing:-0.02em; line-height:1.1;">{{ activeReportLabel }}</h1>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+            <button style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:99px; background:#fff; border:1px solid #D4DAD6; font-size:12px; font-weight:600; color:#3B4B63; cursor:pointer; font-family:inherit; white-space:nowrap;">Export</button>
+          </div>
+        </div>
+
+        <!-- KPI Row -->
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px;">
+          <sc-for list="{{ kpis }}" as="kpi" hint-placeholder-count="4">
+            <div style="border-radius:16px; border:1px solid #E2E8EF; background:#F8FAFA; padding:16px 18px;">
+              <p style="font-size:9.5px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:#8798AA; margin-bottom:8px; line-height:1.2;">{{ kpi.label }}</p>
+              <div style="display:flex; align-items:baseline; gap:3px; margin-bottom:5px;">
+                <span style="font-size:28px; font-weight:800; color:#152238; line-height:1; letter-spacing:-0.02em;">{{ kpi.value }}</span>
+                <span style="font-size:13px; font-weight:600; color:#8798AA;">{{ kpi.unit }}</span>
+              </div>
+              <sc-if value="{{ kpi.hasTrend }}" hint-placeholder-val="{{ false }}">
+                <span style="display:inline-flex; align-items:center; padding:2px 8px; border-radius:99px; font-size:10.5px; font-weight:700; background:{{ kpi.trendBg }}; color:{{ kpi.trendColor }};">{{ kpi.trend }}</span>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- Dimension header -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; padding:0 2px;">
+          <div>
+            <p style="font-size:9.5px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:#8798AA; margin-bottom:3px;">Dimension Scores</p>
+            <p style="font-size:15px; font-weight:700; color:#152238;">Collaboration Index · Full Organization</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;">
+            <div style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:2px; background:#2F9151; display:inline-block;"></span><span style="font-size:10.5px; color:#8798AA; font-weight:500;">80+ Strength</span></div>
+            <div style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:2px; background:#5B7EA8; display:inline-block;"></span><span style="font-size:10.5px; color:#8798AA; font-weight:500;">70–79</span></div>
+            <div style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:2px; background:#C99A3C; display:inline-block;"></span><span style="font-size:10.5px; color:#8798AA; font-weight:500;">60–69 Watch</span></div>
+            <div style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; border-radius:2px; background:#D94A3A; display:inline-block;"></span><span style="font-size:10.5px; color:#8798AA; font-weight:500;">&lt;60 Risk</span></div>
+          </div>
+        </div>
+
+        <!-- Score bar card -->
+        <div style="border-radius:18px; border:1px solid #8798AA; background:#fff; overflow:hidden; margin-bottom:20px; box-shadow:0 1px 4px rgba(15,23,42,0.06);">
+          <div style="display:flex; align-items:center; padding:12px 20px; border-bottom:1px solid #EEF1EE; background:#F8FAFA;">
+            <p style="font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#8798AA; flex:1;">Dimension</p>
+            <p style="font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#8798AA; width:90px; text-align:center;">Score</p>
+            <p style="font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#8798AA; width:58px; text-align:center;">vs. Bench</p>
+          </div>
+          <sc-for list="{{ dimensions }}" as="dim" hint-placeholder-count="6">
+            <div style="display:flex; align-items:center; gap:14px; padding:13px 20px; border-bottom:1px solid {{ dim.rowBorder }};">
+              <div style="width:210px; flex-shrink:0;">
+                <p style="font-size:13px; font-weight:600; color:#152238; line-height:1.3;">{{ dim.label }}</p>
+              </div>
+              <div style="flex:1; height:26px; background:#F1F4F1; border-radius:7px; position:relative; overflow:hidden; min-width:0;">
+                <div style="position:absolute; left:0; top:0; bottom:0; border-radius:7px; background:{{ dim.color }}; width:{{ dim.barW }}; opacity:0.78;"></div>
+                <div style="position:absolute; top:3px; bottom:3px; width:2px; left:{{ dim.benchW }}; background:#152238; border-radius:1px; opacity:0.32; z-index:2;"></div>
+              </div>
+              <div style="width:46px; flex-shrink:0; text-align:center; background:{{ dim.chipBg }}; border-radius:8px; padding:4px 0;">
+                <span style="font-size:15px; font-weight:800; color:{{ dim.color }}; letter-spacing:-0.01em;">{{ dim.score }}</span>
+              </div>
+              <div style="width:52px; flex-shrink:0; text-align:center;">
+                <span style="display:inline-block; padding:3px 7px; border-radius:99px; font-size:10.5px; font-weight:700; background:{{ dim.deltaBg }}; color:{{ dim.deltaText }};">{{ dim.deltaLabel }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- Heatmap preview -->
+        <div style="border-radius:18px; border:1px solid #8798AA; background:#fff; overflow:hidden; box-shadow:0 1px 4px rgba(15,23,42,0.06);">
+          <div style="padding:13px 20px; border-bottom:1px solid #EEF1EE; background:#F8FAFA; display:flex; align-items:center; justify-content:space-between;">
+            <div>
+              <p style="font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#8798AA; margin-bottom:2px;">Statement Heatmap</p>
+              <p style="font-size:14px; font-weight:700; color:#152238;">Department × Statement</p>
+            </div>
+            <button style="padding:5px 14px; border-radius:99px; font-size:12px; font-weight:600; border:1px solid #D4DAD6; background:#fff; color:#3B4B63; cursor:pointer; font-family:inherit;">View full →</button>
+          </div>
+          <div style="padding:16px 20px; overflow-x:auto;">
+            <div style="display:grid; grid-template-columns:168px repeat(5,1fr); gap:5px; min-width:540px;">
+              <div></div>
+              <div style="text-align:center; padding-bottom:6px;"><span style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#8798AA;">Eng</span></div>
+              <div style="text-align:center; padding-bottom:6px;"><span style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#8798AA;">Product</span></div>
+              <div style="text-align:center; padding-bottom:6px;"><span style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#8798AA;">Sales</span></div>
+              <div style="text-align:center; padding-bottom:6px;"><span style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#8798AA;">HR</span></div>
+              <div style="text-align:center; padding-bottom:6px;"><span style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:#8798AA;">Finance</span></div>
+              <div style="display:flex; align-items:center; padding-right:8px;"><span style="font-size:11.5px; color:#3B4B63; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">Cross-functional</span></div>
+              <div style="height:30px; border-radius:6px; background:#DAEAF7; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1E3A5F;">74</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">69</span></div>
+              <div style="height:30px; border-radius:6px; background:#DAEAF7; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1E3A5F;">71</span></div>
+              <div style="height:30px; border-radius:6px; background:#C6E8D3; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1A5932;">77</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">68</span></div>
+              <div style="display:flex; align-items:center; padding-right:8px;"><span style="font-size:11.5px; color:#3B4B63; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">Information Sharing</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">65</span></div>
+              <div style="height:30px; border-radius:6px; background:#DAEAF7; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1E3A5F;">72</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">64</span></div>
+              <div style="height:30px; border-radius:6px; background:#DAEAF7; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1E3A5F;">71</span></div>
+              <div style="height:30px; border-radius:6px; background:#FBDAD6; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A2218;">58</span></div>
+              <div style="display:flex; align-items:center; padding-right:8px;"><span style="font-size:11.5px; color:#3B4B63; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">Trust &amp; Psych. Safety</span></div>
+              <div style="height:30px; border-radius:6px; background:#C6E8D3; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1A5932;">83</span></div>
+              <div style="height:30px; border-radius:6px; background:#C6E8D3; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1A5932;">80</span></div>
+              <div style="height:30px; border-radius:6px; background:#DAEAF7; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1E3A5F;">79</span></div>
+              <div style="height:30px; border-radius:6px; background:#C6E8D3; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1A5932;">85</span></div>
+              <div style="height:30px; border-radius:6px; background:#C6E8D3; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#1A5932;">80</span></div>
+              <div style="display:flex; align-items:center; padding-right:8px;"><span style="font-size:11.5px; color:#3B4B63; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">Decision Alignment</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">68</span></div>
+              <div style="height:30px; border-radius:6px; background:#FBDAD6; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A2218;">58</span></div>
+              <div style="height:30px; border-radius:6px; background:#FBDAD6; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A2218;">57</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">70</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">66</span></div>
+              <div style="display:flex; align-items:center; padding-right:8px;"><span style="font-size:11.5px; color:#3B4B63; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; width:100%;">Meeting Effectiveness</span></div>
+              <div style="height:30px; border-radius:6px; background:#FBDAD6; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A2218;">55</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">62</span></div>
+              <div style="height:30px; border-radius:6px; background:#FBDAD6; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A2218;">56</span></div>
+              <div style="height:30px; border-radius:6px; background:#FFF0CC; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A5010;">65</span></div>
+              <div style="height:30px; border-radius:6px; background:#FBDAD6; display:flex; align-items:center; justify-content:center;"><span style="font-size:12px; font-weight:700; color:#7A2218;">54</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- RIGHT RAIL -->
+    <div style="width:{{ rightW }}px; flex-shrink:0; overflow:hidden; background:#E8ECE9; border-left:1px solid #D4DAD6; position:relative; transition:width 0.32s cubic-bezier(0.4,0,0.2,1); display:flex; flex-direction:column;">
+
+      <sc-if value="{{ rightExpanded }}" hint-placeholder-val="{{ true }}">
+        <div style="width:260px; display:flex; flex-direction:column; height:100%; overflow:hidden;">
+          <div style="display:flex; flex-shrink:0; background:#DDE3DE; border-bottom:1px solid #D4DAD6;">
+            <button onClick="{{ showContextTab }}" style="flex:1; padding:11px 0; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; cursor:pointer; font-family:inherit; border:none; border-bottom:2px solid {{ ctxLine }}; background:{{ ctxBg }}; color:{{ ctxText }}; transition:all 0.18s;">Context</button>
+            <button onClick="{{ showFiltersTab }}" style="flex:1; padding:11px 0; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; cursor:pointer; font-family:inherit; border:none; border-bottom:2px solid {{ fltLine }}; background:{{ fltBg }}; color:{{ fltText }}; transition:all 0.18s;">Filters</button>
+          </div>
+          <div style="flex:1; overflow-y:auto; padding:14px 12px 60px;">
+
+            <sc-if value="{{ showContext }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; flex-direction:column; gap:9px;">
+                <div style="border-radius:13px; border:1px solid #C8D2CF; background:#fff; padding:14px 13px;">
+                  <p style="font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8798AA; margin-bottom:6px;">Campaign</p>
+                  <p style="font-size:13px; font-weight:700; color:#152238; line-height:1.2;">Fall 2024 Survey</p>
+                  <p style="font-size:11px; color:#6E7E96; margin-top:3px;">Oct 7 – Oct 21, 2024</p>
+                  <div style="display:flex; align-items:center; gap:6px; margin-top:10px; padding-top:10px; border-top:1px solid #EEF1EE;">
+                    <span style="width:7px; height:7px; border-radius:99px; background:#2F9151; flex-shrink:0; display:block; animation:pulseGreen 2s ease infinite;"></span>
+                    <span style="font-size:11px; font-weight:600; color:#2F7048;">87% response rate</span>
+                  </div>
+                </div>
+                <div style="border-radius:13px; border:1px solid #C8D2CF; background:#fff; padding:14px 13px;">
+                  <p style="font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8798AA; margin-bottom:10px;">Sample</p>
+                  <div style="display:flex; flex-direction:column; gap:7px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:12px; color:#3B4B63; font-weight:500;">Respondents</span><span style="font-size:13px; font-weight:700; color:#152238;">312</span></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:12px; color:#3B4B63; font-weight:500;">Departments</span><span style="font-size:13px; font-weight:700; color:#152238;">5</span></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;"><span style="font-size:12px; color:#3B4B63; font-weight:500;">Statements</span><span style="font-size:13px; font-weight:700; color:#152238;">42</span></div>
+                  </div>
+                </div>
+                <div style="border-radius:13px; border:1px solid #C8D2CF; background:#fff; padding:14px 13px;">
+                  <p style="font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8798AA; margin-bottom:10px;">Score Legend</p>
+                  <div style="display:flex; flex-direction:column; gap:7px;">
+                    <div style="display:flex; align-items:center; gap:9px;"><span style="width:10px; height:10px; border-radius:2px; background:#2F9151; flex-shrink:0; display:block;"></span><span style="font-size:12px; color:#3B4B63; font-weight:500;">80+ · Strength</span></div>
+                    <div style="display:flex; align-items:center; gap:9px;"><span style="width:10px; height:10px; border-radius:2px; background:#5B7EA8; flex-shrink:0; display:block;"></span><span style="font-size:12px; color:#3B4B63; font-weight:500;">70–79 · On track</span></div>
+                    <div style="display:flex; align-items:center; gap:9px;"><span style="width:10px; height:10px; border-radius:2px; background:#C99A3C; flex-shrink:0; display:block;"></span><span style="font-size:12px; color:#3B4B63; font-weight:500;">60–69 · Watch</span></div>
+                    <div style="display:flex; align-items:center; gap:9px;"><span style="width:10px; height:10px; border-radius:2px; background:#D94A3A; flex-shrink:0; display:block;"></span><span style="font-size:12px; color:#3B4B63; font-weight:500;">&lt;60 · Risk</span></div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ showFilters }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; flex-direction:column; gap:9px;">
+                <div style="border-radius:13px; border:1px solid #C8D2CF; background:#fff; padding:14px 13px;">
+                  <p style="font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8798AA; margin-bottom:8px;">Department</p>
+                  <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                    <sc-for list="{{ deptFilters }}" as="dept" hint-placeholder-count="6">
+                      <button onClick="{{ dept.onSelect }}" style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid {{ dept.border }}; background:{{ dept.bg }}; color:{{ dept.text }}; transition:all 0.15s;">{{ dept.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="border-radius:13px; border:1px solid #C8D2CF; background:#fff; padding:14px 13px;">
+                  <p style="font-size:9.5px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8798AA; margin-bottom:8px;">Role Level</p>
+                  <div style="display:flex; flex-wrap:wrap; gap:5px;">
+                    <sc-for list="{{ roleFilters }}" as="role" hint-placeholder-count="4">
+                      <button onClick="{{ role.onSelect }}" style="padding:4px 10px; border-radius:99px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid {{ role.border }}; background:{{ role.bg }}; color:{{ role.text }}; transition:all 0.15s;">{{ role.label }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ rightCollapsed }}" hint-placeholder-val="{{ false }}">
+        <div style="width:44px; flex:1; display:flex; flex-direction:column; align-items:center; padding:18px 0; gap:8px;">
+          <button onClick="{{ showContextTab }}" title="Context" style="width:30px; height:30px; border-radius:9px; background:#fff; border:1px solid #C8D2CF; display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer; transition:all 0.15s;">📊</button>
+          <div style="width:20px; height:1px; background:#C8D2CF;"></div>
+          <button onClick="{{ showFiltersTab }}" title="Segment Filters" style="width:30px; height:30px; border-radius:9px; background:#fff; border:1px solid #C8D2CF; display:flex; align-items:center; justify-content:center; font-size:14px; cursor:pointer; transition:all 0.15s;">⚙️</button>
+        </div>
+      </sc-if>
+
+      <div style="position:absolute; left:-15px; top:50%; transform:translateY(-50%); z-index:10;">
+        <button onClick="{{ toggleRight }}" style="width:30px; height:30px; border-radius:99px; background:#fff; border:1px solid #8798AA; display:flex; align-items:center; justify-content:center; cursor:pointer; box-shadow:0 2px 8px rgba(15,23,42,0.14); color:#3B4B63; font-size:15px; font-family:inherit; transition:all 0.18s;">{{ rightToggle }}</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+
+class Component extends DCLogic {
+  state = {
+    headerVisible: true,
+    leftExpanded: true,
+    rightExpanded: true,
+    rightTab: 'context',
+    activeReportId: 'ci-summary',
+    openViewId: 'exec',
+    openPinId: null,
+    activeDept: 'all',
+    activeRole: 'all',
+    showBenchmark: true,
+    lastScrollY: 0,
+  };
+
+  _views = [
+    { id: 'exec', label: 'Executive View', reports: [
+      { id: 'ci-summary', label: 'CI Executive Summary' },
+      { id: 'action-priorities', label: 'Action Priorities' },
+      { id: 'relationships', label: 'Relationship Map' },
+    ] },
+    { id: 'hr', label: 'HR View', reports: [
+      { id: 'engagement', label: 'Engagement & Retention' },
+      { id: 'manager-eff', label: 'Manager Effectiveness' },
+      { id: 'onboarding', label: 'Onboarding Pulse' },
+    ] },
+    { id: 'dept', label: 'Department View', reports: [
+      { id: 'eng', label: 'Engineering' },
+      { id: 'product', label: 'Product' },
+      { id: 'sales', label: 'Sales' },
+      { id: 'finance', label: 'Finance' },
+    ] },
+  ];
+
+  _rawDims = [
+    { label: 'Cross-functional Collaboration', score: 72, bench: 68 },
+    { label: 'Information Sharing', score: 68, bench: 71 },
+    { label: 'Trust & Psychological Safety', score: 81, bench: 74 },
+    { label: 'Decision Alignment', score: 65, bench: 67 },
+    { label: 'Feedback Culture', score: 74, bench: 70 },
+    { label: 'Meeting Effectiveness', score: 59, bench: 63 },
+  ];
+
+  _rawPins = [
+    { id: 'p1', dotColor: '#2F9151', title: 'Trust is a standout strength', body: 'At 81, Trust & Psychological Safety leads all dimensions and exceeds benchmark by 7 pts. Preserve through consistent leadership behavior and visible accountability.' },
+    { id: 'p2', dotColor: '#D94A3A', title: 'Meeting effectiveness needs attention', body: 'Scoring 59, 4 pts below benchmark. Focus groups surfaced concerns around agenda clarity and follow-through on action items after meetings.' },
+    { id: 'p3', dotColor: '#5B7EA8', title: 'Information sharing trending down', body: 'Year-over-year decline of 5 points. Consider cross-departmental communication rituals and shared documentation standards.' },
+  ];
+
+  _kpis = [
+    { label: 'Overall CI Score', value: '72', unit: '', hasTrend: true, trend: '▲ +4 YoY', trendBg: '#E7F2EB', trendColor: '#2F7048' },
+    { label: 'vs. Benchmark', value: '+4', unit: 'pts', hasTrend: false },
+    { label: 'Response Rate', value: '87', unit: '%', hasTrend: true, trend: '▲ +3%', trendBg: '#E7F2EB', trendColor: '#2F7048' },
+    { label: 'Respondents', value: '312', unit: '', hasTrend: false },
+  ];
+
+  _depts = [
+    { id: 'all', label: 'All' }, { id: 'eng', label: 'Engineering' }, { id: 'product', label: 'Product' },
+    { id: 'sales', label: 'Sales' }, { id: 'hr', label: 'HR' }, { id: 'finance', label: 'Finance' },
+  ];
+  _roles = [
+    { id: 'all', label: 'All' }, { id: 'manager', label: 'Manager' }, { id: 'ic', label: 'IC' }, { id: 'director', label: 'Director+' },
+  ];
+
+  _scoreColor(n) { if (n >= 80) return '#2F9151'; if (n >= 70) return '#5B7EA8'; if (n >= 60) return '#C99A3C'; return '#D94A3A'; }
+  _chipBg(n) { if (n >= 80) return '#EBF5EF'; if (n >= 70) return '#EAF0F7'; if (n >= 60) return '#FFF6E6'; return '#FBECE9'; }
+
+  _findActive() {
+    for (const v of this._views) {
+      const r = v.reports.find(x => x.id === this.state.activeReportId);
+      if (r) return { view: v, report: r };
+    }
+    return { view: this._views[0], report: this._views[0].reports[0] };
+  }
+
+  onScroll = (e) => {
+    const scrollY = e.target.scrollTop;
+    const delta = scrollY - this.state.lastScrollY;
+    const next = { lastScrollY: scrollY };
+    if (delta > 40 && scrollY > 80) next.headerVisible = false;
+    else if (delta < -20) next.headerVisible = true;
+    this.setState(next);
+  };
+
+  renderVals() {
+    const {
+      headerVisible, leftExpanded, rightExpanded, rightTab,
+      activeReportId, openViewId, openPinId, activeDept, activeRole, showBenchmark,
+    } = this.state;
+
+    const leftW = leftExpanded ? 260 : 44;
+    const rightW = rightExpanded ? 260 : 44;
+
+    const active = this._findActive();
+
+    const views = this._views.map(v => {
+      const containsActive = v.reports.some(r => r.id === activeReportId);
+      return {
+        id: v.id,
+        label: v.label,
+        count: v.reports.length,
+        open: openViewId === v.id,
+        chevron: openViewId === v.id ? 'rotate(180deg)' : 'rotate(0deg)',
+        headerBg: containsActive ? 'rgba(201,154,60,0.08)' : 'transparent',
+        headerText: containsActive ? '#152238' : '#3B4B63',
+        headerWeight: containsActive ? 700 : 600,
+        onToggle: () => this.setState(s => ({ openViewId: s.openViewId === v.id ? null : v.id })),
+        reports: v.reports.map(r => {
+          const isActive = activeReportId === r.id;
+          return {
+            id: r.id,
+            label: r.label,
+            dot: isActive ? '#C99A3C' : '#C8D2CF',
+            bg: isActive ? '#fff' : 'transparent',
+            border: isActive ? '#8798AA' : 'transparent',
+            shadow: isActive ? '0 1px 3px rgba(15,23,42,0.08)' : 'none',
+            text: isActive ? '#152238' : '#59675C',
+            weight: isActive ? 700 : 600,
+            onSelect: () => this.setState({ activeReportId: r.id, openViewId: v.id }),
+          };
+        }),
+      };
+    });
+
+    const pins = this._rawPins.map(pin => ({
+      ...pin,
+      open: openPinId === pin.id,
+      chevron: openPinId === pin.id ? 'rotate(180deg)' : 'rotate(0deg)',
+      onToggle: () => this.setState(s => ({ openPinId: s.openPinId === pin.id ? null : pin.id })),
+    }));
+
+    const dimensions = this._rawDims.map((dim, i) => {
+      const delta = dim.score - dim.bench;
+      return {
+        ...dim,
+        barW: dim.score + '%',
+        benchW: dim.bench + '%',
+        color: this._scoreColor(dim.score),
+        chipBg: this._chipBg(dim.score),
+        deltaLabel: delta >= 0 ? '+' + delta : String(delta),
+        deltaBg: delta >= 0 ? '#E7F2EB' : '#FBEBE9',
+        deltaText: delta >= 0 ? '#2F7048' : '#9B3D35',
+        rowBorder: i === this._rawDims.length - 1 ? 'transparent' : '#F1F4F1',
+      };
+    });
+
+    const isContext = rightTab === 'context';
+
+    const deptFilters = this._depts.map(d => {
+      const on = activeDept === d.id;
+      return { ...d, bg: on ? '#152238' : '#F5F7F5', border: on ? '#152238' : '#D4DAD6', text: on ? '#fff' : '#3B4B63', onSelect: () => this.setState({ activeDept: d.id }) };
+    });
+    const roleFilters = this._roles.map(r => {
+      const on = activeRole === r.id;
+      return { ...r, bg: on ? '#152238' : '#F5F7F5', border: on ? '#152238' : '#D4DAD6', text: on ? '#fff' : '#3B4B63', onSelect: () => this.setState({ activeRole: r.id }) };
+    });
+
+    return {
+      leftW, rightW,
+      chromeMaxH: headerVisible ? '64px' : '0px',
+      revealOpacity: headerVisible ? 0 : 1,
+      revealEvents: headerVisible ? 'none' : 'auto',
+      leftExpanded, leftCollapsed: !leftExpanded,
+      rightExpanded, rightCollapsed: !rightExpanded,
+      leftToggle: leftExpanded ? '‹' : '›',
+      rightToggle: rightExpanded ? '›' : '‹',
+
+      views,
+      activeViewLabel: active.view.label,
+      activeReportLabel: active.report.label,
+
+      showContext: isContext,
+      showFilters: !isContext,
+      ctxBg: isContext ? '#fff' : 'transparent',
+      ctxText: isContext ? '#152238' : '#6E7E96',
+      ctxLine: isContext ? '#2F9151' : 'transparent',
+      fltBg: !isContext ? '#fff' : 'transparent',
+      fltText: !isContext ? '#152238' : '#6E7E96',
+      fltLine: !isContext ? '#2F9151' : 'transparent',
+
+      pins, pinCount: pins.length,
+      kpis: this._kpis, dimensions,
+      deptFilters, roleFilters,
+      benchBg: showBenchmark ? '#2F9151' : '#D4DAD6',
+      benchThumb: showBenchmark ? '20px' : '2px',
+
+      toggleChrome: () => this.setState(s => ({ headerVisible: !s.headerVisible })),
+      showChrome: () => this.setState({ headerVisible: true }),
+      toggleLeft: () => this.setState(s => ({ leftExpanded: !s.leftExpanded })),
+      toggleRight: () => this.setState(s => ({ rightExpanded: !s.rightExpanded })),
+      toggleBenchmark: () => this.setState(s => ({ showBenchmark: !s.showBenchmark })),
+      showContextTab: () => this.setState({ rightTab: 'context', rightExpanded: true }),
+      showFiltersTab: () => this.setState({ rightTab: 'filters', rightExpanded: true }),
+      onScroll: this.onScroll,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

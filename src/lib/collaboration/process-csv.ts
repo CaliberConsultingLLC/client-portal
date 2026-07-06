@@ -281,14 +281,26 @@ export function processCollaborationCSV(
 
     const metrics = departmentMetrics.find((m) => m.department === dept);
 
+    const ciRaterIds = new Set<string>();
+    for (const row of respondents) {
+      const respDept = normDept(row[6]);
+      if (respDept === dept) continue;
+      const qItems = deptQuantItems[dept];
+      if (!qItems) continue;
+      const hasCi = qItems.some((itemId) => getVal(row, itemId) !== null);
+      if (hasCi) ciRaterIds.add(String(row[0] ?? row.join("|")));
+    }
+
     return {
       department: dept,
       incomingCDRS: metrics?.incomingCDRS ?? 0,
       outgoingCDRS: metrics?.outgoingCDRS ?? 0,
       collaborationIndex: metrics?.collaborationIndex ?? 0,
       responseCount: metrics?.incomingCount ?? 0,
+      ciRaterCount: ciRaterIds.size,
       incomingByDept,
       outgoingByDept,
+      ciByDept: [],
       questionScores: metrics?.questionScores ?? [],
     };
   });

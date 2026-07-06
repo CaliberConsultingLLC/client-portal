@@ -1,27 +1,52 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
 import { EECampaignResults } from "./ee-campaign-results";
 import { EEDepartmentComparison } from "./ee-department-comparison";
 import { EELocationComparison } from "./ee-location-comparison";
 import { EEDepartmentReport } from "./ee-department-report";
+import { EESegmentBreakdown } from "./ee-segment-breakdown";
 import { EEHistoricalReport } from "./ee-historical-report";
 import { EESupervisorReport } from "./ee-supervisor-report";
+import { EESupervisorComparison } from "./ee-supervisor-comparison";
 import { EEEnpsReport } from "./ee-enps-report";
 import { EEExecutiveRail, EE_GUIDANCE_RAIL_STYLE, EE_PERSPECTIVE_CANVAS_STYLE, EE_PERSPECTIVE_MAIN_STYLE } from "./ee-executive-rail";
-import { buildEmployeeExperienceReportBundle } from "./ee-live-projections";
-import { ClientMark, defaultComparisonId } from "./ee-report-kit";
+import { FieldRedesignShell } from "./field-redesign-shell";
+
+// DWS Field redesign pilot: id of the portal target rendered inside the shell's
+// right-rail "Filters" tab (report-style perspectives portal their selectors here).
+const FR_FILTERS_SLOT = "fr-filters-slot";
+// DWS Field redesign pilot: id of the portal target rendered inline in the
+// shell's single top header, so every report's KPI strip lands next to the
+// title instead of drawing a second, boxed hero underneath it.
+const FR_HEADER_EXTRA_SLOT = "fr-header-extra-slot";
+// DWS Field redesign pilot: id of the portal target appended right after the
+// title, e.g. "Basin Report — East Texas" for reports with a unit picker.
+const FR_TITLE_SUFFIX_SLOT = "fr-title-suffix-slot";
+import { buildEmployeeExperienceReportBundle, projectEnpsReportData, projectSupervisorReportData } from "./ee-live-projections";
+import { ClientMark, defaultComparisonId, EmbeddedFilterCard, HeaderKpiPortal, PillOptionRow } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
 import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
-import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
+import { scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
+import { dwsScoreColor, dwsRawScoreColor, makeGradientColor } from "./ee-report-kit";
 import { mergeHiddenDimensionIds } from "@/lib/employee-experience/excluded-dimensions";
 import { isKnownBrandSegment } from "@/lib/employee-experience/brand-segment";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
+import { VisualExportButton } from "@/components/dashboard/visual-export-button";
+import { VisualExportProvider, useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
+import { CompositeVisualExportButton } from "@/components/dashboard/composite-visual-export-button";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import {
+  buildDashboardExportFilename,
+  DASHBOARD_VISUAL_EXPORT_TARGET_ID,
+} from "@/lib/dashboard/export-visual";
 import { cn } from "@/lib/utils";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
+import type { EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
 import type {
   EmployeeExperienceDashboardData,
   EmployeeExperienceQuestionDefinition,
@@ -31,6 +56,12 @@ import type {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const EE = { min: 6, mid: 7.25, max: 8.5, minLabel: "60", maxLabel: "85" } as const;
+
+// DWS Field uses a tighter color scale: bottom 50, white midpoint 62.5, top (blue) 75.
+// Display scale (0–100) drives report/comparison axes, legends, and fill colors;
+// the raw scale (0–10) drives the Heat Maps perspective.
+const FIELD_REPORT_SCALE = { min: 50, mid: 62.5, max: 75 } as const;
+const FIELD_RAW_SCALE = { min: 5, mid: 6.25, max: 7.5, minLabel: "50", maxLabel: "75" } as const;
 
 const EE_PANEL =
   "overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[7px_9px_20px_rgba(15,23,42,0.09),2px_3px_6px_rgba(15,23,42,0.05)]";
@@ -72,7 +103,7 @@ function EEPanelContent({
   return <div className={cn("px-6 pb-6", className)}>{children}</div>;
 }
 
-const DIM_ORDER = ["Acquisition", "Culture", "Daily Work", "Intent", "Supervisor", "Engage", "Balance"];
+const DIM_ORDER = ["Culture", "Daily Work", "Intent", "Supervisor", "Engage", "Balance"];
 
 function orderedDimensionNames(questions: EmployeeExperienceQuestionDefinition[]) {
   const present = Array.from(new Set(questions.map((question) => question.dimension)));
@@ -84,88 +115,411 @@ function orderedDimensionNames(questions: EmployeeExperienceQuestionDefinition[]
   return [...preferred, ...remaining];
 }
 
-const GROUPS = [
-  {
-    id: "executive" as const,
-    label: "Executive & HR",
-    perspectives: [
-      { id: "exec-overview" as const, label: "Campaign Overview" },
-      { id: "ee-campaign-results" as const, label: "Detailed Results" },
-      { id: "ee-historical-report" as const, label: "Detailed History" },
-      { id: "exec-location" as const, label: "Heat Maps" },
-      { id: "ee-location-comparison" as const, label: "Brand Comparison" },
-      { id: "ee-department-comparison" as const, label: "Job / Department Comparison" },
-      { id: "ee-enps" as const, label: "ENPS" },
-      { id: "hr-open-text" as const, label: "Open Text" },
-    ],
-  },
-  {
-    id: "department" as const,
-    label: "Brand",
-    perspectives: [
-      { id: "ee-brand-report" as const, label: "Brand Report" },
-      { id: "hr-supervisor" as const, label: "Supervisor Reports" },
-      { id: "ee-department-report" as const, label: "Job Category Report" },
-      { id: "ee-unit-department-report" as const, label: "Department Report" },
-      { id: "ee-enps" as const, label: "ENPS" },
-      { id: "ee-brand-open-text" as const, label: "Open Text" },
-    ],
-  },
-] as const;
-
-type GroupId = (typeof GROUPS)[number]["id"];
+type GroupId =
+  | "executive"
+  | "department"
+  | "division"
+  | "basin"
+  | "dept-group"
+  | "role-group"
+  | "supervisor-group"
+  | "autosep-group";
 type PerspectiveId =
-  | "exec-overview" | "exec-location" | "ee-campaign-results" | "ee-department-comparison" | "ee-location-comparison"
-  | "hr-index-dive" | "hr-supervisor" | "hr-open-text"
-  | "dept-scorecard" | "ee-brand-report" | "ee-brand-open-text" | "ee-department-report" | "ee-unit-department-report" | "ee-historical-report" | "ee-enps";
+  | "exec-overview"
+  | "exec-location"
+  | "ee-campaign-results"
+  | "ee-department-comparison"
+  | "ee-role-comparison"
+  | "ee-location-comparison"
+  | "ee-division-comparison"
+  | "ee-supervisor-comparison"
+  | "hr-index-dive"
+  | "hr-supervisor"
+  | "hr-open-text"
+  | "dept-scorecard"
+  | "ee-brand-report"
+  | "ee-brand-open-text"
+  | "ee-segment-breakdown"
+  | "ee-department-report"
+  | "ee-division-report"
+  | "ee-unit-department-report"
+  | "ee-historical-report"
+  | "ee-autosep-report"
+  | "ee-enps";
 
-const EXECUTIVE_PERSPECTIVES = new Set<PerspectiveId>([
-  "exec-overview",
-  "exec-location",
-  "ee-campaign-results",
-  "ee-department-comparison",
-  "ee-location-comparison",
-  "ee-historical-report",
-  "ee-enps",
-]);
-const EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER = new Set<PerspectiveId>([
-  "exec-overview",
-  "ee-campaign-results",
-  "exec-location",
-  "ee-enps",
-]);
-const EXECUTIVE_PERSPECTIVES_WITHOUT_BRAND_FILTER = new Set<PerspectiveId>([
-  "exec-overview",
-  "exec-location",
-  "ee-location-comparison",
-  "ee-enps",
-]);
-
-const EXECUTIVE_PERSPECTIVE_TITLES: Record<PerspectiveId, string> = {
-  "exec-overview": "Campaign Overview",
-  "exec-location": "Heat Maps",
-  "ee-campaign-results": "Detailed Results",
-  "ee-department-comparison": "Job / Department Comparison",
-  "ee-location-comparison": "Brand Comparison",
-  "ee-historical-report": "Detailed History",
-  "ee-enps": "ENPS",
-  "hr-index-dive": "Index Deep Dive",
-  "hr-supervisor": "Supervisor Reports",
-  "hr-open-text": "Open Text",
-  "dept-scorecard": "Department Scorecard",
-  "ee-brand-report": "Brand Report",
-  "ee-brand-open-text": "Open Text",
-  "ee-department-report": "Job Category Report",
-  "ee-unit-department-report": "Department Report",
+type PerspectiveDef = {
+  id: PerspectiveId;
+  label: string;
+  /** Left-rail navigator only: draw a thin divider above this report,
+   * grouping it apart from the ones above it (e.g. Comparison reports
+   * split off from the Report/Breakdown pair within the same view). */
+  dividerBefore?: boolean;
 };
+type GroupDef = { id: GroupId; label: string; perspectives: PerspectiveDef[] };
+type EmployeeExperienceClientScope = {
+  key: "csg" | "dws" | "dws-field";
+  brandLabel: string;
+  jobCategoryLabel: string;
+  // Short label for the org-wide benchmark shown on comparison visuals (e.g. "vs DWS").
+  benchmarkLabel: string;
+  brandGroupId: GroupId;
+  showDivisionHeatmap: boolean;
+  showLeadershipHeatmap: boolean;
+  showJobCategoryHeatmap: boolean;
+  showTenureHeatmap: boolean;
+  enableVisualLocks: boolean;
+  groups: GroupDef[];
+  executivePerspectives: Set<PerspectiveId>;
+  executiveWithoutIndexFilter: Set<PerspectiveId>;
+  executiveWithoutBrandFilter: Set<PerspectiveId>;
+  executiveTitles: Record<PerspectiveId, string>;
+  // Optional per-client open-text question labels. When omitted, the shared
+  // OPEN_TEXT_FIELDS defaults are used.
+  openTextFields?: ReadonlyArray<{ id: OpenTextField; label: string }>;
+};
+
+const CSG_SCOPE: EmployeeExperienceClientScope = {
+  key: "csg",
+  brandLabel: "Brand",
+  jobCategoryLabel: "Job Category",
+  benchmarkLabel: "CSG",
+  brandGroupId: "department",
+  showDivisionHeatmap: false,
+  showLeadershipHeatmap: false,
+  showJobCategoryHeatmap: true,
+  showTenureHeatmap: true,
+  enableVisualLocks: false,
+  groups: [
+    {
+      id: "executive",
+      label: "Executive & HR",
+      perspectives: [
+        { id: "exec-overview", label: "Campaign Overview" },
+        { id: "ee-campaign-results", label: "Detailed Results" },
+        { id: "ee-historical-report", label: "Detailed History" },
+        { id: "exec-location", label: "Heat Maps" },
+        { id: "ee-location-comparison", label: "Brand Comparison" },
+        { id: "ee-department-comparison", label: "Job / Department Comparison" },
+        { id: "ee-supervisor-comparison", label: "Supervisor Comparison" },
+        { id: "ee-enps", label: "ENPS" },
+        { id: "hr-open-text", label: "Open Text" },
+      ],
+    },
+    {
+      id: "department",
+      label: "Brand",
+      perspectives: [
+        { id: "ee-brand-report", label: "Brand Report" },
+        { id: "hr-supervisor", label: "Supervisor Reports" },
+        { id: "ee-department-report", label: "Job Category Report" },
+        { id: "ee-unit-department-report", label: "Department Report" },
+        { id: "ee-enps", label: "ENPS" },
+        { id: "ee-brand-open-text", label: "Open Text" },
+      ],
+    },
+  ],
+  executivePerspectives: new Set<PerspectiveId>([
+    "exec-overview",
+    "exec-location",
+    "ee-campaign-results",
+    "ee-department-comparison",
+    "ee-location-comparison",
+    "ee-supervisor-comparison",
+    "ee-historical-report",
+    "ee-enps",
+  ]),
+  executiveWithoutIndexFilter: new Set<PerspectiveId>([
+    "exec-overview",
+    "ee-campaign-results",
+    "exec-location",
+    "ee-supervisor-comparison",
+    "ee-enps",
+  ]),
+  executiveWithoutBrandFilter: new Set<PerspectiveId>([
+    "exec-overview",
+    "exec-location",
+    "ee-location-comparison",
+    "ee-enps",
+  ]),
+  executiveTitles: {
+    "exec-overview": "Campaign Overview",
+    "exec-location": "Heat Maps",
+    "ee-campaign-results": "Detailed Results",
+    "ee-department-comparison": "Job / Department Comparison",
+    "ee-role-comparison": "Role Comparison",
+    "ee-location-comparison": "Brand Comparison",
+    "ee-division-comparison": "Division Comparison",
+    "ee-division-report": "Division Report",
+    "ee-enps": "ENPS",
+    "ee-supervisor-comparison": "Supervisor Comparison",
+    "ee-historical-report": "Detailed History",
+    "hr-index-dive": "Index Deep Dive",
+    "hr-supervisor": "Supervisor Reports",
+    "hr-open-text": "Open Text",
+    "dept-scorecard": "Department Scorecard",
+    "ee-brand-report": "Brand Report",
+    "ee-brand-open-text": "Open Text",
+    "ee-segment-breakdown": "Basin Breakdown",
+    "ee-department-report": "Job Category Report",
+    "ee-unit-department-report": "Department Report",
+    "ee-autosep-report": "AutoSEP Report",
+  },
+};
+
+const DWS_SCOPE: EmployeeExperienceClientScope = {
+  key: "dws",
+  brandLabel: "Basin",
+  jobCategoryLabel: "Role",
+  benchmarkLabel: "DWS",
+  brandGroupId: "division",
+  showDivisionHeatmap: true,
+  showLeadershipHeatmap: true,
+  showJobCategoryHeatmap: false,
+  showTenureHeatmap: false,
+  enableVisualLocks: true,
+  groups: [
+    {
+      id: "executive",
+      label: "Executive & HR",
+      perspectives: [
+        { id: "exec-overview", label: "Campaign Overview" },
+        { id: "ee-campaign-results", label: "Detailed Results" },
+        { id: "ee-historical-report", label: "Detailed History" },
+        { id: "exec-location", label: "Heat Maps" },
+        { id: "hr-open-text", label: "Open Text" },
+      ],
+    },
+    {
+      id: "division",
+      label: "Division",
+      perspectives: [
+        { id: "ee-division-report", label: "Division Report" },
+        { id: "ee-division-comparison", label: "Division Comparison" },
+      ],
+    },
+    {
+      id: "basin",
+      label: "Basin",
+      perspectives: [
+        { id: "ee-brand-report", label: "Basin Report" },
+        { id: "ee-location-comparison", label: "Basin Comparison" },
+      ],
+    },
+    {
+      id: "dept-group",
+      label: "Department",
+      perspectives: [
+        { id: "ee-unit-department-report", label: "Department Report" },
+        { id: "ee-department-comparison", label: "Department Comparison" },
+      ],
+    },
+    {
+      id: "role-group",
+      label: "Role",
+      perspectives: [
+        { id: "ee-department-report", label: "Role Report" },
+        { id: "ee-role-comparison", label: "Role Comparison" },
+      ],
+    },
+    {
+      id: "supervisor-group",
+      label: "Supervisor",
+      perspectives: [
+        { id: "hr-supervisor", label: "Supervisor Reports" },
+        { id: "ee-supervisor-comparison", label: "Supervisor Comparison" },
+      ],
+    },
+  ],
+  executivePerspectives: new Set<PerspectiveId>([
+    "exec-overview",
+    "exec-location",
+    "ee-campaign-results",
+    "ee-department-comparison",
+    "ee-role-comparison",
+    "ee-location-comparison",
+    "ee-division-comparison",
+    "ee-supervisor-comparison",
+    "ee-historical-report",
+  ]),
+  executiveWithoutIndexFilter: new Set<PerspectiveId>([
+    "exec-overview",
+    "ee-campaign-results",
+    "exec-location",
+    "ee-supervisor-comparison",
+  ]),
+  executiveWithoutBrandFilter: new Set<PerspectiveId>([
+    "exec-overview",
+    "exec-location",
+    "ee-location-comparison",
+    "ee-division-comparison",
+    "ee-supervisor-comparison",
+  ]),
+  executiveTitles: {
+    "exec-overview": "Campaign Overview",
+    "exec-location": "Heat Maps",
+    "ee-campaign-results": "Detailed Results",
+    "ee-department-comparison": "Department Comparison",
+    "ee-role-comparison": "Role Comparison",
+    "ee-location-comparison": "Basin Comparison",
+    "ee-division-comparison": "Division Comparison",
+    "ee-division-report": "Division Report",
+    "ee-enps": "ENPS",
+    "ee-supervisor-comparison": "Supervisor Comparison",
+    "ee-historical-report": "Detailed History",
+    "hr-index-dive": "Index Deep Dive",
+    "hr-supervisor": "Supervisor Reports",
+    "hr-open-text": "Open Text",
+    "dept-scorecard": "Department Scorecard",
+    "ee-brand-report": "Basin Report",
+    "ee-brand-open-text": "Open Text",
+    "ee-segment-breakdown": "Basin Breakdown",
+    "ee-department-report": "Role Report",
+    "ee-unit-department-report": "Department Report",
+    "ee-autosep-report": "AutoSEP Report",
+  },
+};
+
+const DWS_FIELD_SCOPE: EmployeeExperienceClientScope = {
+  key: "dws-field",
+  brandLabel: "Basin",
+  jobCategoryLabel: "Job Category",
+  benchmarkLabel: "DWS",
+  brandGroupId: "basin",
+  showDivisionHeatmap: false,
+  showLeadershipHeatmap: false,
+  showJobCategoryHeatmap: true,
+  showTenureHeatmap: false,
+  enableVisualLocks: true,
+  groups: [
+    {
+      id: "executive",
+      label: "Executive & HR",
+      perspectives: [
+        { id: "exec-overview", label: "Campaign Overview" },
+        { id: "ee-campaign-results", label: "Detailed Results" },
+        { id: "ee-historical-report", label: "Detailed History" },
+        { id: "exec-location", label: "Heat Maps" },
+        { id: "hr-open-text", label: "Open Text" },
+      ],
+    },
+    {
+      id: "basin",
+      label: "Basin",
+      perspectives: [
+        { id: "ee-brand-report", label: "Basin Report" },
+        { id: "ee-location-comparison", label: "Basin Comparison" },
+      ],
+    },
+    {
+      id: "dept-group",
+      label: "Department",
+      perspectives: [
+        { id: "ee-unit-department-report", label: "Department Report" },
+        { id: "ee-department-comparison", label: "Department Comparison" },
+      ],
+    },
+    {
+      id: "role-group",
+      label: "Role",
+      perspectives: [
+        { id: "ee-department-report", label: "Job Category Report" },
+        { id: "ee-role-comparison", label: "Role Comparison" },
+      ],
+    },
+    {
+      id: "supervisor-group",
+      label: "Supervisor",
+      perspectives: [
+        { id: "hr-supervisor", label: "Supervisor Reports" },
+        { id: "ee-supervisor-comparison", label: "Supervisor Comparison" },
+      ],
+    },
+    {
+      id: "autosep-group",
+      label: "AutoSEP",
+      perspectives: [
+        { id: "ee-autosep-report", label: "AutoSEP Report" },
+      ],
+    },
+  ],
+  executivePerspectives: new Set<PerspectiveId>([
+    "exec-overview",
+    "exec-location",
+    "ee-campaign-results",
+    "ee-department-comparison",
+    "ee-role-comparison",
+    "ee-location-comparison",
+    "ee-supervisor-comparison",
+    "ee-historical-report",
+  ]),
+  executiveWithoutIndexFilter: new Set<PerspectiveId>([
+    "exec-overview",
+    "ee-campaign-results",
+    "exec-location",
+    "ee-supervisor-comparison",
+    // Field comparison pages move the index selector inline beside the bar chart.
+    "ee-location-comparison",
+    "ee-department-comparison",
+    "ee-role-comparison",
+  ]),
+  executiveWithoutBrandFilter: new Set<PerspectiveId>([
+    "exec-overview",
+    "exec-location",
+    "ee-location-comparison",
+    "ee-supervisor-comparison",
+  ]),
+  executiveTitles: {
+    "exec-overview": "Campaign Overview",
+    "exec-location": "Heat Maps",
+    "ee-campaign-results": "Detailed Results",
+    "ee-department-comparison": "Department Comparison",
+    "ee-role-comparison": "Job Category Comparison",
+    "ee-location-comparison": "Basin Comparison",
+    "ee-division-comparison": "Division Comparison",
+    "ee-division-report": "Division Report",
+    "ee-enps": "ENPS",
+    "ee-supervisor-comparison": "Supervisor Comparison",
+    "ee-historical-report": "Detailed History",
+    "hr-index-dive": "Index Deep Dive",
+    "hr-supervisor": "Supervisor Reports",
+    "hr-open-text": "Open Text",
+    "dept-scorecard": "Department Scorecard",
+    "ee-brand-report": "Basin Report",
+    "ee-brand-open-text": "Open Text",
+    "ee-segment-breakdown": "Basin Breakdown",
+    "ee-department-report": "Job Category Report",
+    "ee-unit-department-report": "Department Report",
+    "ee-autosep-report": "AutoSEP Report",
+  },
+  // Field survey has two open-text questions, mapped in CSV order to the
+  // strengths/improvement comment buckets by the data loader.
+  openTextFields: [
+    { id: "strengths", label: "Culture Champions" },
+    { id: "improvement", label: "Feedback for Leadership" },
+  ],
+};
+
+function resolveEmployeeExperienceClientScope(organizationName: string) {
+  const normalized = organizationName.trim().toLowerCase();
+  if (normalized.includes("canopy") || normalized.includes("csg")) return CSG_SCOPE;
+  // Check "field" before "deep" since "Deep Well Services — Field" matches both
+  if (normalized.includes("field")) return DWS_FIELD_SCOPE;
+  if (normalized.includes("deep") || normalized.includes("dws")) return DWS_SCOPE;
+  // Guardrail: unknown clients are blocked in development to avoid accidental cross-client edits.
+  if (process.env.NODE_ENV !== "production") {
+    throw new Error(
+      `Unrecognized EE client scope for organization "${organizationName}". Add an explicit scoped profile before editing shared dashboard behavior.`
+    );
+  }
+  return DWS_SCOPE;
+}
 
 const OPEN_TEXT_FIELDS = [
   { id: "strengths" as const, label: "Greatest Strengths", dimensionId: undefined },
   { id: "improvement" as const, label: "Desired Changes", dimensionId: undefined },
   { id: "supervisor" as const, label: "Supervisor Feedback", dimensionId: undefined },
-  { id: "acquisition" as const, label: "Acquisition Comments", dimensionId: "acquisition" },
 ];
-type OpenTextField = "strengths" | "improvement" | "supervisor" | "acquisition";
+type OpenTextField = "strengths" | "improvement" | "supervisor";
 const COMPARISON_ALL = "__ALL__";
 const PREFERRED_CURRENT_CAMPAIGN = "May 2026";
 const PREFERRED_PRIOR_CAMPAIGN = "Aug 2025";
@@ -259,7 +613,7 @@ function fmtDelta(delta: number | null): string {
 
 // ─── Shared UI ────────────────────────────────────────────────────────────────
 
-function sColor(score: number) { return scoreScaleColor(score, EE.min, EE.mid, EE.max); }
+function sColor(score: number) { return dwsRawScoreColor(score); }
 function sTColor(score: number) { return scoreScaleTextColor(score, EE.mid, 0.8, EE.min, EE.max); }
 
 function ScoreChip({ score, size = "md" }: { score: number; size?: "sm" | "md" | "lg" }) {
@@ -336,8 +690,10 @@ function CampaignRail({
   campaigns: string[]; current: string; prior: string;
   onCurrent: (v: string) => void; onPrior: (v: string) => void;
 }) {
+  // Nothing to compare against with a single campaign — hide the selector entirely.
+  if (campaigns.length <= 1) return null;
   return (
-    <RailSection title="Campaign Selection">
+    <RailSection title="Campaign Selection" defaultOpen>
       <div className="mx-auto max-w-[220px] space-y-3 text-center">
         <div>
           <span className="text-xs font-medium text-text-secondary">Current</span>
@@ -613,11 +969,18 @@ function ExecutiveHeader({
   title,
   subtitle,
   kpis,
+  chromeless = false,
+  headerPortalId,
 }: {
   title: string;
   subtitle: string;
   kpis: Array<{ label: string; value: string }>;
+  chromeless?: boolean;
+  headerPortalId?: string;
 }) {
+  if (chromeless) {
+    return <HeaderKpiPortal portalId={headerPortalId} items={kpis} />;
+  }
   return (
     <EEPanel className="bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
       <div className="p-4">
@@ -782,8 +1145,43 @@ function ExecOverview({
 // ─── Executive: Brand Breakdown ──────────────────────────────────────────────
 
 function ExecLocation({
-  data, current, prior, locationFilter = "",
-}: { data: EmployeeExperienceDashboardData; current: string; prior: string; locationFilter?: string }) {
+  data,
+  current,
+  prior,
+  locationFilter = "",
+  brandLabel,
+  jobCategoryLabel,
+  showDivisionHeatmap,
+  showLeadershipHeatmap,
+  showJobCategoryHeatmap,
+  showTenureHeatmap,
+  scale = EE,
+  chromeless = false,
+  headerPortalId,
+}: {
+  data: EmployeeExperienceDashboardData;
+  current: string;
+  prior: string;
+  locationFilter?: string;
+  brandLabel: string;
+  jobCategoryLabel: string;
+  showDivisionHeatmap: boolean;
+  showLeadershipHeatmap: boolean;
+  showJobCategoryHeatmap: boolean;
+  showTenureHeatmap: boolean;
+  scale?: { min: number; mid: number; max: number; minLabel: string; maxLabel: string };
+  chromeless?: boolean;
+  headerPortalId?: string;
+}) {
+  // Reorient the Heat Maps perspective to the dashboard's score scale: shadow the
+  // module-level EE scale and raw color resolver with the passed-in scale.
+  const EE = scale;
+  const dwsRawScoreColor = makeGradientColor(scale.min, scale.max);
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  const heatExportFile = (section: string) =>
+    buildDashboardExportFilename({ client: "dws", perspective: `heat-maps-${section}`, campaign: current });
   const min = data.settings.minimumSegmentSize;
   const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
   const curR = useMemo(() => {
@@ -804,45 +1202,6 @@ function ExecLocation({
     return m;
   }, [dims]);
 
-  const locations = useMemo(
-    () => uniq(curR, "location", min).filter(isKnownBrandSegment),
-    [curR, min]
-  );
-  const locRowTotals = useMemo(() => {
-    const m: Record<string, number> = {};
-    locations.forEach((loc) => { m[loc] = groupScore(curR.filter((r) => r.location === loc), allIds); });
-    return m;
-  }, [locations, curR, allIds]);
-  const sortedLocs = useMemo(() => [...locations].sort((a, b) => (locRowTotals[b] ?? 0) - (locRowTotals[a] ?? 0)), [locations, locRowTotals]);
-  const locHeatData = useMemo(() =>
-    locations.map((loc) => {
-      const lr = curR.filter((r) => r.location === loc);
-      const locDims = buildDims(data.questions, lr, []);
-      const scores: Record<string, number | null> = {};
-      locDims.forEach((d) => { scores[d.label] = d.score || null; });
-      return { department: loc, scores };
-    }),
-    [locations, curR, data.questions]
-  );
-
-  const workTypes = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
-  const wtRowTotals = useMemo(() => {
-    const m: Record<string, number> = {};
-    workTypes.forEach((wt) => { m[wt] = groupScore(curR.filter((r) => r.fieldCategory === wt), allIds); });
-    return m;
-  }, [workTypes, curR, allIds]);
-  const sortedWts = useMemo(() => [...workTypes].sort((a, b) => (wtRowTotals[b] ?? 0) - (wtRowTotals[a] ?? 0)), [workTypes, wtRowTotals]);
-  const wtHeatData = useMemo(() =>
-    workTypes.map((wt) => {
-      const wr = curR.filter((r) => r.fieldCategory === wt);
-      const wtDims = buildDims(data.questions, wr, []);
-      const scores: Record<string, number | null> = {};
-      wtDims.forEach((d) => { scores[d.label] = d.score || null; });
-      return { department: wt, scores };
-    }),
-    [workTypes, curR, data.questions]
-  );
-
   function buildGroupedHeatmap(field: keyof EmployeeExperienceRespondent) {
     const groups = uniq(curR, field, min);
     const rowTotals: Record<string, number> = {};
@@ -860,15 +1219,27 @@ function ExecLocation({
     return { sortedRows, rowTotals, heatData };
   }
 
-  const generationHeatmap = useMemo(() => buildGroupedHeatmap("generation"), [curR, data.questions, allIds]);
+  const divisionHeatmap = useMemo(() => buildGroupedHeatmap("division"), [curR, data.questions, allIds]);
+  const brandHeatmap = useMemo(() => buildGroupedHeatmap("location"), [curR, data.questions, allIds]);
+  const departmentHeatmap = useMemo(() => buildGroupedHeatmap("department"), [curR, data.questions, allIds]);
+  const leadershipHeatmap = useMemo(() => buildGroupedHeatmap("leadership"), [curR, data.questions, allIds]);
+  const jobCategoryHeatmap = useMemo(() => buildGroupedHeatmap("fieldCategory"), [curR, data.questions, allIds]);
   const tenureHeatmap = useMemo(() => buildGroupedHeatmap("tenure"), [curR, data.questions, allIds]);
-  const jobCategoryHeatmap = useMemo(() => buildGroupedHeatmap("jobTitle"), [curR, data.questions, allIds]);
 
   if (curR.length < min) return <Empty message="Insufficient responses for the selected campaign." />;
 
   const overallScore = groupScore(curR, allIds);
   const priorScore = priR.length > 0 ? groupScore(priR, allIds) : null;
   const overallDelta = priorScore !== null ? r1(overallScore - priorScore) : null;
+
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "Heat Maps",
+      filters: [locationFilter || undefined, current].filter(
+        (value): value is string => Boolean(value)
+      ),
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -877,122 +1248,183 @@ function ExecLocation({
         subtitle={`${current}${prior ? ` vs ${prior}` : ""}`}
         kpis={[
           { label: "Responses", value: curR.length.toLocaleString() },
-          { label: "Brands", value: sortedLocs.length.toString() },
           { label: "Campaign Average", value: formatScoreForDisplay(overallScore) },
-          { label: "Change From Previous", value: fmtDelta(overallDelta) },
+          ...(prior ? [{ label: "Change From Previous", value: fmtDelta(overallDelta) }] : []),
         ]}
+        chromeless={chromeless}
+        headerPortalId={headerPortalId}
       />
-      {sortedLocs.length > 0 ? (
+
+      {showDivisionHeatmap ? (
+        divisionHeatmap.sortedRows.length > 0 ? (
+          <RegisteredVisualExportFrame order={10} label="Download heat map" filename={heatExportFile("by-division")}>
+          <EEPanel>
+            <EEPanelHeader
+              title="By Division"
+              description="Score per dimension grouped by division. Rows sorted highest to lowest overall score."
+            />
+            <EEPanelContent className="pt-0">
+              <HeatmapChart
+                rows={divisionHeatmap.sortedRows}
+                columns={dimNames}
+                data={divisionHeatmap.heatData}
+                rowTotals={divisionHeatmap.rowTotals}
+                columnTotals={dimColTotals}
+              scoreColorResolver={dwsRawScoreColor}
+                rowLabelHeader="Division"
+                minValue={EE.min}
+                midpoint={EE.mid}
+                maxValue={EE.max}
+              />
+            </EEPanelContent>
+          </EEPanel>
+          </RegisteredVisualExportFrame>
+        ) : (
+          <Empty message="No divisions meet the minimum response threshold." />
+        )
+      ) : null}
+
+      {brandHeatmap.sortedRows.length > 0 ? (
+        <RegisteredVisualExportFrame order={20} label="Download heat map" filename={heatExportFile("by-brand")}>
         <EEPanel>
           <EEPanelHeader
-            title="By Brand"
-            description="Score per dimension grouped by company brand. Overall score in the rightmost column."
+            title={`By ${brandLabel}`}
+            description={`Score per dimension grouped by ${brandLabel.toLowerCase()}. Rows sorted highest to lowest overall score.`}
           />
           <EEPanelContent className="pt-0">
             <HeatmapChart
-              rows={sortedLocs}
+              rows={brandHeatmap.sortedRows}
               columns={dimNames}
-              data={locHeatData}
-              rowTotals={locRowTotals}
+              data={brandHeatmap.heatData}
+              rowTotals={brandHeatmap.rowTotals}
               columnTotals={dimColTotals}
-              rowLabelHeader="Brand"
+              scoreColorResolver={dwsRawScoreColor}
+              rowLabelHeader={brandLabel}
               minValue={EE.min}
               midpoint={EE.mid}
               maxValue={EE.max}
             />
           </EEPanelContent>
         </EEPanel>
+        </RegisteredVisualExportFrame>
       ) : (
-        <Empty message="No brands meet the minimum response threshold." />
+        <Empty message={`No ${brandLabel.toLowerCase()}s meet the minimum response threshold.`} />
       )}
 
-      {sortedWts.length > 0 && (
+      {departmentHeatmap.sortedRows.length > 0 ? (
+        <RegisteredVisualExportFrame order={30} label="Download heat map" filename={heatExportFile("by-department")}>
         <EEPanel>
           <EEPanelHeader
-            title="By Work Type"
-            description="Score per dimension grouped by field category (Field, Office, Shop, etc.)."
+            title="By Department"
+            description="Score per dimension grouped by department. Rows sorted highest to lowest overall score."
           />
           <EEPanelContent className="pt-0">
             <HeatmapChart
-              rows={sortedWts}
+              rows={departmentHeatmap.sortedRows}
               columns={dimNames}
-              data={wtHeatData}
-              rowTotals={wtRowTotals}
+              data={departmentHeatmap.heatData}
+              rowTotals={departmentHeatmap.rowTotals}
               columnTotals={dimColTotals}
-              rowLabelHeader="Work Type"
+              scoreColorResolver={dwsRawScoreColor}
+              rowLabelHeader="Department"
               minValue={EE.min}
               midpoint={EE.mid}
               maxValue={EE.max}
             />
           </EEPanelContent>
         </EEPanel>
+        </RegisteredVisualExportFrame>
+      ) : (
+        <Empty message="No departments meet the minimum response threshold." />
       )}
 
-      {generationHeatmap.sortedRows.length > 0 && (
-        <EEPanel>
-          <EEPanelHeader
-            title="By Generation"
-            description="Score per dimension grouped by generation."
-          />
-          <EEPanelContent className="pt-0">
-            <HeatmapChart
-              rows={generationHeatmap.sortedRows}
-              columns={dimNames}
-              data={generationHeatmap.heatData}
-              rowTotals={generationHeatmap.rowTotals}
-              columnTotals={dimColTotals}
-              rowLabelHeader="Generation"
-              minValue={EE.min}
-              midpoint={EE.mid}
-              maxValue={EE.max}
+      {showLeadershipHeatmap ? (
+        leadershipHeatmap.sortedRows.length > 0 ? (
+          <RegisteredVisualExportFrame order={40} label="Download heat map" filename={heatExportFile("by-leadership")}>
+          <EEPanel>
+            <EEPanelHeader
+              title={`By ${jobCategoryLabel}`}
+              description={`Score per dimension grouped by ${jobCategoryLabel.toLowerCase()}. Rows sorted highest to lowest overall score.`}
             />
-          </EEPanelContent>
-        </EEPanel>
-      )}
+            <EEPanelContent className="pt-0">
+              <HeatmapChart
+                rows={leadershipHeatmap.sortedRows}
+                columns={dimNames}
+                data={leadershipHeatmap.heatData}
+                rowTotals={leadershipHeatmap.rowTotals}
+                columnTotals={dimColTotals}
+                scoreColorResolver={dwsRawScoreColor}
+                rowLabelHeader={jobCategoryLabel}
+                minValue={EE.min}
+                midpoint={EE.mid}
+                maxValue={EE.max}
+              />
+            </EEPanelContent>
+          </EEPanel>
+          </RegisteredVisualExportFrame>
+        ) : (
+          <Empty message={`No ${jobCategoryLabel.toLowerCase()}s meet the minimum response threshold.`} />
+        )
+      ) : null}
 
-      {tenureHeatmap.sortedRows.length > 0 && (
-        <EEPanel>
-          <EEPanelHeader
-            title="By Tenure"
-            description="Score per dimension grouped by tenure cohort."
-          />
-          <EEPanelContent className="pt-0">
-            <HeatmapChart
-              rows={tenureHeatmap.sortedRows}
-              columns={dimNames}
-              data={tenureHeatmap.heatData}
-              rowTotals={tenureHeatmap.rowTotals}
-              columnTotals={dimColTotals}
-              rowLabelHeader="Tenure"
-              minValue={EE.min}
-              midpoint={EE.mid}
-              maxValue={EE.max}
+      {showJobCategoryHeatmap ? (
+        jobCategoryHeatmap.sortedRows.length > 0 ? (
+          <RegisteredVisualExportFrame order={50} label="Download heat map" filename={heatExportFile("by-job-category")}>
+          <EEPanel>
+            <EEPanelHeader
+              title="By Job Category"
+              description="Score per dimension grouped by job category. Rows sorted highest to lowest overall score."
             />
-          </EEPanelContent>
-        </EEPanel>
-      )}
+            <EEPanelContent className="pt-0">
+              <HeatmapChart
+                rows={jobCategoryHeatmap.sortedRows}
+                columns={dimNames}
+                data={jobCategoryHeatmap.heatData}
+                rowTotals={jobCategoryHeatmap.rowTotals}
+                columnTotals={dimColTotals}
+                scoreColorResolver={dwsRawScoreColor}
+                rowLabelHeader="Job Category"
+                minValue={EE.min}
+                midpoint={EE.mid}
+                maxValue={EE.max}
+              />
+            </EEPanelContent>
+          </EEPanel>
+          </RegisteredVisualExportFrame>
+        ) : (
+          <Empty message="No job categories meet the minimum response threshold." />
+        )
+      ) : null}
 
-      {jobCategoryHeatmap.sortedRows.length > 0 && (
-        <EEPanel>
-          <EEPanelHeader
-            title="By Job Category"
-            description="Score per dimension grouped by job category/title."
-          />
-          <EEPanelContent className="pt-0">
-            <HeatmapChart
-              rows={jobCategoryHeatmap.sortedRows}
-              columns={dimNames}
-              data={jobCategoryHeatmap.heatData}
-              rowTotals={jobCategoryHeatmap.rowTotals}
-              columnTotals={dimColTotals}
-              rowLabelHeader="Job Category"
-              minValue={EE.min}
-              midpoint={EE.mid}
-              maxValue={EE.max}
+      {showTenureHeatmap ? (
+        tenureHeatmap.sortedRows.length > 0 ? (
+          <RegisteredVisualExportFrame order={60} label="Download heat map" filename={heatExportFile("by-tenure")}>
+          <EEPanel>
+            <EEPanelHeader
+              title="By Tenure"
+              description="Score per dimension grouped by tenure. Rows sorted highest to lowest overall score."
             />
-          </EEPanelContent>
-        </EEPanel>
-      )}
+            <EEPanelContent className="pt-0">
+              <HeatmapChart
+                rows={tenureHeatmap.sortedRows}
+                columns={dimNames}
+                data={tenureHeatmap.heatData}
+                rowTotals={tenureHeatmap.rowTotals}
+                columnTotals={dimColTotals}
+                scoreColorResolver={dwsRawScoreColor}
+                rowLabelHeader="Tenure"
+                minValue={EE.min}
+                midpoint={EE.mid}
+                maxValue={EE.max}
+              />
+            </EEPanelContent>
+          </EEPanel>
+          </RegisteredVisualExportFrame>
+        ) : (
+          <Empty message="No tenure groups meet the minimum response threshold." />
+        )
+      ) : null}
+
     </div>
   );
 }
@@ -1051,6 +1483,7 @@ function HrRankings({
           data={deptHeatData}
           rowTotals={deptRowTotals}
           columnTotals={dimColTotals}
+          scoreColorResolver={dwsRawScoreColor}
           rowLabelHeader="Department"
           minValue={EE.min}
           midpoint={EE.mid}
@@ -1069,6 +1502,11 @@ function HrIndexDive({
   data: EmployeeExperienceDashboardData; current: string; prior: string;
   selectedDim: string; filters: Record<string, string>;
 }) {
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  const idxDiveFile = (section: string) =>
+    buildDashboardExportFilename({ client: "dws", perspective: `index-deep-dive-${section}`, campaign: current });
   const min = data.settings.minimumSegmentSize;
   const curR = useMemo(() => filterR(data.respondents.filter((r) => r.campaignLabel === current), filters), [data.respondents, current, filters]);
   const priR = useMemo(() => prior ? filterR(data.respondents.filter((r) => r.campaignLabel === prior), filters) : [], [data.respondents, prior, filters]);
@@ -1103,6 +1541,15 @@ function HrIndexDive({
 
   if (dimQs.length === 0) return <Empty message="No statements are available for this selection." />;
 
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "Index Deep Dive",
+      filters: [selectedDim || "All indexes", current].filter(
+        (value): value is string => Boolean(value)
+      ),
+    });
+  }
+
   return (
     <div className="space-y-6">
       <ExecutiveHeader
@@ -1115,6 +1562,7 @@ function HrIndexDive({
           { label: "Statements", value: stmts.length.toString() },
         ]}
       />
+      <RegisteredVisualExportFrame order={10} label="Download table" filename={idxDiveFile("statement-detail")}>
       <EEPanel>
         <EEPanelHeader
           title={`${selectedDim || "All indexes"} — Statement Detail`}
@@ -1143,8 +1591,10 @@ function HrIndexDive({
           </div>
         </EEPanelContent>
       </EEPanel>
+      </RegisteredVisualExportFrame>
 
       {brandBars.length > 0 && (
+        <RegisteredVisualExportFrame order={20} label="Download chart" filename={idxDiveFile("by-brand")}>
         <EEPanel>
           <EEPanelHeader
             title={`${selectedDim || "All indexes"} by Brand`}
@@ -1159,6 +1609,7 @@ function HrIndexDive({
             />
           </EEPanelContent>
         </EEPanel>
+        </RegisteredVisualExportFrame>
       )}
     </div>
   );
@@ -1182,7 +1633,7 @@ function SupervisorBenchmark({ rows }: { rows: { id: number; statement: string; 
             <div key={row.id} className="border-b border-border-subtle pb-3 last:border-0 last:pb-0">
               <p className="mb-1.5 text-xs leading-snug text-text-secondary">{row.statement}</p>
               <div className="relative h-8 rounded border border-[#B5BCC6] bg-white">
-                <div className="absolute left-0 top-0 flex h-full items-center rounded px-2 text-xs font-bold" style={{ width: `${Math.max(curPct, 10)}%`, backgroundColor: sColor(row.score), color: sTColor(row.score) }}>
+                <div className="absolute left-0 top-0 flex h-full items-center rounded px-2 text-xs font-bold" style={{ width: `${Math.max(curPct, 10)}%`, backgroundColor: sColor(row.score), color: sTColor(row.score), outline: "1px solid rgba(0,0,0,0.15)" }}>
                   {formatScoreForDisplay(row.score)}
                 </div>
                 <div className="absolute bottom-[-4px] top-[-4px] w-px bg-[#2E3E4F]" style={{ left: `${orgPct}%` }} />
@@ -1353,19 +1804,29 @@ function HrSupervisor({
 // ─── HR: Open Text ────────────────────────────────────────────────────────────
 
 function HrOpenText({
-  data, current, brandFilter, fieldType,
+  data, current, brandFilter, fieldType, fields = OPEN_TEXT_FIELDS,
+  basinReportSurface = false,
 }: {
   data: EmployeeExperienceDashboardData; current: string;
   brandFilter: string; fieldType: OpenTextField;
+  fields?: ReadonlyArray<{ id: OpenTextField; label: string }>;
+  /**
+   * Basin surface treatment "1b" (DWS Field redesign pilot only): this
+   * component doesn't use the shared `.card`/`.stmt-wrap` kit classes, so
+   * its question-group panels get the same soft border/shadow values via a
+   * direct Tailwind class swap instead. Every other caller leaves this
+   * unset and keeps the hard-edged default look.
+   */
+  basinReportSurface?: boolean;
 }) {
   const questionGroups = useMemo(() => {
     const orderedFields = [
       fieldType,
-      ...OPEN_TEXT_FIELDS.map((field) => field.id).filter((id) => id !== fieldType),
+      ...fields.map((field) => field.id).filter((id) => id !== fieldType),
     ] as OpenTextField[];
 
     return orderedFields.map((questionId) => {
-      const label = OPEN_TEXT_FIELDS.find((field) => field.id === questionId)?.label ?? questionId;
+      const label = fields.find((field) => field.id === questionId)?.label ?? questionId;
       const inCampaign = data.respondents
         .filter((respondent) => {
           if (respondent.campaignLabel !== current) return false;
@@ -1404,12 +1865,25 @@ function HrOpenText({
         brands,
       };
     });
-  }, [data.respondents, fieldType, current, brandFilter]);
+  }, [data.respondents, fieldType, current, brandFilter, fields]);
 
   const totalResponses = questionGroups.reduce((sum, group) => sum + group.responseCount, 0);
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "Open Text",
+      filters: [brandFilter || "All brands", current].filter(
+        (value): value is string => Boolean(value)
+      ),
+    });
+  }
 
   return (
     <div className="space-y-6">
+      {/* Export-only: reveal all collapsed comment groups so the capture is complete. */}
+      <style>{`.ee-export-mode details > *:not(summary){display:block !important}`}</style>
       <div>
         <SLabel>Open Text Insights</SLabel>
         <p className="mt-2 text-sm text-text-secondary">
@@ -1420,8 +1894,14 @@ function HrOpenText({
         <Empty message="No responses match the current selection." />
       ) : (
         <div className="space-y-3">
-          {questionGroups.map((group) => (
-            <div key={group.id} className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
+          {questionGroups.map((group, groupIndex) => (
+            <RegisteredVisualExportFrame
+              key={group.id}
+              order={70 + groupIndex}
+              label="Download responses"
+              filename={buildDashboardExportFilename({ client: "dws", perspective: `open-text-${group.label}`, campaign: current })}
+            >
+            <div className={basinReportSurface ? "overflow-hidden rounded-2xl border border-[rgba(135,152,170,0.7)] bg-white shadow-[0_2px_12px_rgba(15,23,42,0.24),0_1px_3px_rgba(15,23,42,0.20)]" : "overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]"}>
               <div className="border-b border-[#D3DDE7] bg-[#F1F4F7] px-5 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6E7E96]">Question</p>
                 <p className="mt-1 text-sm font-semibold text-[#152238]">{group.label}</p>
@@ -1450,6 +1930,7 @@ function HrOpenText({
                 </div>
               )}
             </div>
+            </RegisteredVisualExportFrame>
           ))}
         </div>
       )}
@@ -1464,6 +1945,11 @@ function DeptScorecard({
 }: {
   data: EmployeeExperienceDashboardData; current: string; prior: string; selectedDept: string;
 }) {
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  const scorecardFile = (section: string) =>
+    buildDashboardExportFilename({ client: "dws", perspective: `scorecard-${selectedDept}-${section}`, campaign: current });
   const min = data.settings.minimumSegmentSize;
   const allIds = useMemo(() => data.questions.map((q) => q.itemId), [data.questions]);
 
@@ -1515,6 +2001,13 @@ function DeptScorecard({
   if (!selectedDept) return <Empty message="Select a department from the left rail." />;
   if (dc.length < min) return <Empty message={`${selectedDept} does not meet the minimum response threshold (${min}).`} />;
 
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "Department Scorecard",
+      filters: [selectedDept, current].filter((value): value is string => Boolean(value)),
+    });
+  }
+
   function StmtTable({ title, desc, stmts }: { title: string; desc: string; stmts: typeof allStmts }) {
     return (
       <EEPanel>
@@ -1547,6 +2040,7 @@ function DeptScorecard({
 
   return (
     <div className="space-y-6">
+      <RegisteredVisualExportFrame order={10} label="Download scorecard" filename={scorecardFile("overview")}>
       <EEPanel className="bg-gradient-to-br from-white via-surface-2 to-nsp-blue-50/30">
         <div className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1562,8 +2056,10 @@ function DeptScorecard({
           </div>
         </div>
       </EEPanel>
+      </RegisteredVisualExportFrame>
 
       {/* Index tiles */}
+      <RegisteredVisualExportFrame order={20} label="Download index tiles" filename={scorecardFile("index-tiles")}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {dims.map((dim) => (
           <div key={dim.id} className="flex items-center justify-between gap-2 rounded-2xl border border-[#8798AA] bg-white px-4 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
@@ -1578,15 +2074,21 @@ function DeptScorecard({
           </div>
         ))}
       </div>
+      </RegisteredVisualExportFrame>
 
       {/* Statement tables */}
       <div className="grid gap-6 xl:grid-cols-2">
-        <StmtTable title="Top Statements" desc="Highest-scoring items for this department." stmts={topStmts} />
-        <StmtTable title="Focus Areas" desc="Lowest-scoring items for this department." stmts={focusStmts} />
+        <RegisteredVisualExportFrame order={30} label="Download table" filename={scorecardFile("top-statements")}>
+          <StmtTable title="Top Statements" desc="Highest-scoring items for this department." stmts={topStmts} />
+        </RegisteredVisualExportFrame>
+        <RegisteredVisualExportFrame order={40} label="Download table" filename={scorecardFile("focus-areas")}>
+          <StmtTable title="Focus Areas" desc="Lowest-scoring items for this department." stmts={focusStmts} />
+        </RegisteredVisualExportFrame>
       </div>
 
       {/* Demographic cuts */}
       {demoCuts.length > 0 && (
+        <RegisteredVisualExportFrame order={50} label="Download cuts" filename={scorecardFile("demographic-cuts")}>
         <div>
           <SLabel>Demographic Cuts</SLabel>
           <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -1608,6 +2110,7 @@ function DeptScorecard({
             ))}
           </div>
         </div>
+        </RegisteredVisualExportFrame>
       )}
     </div>
   );
@@ -1615,17 +2118,36 @@ function DeptScorecard({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+const DWS_DEFAULT_LOGO_URL = "/deep-well-services-logo.png";
+
 export function DwsEmployeeExperienceDashboardClient({
   data,
-  logoUrl,
+  logoUrl = DWS_DEFAULT_LOGO_URL,
   dashboardInstanceId,
   canEditGuidance = false,
+  portalAccess,
+  redesignLayout = false,
 }: {
   data: EmployeeExperienceDashboardData;
   logoUrl?: string;
   dashboardInstanceId?: string;
   canEditGuidance?: boolean;
+  portalAccess?: EmployeeExperienceUserAccess;
+  /**
+   * DWS Field layout-redesign pilot flag (from ?layout=redesign). Only takes
+   * effect when clientScope.key === "dws-field"; every other scope ignores it.
+   */
+  redesignLayout?: boolean;
 }) {
+  const clientScope = useMemo(
+    () => resolveEmployeeExperienceClientScope(data.meta.organizationName),
+    [data.meta.organizationName]
+  );
+  const searchParams = useSearchParams();
+  // Effective redesign flag: explicit prop OR ?layout=redesign on the URL. The
+  // gate below also requires clientScope.key === "dws-field", so no other
+  // dashboard is affected regardless of the flag.
+  const redesignActive = redesignLayout || searchParams?.get("layout") === "redesign";
   const [activeGroup, setActiveGroup] = useState<GroupId>("executive");
   const [activePersp, setActivePersp] = useState<PerspectiveId>("exec-overview");
   const [current, setCurrent] = useState(() => resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN));
@@ -1649,10 +2171,60 @@ export function DwsEmployeeExperienceDashboardClient({
   const [execLocation, setExecLocation] = useState("");
   const [execEmployment, setExecEmployment] = useState("");
   const [execGeneration, setExecGeneration] = useState("");
+  const [execRole, setExecRole] = useState("");
+  const [execTenure, setExecTenure] = useState("");
   const [execDepartment, setExecDepartment] = useState("");
   const [execJobCategory, setExecJobCategory] = useState("");
+  const [execSupervisorDepartment, setExecSupervisorDepartment] = useState("");
+  const [execSupervisorJobCategory, setExecSupervisorJobCategory] = useState("");
+  const [execComparisonJobCategory, setExecComparisonJobCategory] = useState("");
+  const [execComparisonDepartment, setExecComparisonDepartment] = useState("");
   const [execDeptStatementId, setExecDeptStatementId] = useState(COMPARISON_ALL);
   const [execBrandStatementId, setExecBrandStatementId] = useState(COMPARISON_ALL);
+  const hasPerspectiveRestrictions =
+    portalAccess?.perspectiveAccessMode === "restricted" ||
+    (portalAccess?.allowedPerspectiveIds.length ?? 0) > 0;
+  const availableGroups = useMemo(() => {
+    const base = !hasPerspectiveRestrictions
+      ? clientScope.groups
+      : clientScope.groups
+          .map((group) => ({
+            ...group,
+            perspectives: group.perspectives.filter((perspective) =>
+              new Set(portalAccess?.allowedPerspectiveIds ?? []).has(perspective.id)
+            ),
+          }))
+          .filter((group) => group.perspectives.length > 0);
+
+    // Basin Breakdown is a redesign-pilot-only perspective (DWS Field, chromeless
+    // layout). It's spliced in here rather than added to DWS_FIELD_SCOPE.groups so
+    // the classic (non-redesign) nav and other clients never see or route to it.
+    // Nav order within the group: Report, Breakdown — a thin divider — then
+    // Comparison, since Comparison is a fundamentally different lens (across
+    // units) than the Report/Breakdown pair (deep dive into one unit).
+    if (redesignActive && clientScope.key === "dws-field") {
+      return base.map((group) => {
+        if (group.id !== "basin") return group;
+        const perspectives = group.perspectives.map((perspective) =>
+          perspective.id === "ee-location-comparison"
+            ? { ...perspective, dividerBefore: true }
+            : perspective
+        );
+        const reportIndex = perspectives.findIndex((perspective) => perspective.id === "ee-brand-report");
+        const insertAt = reportIndex >= 0 ? reportIndex + 1 : perspectives.length;
+        return {
+          ...group,
+          perspectives: [
+            ...perspectives.slice(0, insertAt),
+            { id: "ee-segment-breakdown" as PerspectiveId, label: "Basin Breakdown" },
+            ...perspectives.slice(insertAt),
+          ],
+        };
+      });
+    }
+
+    return base;
+  }, [clientScope.groups, clientScope.key, hasPerspectiveRestrictions, portalAccess?.allowedPerspectiveIds, redesignActive]);
 
   const min = data.settings.minimumSegmentSize;
   const curR = useMemo(() => data.respondents.filter((r) => r.campaignLabel === current), [data.respondents, current]);
@@ -1662,8 +2234,11 @@ export function DwsEmployeeExperienceDashboardClient({
     [data.settings.hiddenDimensionIds]
   );
   const openTextFields = useMemo(
-    () => OPEN_TEXT_FIELDS.filter((field) => !field.dimensionId || !hiddenDimensionIds.has(field.dimensionId)),
-    [hiddenDimensionIds]
+    () =>
+      (clientScope.openTextFields ?? OPEN_TEXT_FIELDS).filter(
+        (field) => !("dimensionId" in field && field.dimensionId) || !hiddenDimensionIds.has(field.dimensionId as string)
+      ),
+    [clientScope, hiddenDimensionIds]
   );
 
   const locationOpts = useMemo(
@@ -1673,8 +2248,17 @@ export function DwsEmployeeExperienceDashboardClient({
   const employmentOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
   const workTypeOpts = employmentOpts;
   const generationOpts = useMemo(() => uniq(curR, "generation", min), [curR, min]);
+  const roleOpts = useMemo(() => uniq(curR, "role", min), [curR, min]);
+  const tenureOpts = useMemo(() => uniq(curR, "tenure", min), [curR, min]);
   const deptOpts = useMemo(() => uniq(curR, "department", min), [curR, min]);
-  const jobCategoryOpts = useMemo(() => uniq(curR, "jobTitle", min), [curR, min]);
+  const jobCategoryOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const isFieldScope = clientScope.key === "dws-field";
+  // Index-rail report/comparison layout: enabled for both DWS instances (field +
+  // office). CSG intentionally keeps the classic layout.
+  const useIndexRailLayout = clientScope.key === "dws-field" || clientScope.key === "dws";
+  // Field-only score scale (50–75). Other dashboards keep the default 60–85 scale.
+  const reportScaleOption = isFieldScope ? FIELD_REPORT_SCALE : undefined;
+  const eeScale = isFieldScope ? FIELD_RAW_SCALE : EE;
 
   const supCurFiltered = useMemo(() => filterR(curR, supFilters), [curR, supFilters]);
   const supOpts = useMemo(() => uniq(supCurFiltered, "supervisor", min), [supCurFiltered, min]);
@@ -1689,7 +2273,7 @@ export function DwsEmployeeExperienceDashboardClient({
     return m;
   }, [supOpts, supCurFiltered, allIds]);
 
-  const groupDef = GROUPS.find((g) => g.id === activeGroup) ?? GROUPS[0];
+  const groupDef = availableGroups.find((g) => g.id === activeGroup) ?? availableGroups[0];
   const campaignResultsData = useMemo(
     () => ({
       ...data,
@@ -1698,19 +2282,49 @@ export function DwsEmployeeExperienceDashboardClient({
           (!execLocation || respondent.location === execLocation) &&
           (!execEmployment || respondent.fieldCategory === execEmployment) &&
           (!execGeneration || respondent.generation === execGeneration) &&
+          (!execRole || respondent.role === execRole) &&
+          (!execTenure || respondent.tenure === execTenure) &&
           (!execDepartment || respondent.department === execDepartment) &&
-          (!execJobCategory || respondent.jobTitle === execJobCategory)
+          (!execJobCategory || respondent.fieldCategory === execJobCategory)
       ),
     }),
-    [data, execLocation, execEmployment, execGeneration, execDepartment, execJobCategory]
+    [data, execLocation, execEmployment, execGeneration, execRole, execTenure, execDepartment, execJobCategory]
   );
   const campaignResultsBundle = useMemo(
-    () => buildEmployeeExperienceReportBundle(campaignResultsData, { logoUrl, campaignLabel: current }),
-    [campaignResultsData, logoUrl, current]
+    () => buildEmployeeExperienceReportBundle(campaignResultsData, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
+    [campaignResultsData, logoUrl, current, reportScaleOption]
   );
   const reportBundle = useMemo(
-    () => buildEmployeeExperienceReportBundle(data, { logoUrl, campaignLabel: current }),
-    [data, logoUrl, current]
+    () => buildEmployeeExperienceReportBundle(data, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
+    [data, logoUrl, current, reportScaleOption]
+  );
+  // AutoSEP partner respondents are excluded from `data` org-wide; this bundle is built
+  // solely from the carried partner set for the dedicated AutoSEP report. Minimum segment
+  // size is relaxed to 1 since the client explicitly wants AutoSEP's individual results.
+  const autosepBundle = useMemo(
+    () =>
+      buildEmployeeExperienceReportBundle(
+        {
+          ...data,
+          respondents: data.partnerRespondents ?? [],
+          settings: { ...data.settings, minimumSegmentSize: 1 },
+        },
+        { logoUrl, campaignLabel: current, scale: reportScaleOption }
+      ),
+    [data, logoUrl, current, reportScaleOption]
+  );
+  const execBrandFilteredData = useMemo(
+    () => ({
+      ...data,
+      respondents: data.respondents.filter(
+        (respondent) => !execLocation || respondent.location === execLocation
+      ),
+    }),
+    [data, execLocation]
+  );
+  const execBrandFilteredBundle = useMemo(
+    () => buildEmployeeExperienceReportBundle(execBrandFilteredData, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
+    [execBrandFilteredData, logoUrl, current, reportScaleOption]
   );
   const historyFilteredBundle = useMemo(
     () =>
@@ -1721,9 +2335,53 @@ export function DwsEmployeeExperienceDashboardClient({
             (respondent) => !execLocation || respondent.location === execLocation
           ),
         },
-        { logoUrl, campaignLabel: current }
+        { logoUrl, campaignLabel: current, scale: reportScaleOption }
       ),
-    [data, logoUrl, current, execLocation]
+    [data, logoUrl, current, execLocation, reportScaleOption]
+  );
+  const supervisorComparisonData = useMemo(
+    () => ({
+      ...data,
+      respondents: data.respondents.filter(
+        (respondent) =>
+          (!execLocation || respondent.location === execLocation) &&
+          (!execSupervisorDepartment || respondent.department === execSupervisorDepartment) &&
+          (!execSupervisorJobCategory || respondent.fieldCategory === execSupervisorJobCategory)
+      ),
+    }),
+    [data, execLocation, execSupervisorDepartment, execSupervisorJobCategory]
+  );
+  const supervisorComparisonReport = useMemo(
+    () => projectSupervisorReportData(supervisorComparisonData, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
+    [supervisorComparisonData, logoUrl, current, reportScaleOption]
+  );
+  const hrSupervisorData = useMemo(
+    () => ({
+      ...data,
+      respondents: data.respondents.filter(
+        (respondent) =>
+          (!supFilters.location || respondent.location === supFilters.location) &&
+          (!supFilters.department || respondent.department === supFilters.department)
+      ),
+    }),
+    [data, supFilters.department, supFilters.location]
+  );
+  const hrSupervisorReport = useMemo(
+    () => projectSupervisorReportData(hrSupervisorData, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
+    [hrSupervisorData, logoUrl, current, reportScaleOption]
+  );
+  const brandEnpsData = useMemo(
+    () => ({
+      ...data,
+      respondents: data.respondents.filter(
+        (respondent) => !execLocation || respondent.location === execLocation
+      ),
+    }),
+    [data, execLocation]
+  );
+  const brandEnpsReport = useMemo(
+    () => projectEnpsReportData(brandEnpsData, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
+    [brandEnpsData, logoUrl, current, reportScaleOption]
   );
   const executiveIndexes = useMemo(
     () => reportBundle.campaignResults.indexes.map((index) => ({ id: index.id, name: index.name })),
@@ -1740,7 +2398,33 @@ export function DwsEmployeeExperienceDashboardClient({
   const activeBrandIndex = activeExecIndexId
     ? reportBundle.locationComparison.indexes.find((index) => index.id === activeExecIndexId)
     : undefined;
-  const showExecutiveBrandFilter = !EXECUTIVE_PERSPECTIVES_WITHOUT_BRAND_FILTER.has(activePersp);
+  const showExecutiveBrandFilter =
+    activePersp === "ee-enps" && activeGroup === clientScope.brandGroupId
+      ? true
+      : !clientScope.executiveWithoutBrandFilter.has(activePersp);
+
+  useEffect(() => {
+    if (availableGroups.length === 0) {
+      return;
+    }
+
+    const nextGroup =
+      availableGroups.find((group) => group.id === activeGroup) ?? availableGroups[0];
+    if (!nextGroup) {
+      return;
+    }
+
+    if (nextGroup.id !== activeGroup) {
+      setActiveGroup(nextGroup.id as GroupId);
+    }
+
+    const perspectiveAllowed = nextGroup.perspectives.some(
+      (perspective) => perspective.id === activePersp
+    );
+    if (!perspectiveAllowed) {
+      setActivePersp(nextGroup.perspectives[0].id as PerspectiveId);
+    }
+  }, [availableGroups, activeGroup, activePersp]);
 
   useEffect(() => {
     const preferredCurrent = resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN);
@@ -1765,11 +2449,162 @@ export function DwsEmployeeExperienceDashboardClient({
     }
   }, [derivedExecCompId, execCompId]);
 
-  const executiveRail = EXECUTIVE_PERSPECTIVES.has(activePersp) ? (
+  useEffect(() => {
+    if (activePersp !== "ee-enps" || activeGroup !== clientScope.brandGroupId) return;
+    if (execLocation || locationOpts.length === 0) return;
+    setExecLocation(locationOpts[0]);
+  }, [activePersp, activeGroup, clientScope.brandGroupId, execLocation, locationOpts]);
+
+  // Filter control that renders as a select (fixed rail) or a fully visible
+  // pill-button row (redesign pilot's embedded Filters tab) — see FilterField.
+  function FilterField({
+    embedded,
+    title,
+    value,
+    onChange,
+    options,
+    allLabel,
+    disabled,
+  }: {
+    embedded: boolean;
+    title: string;
+    value: string;
+    onChange: (v: string) => void;
+    options: string[];
+    allLabel: string;
+    disabled?: boolean;
+  }) {
+    if (embedded) {
+      return (
+        <EmbeddedFilterCard title={title}>
+          <PillOptionRow
+            value={value}
+            onChange={onChange}
+            options={[{ id: "", label: allLabel }, ...options.map((item) => ({ id: item, label: item }))]}
+          />
+        </EmbeddedFilterCard>
+      );
+    }
+    return (
+      <RailSection title={title}>
+        <select
+          value={value}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+        >
+          <option value="">{allLabel}</option>
+          {options.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </select>
+      </RailSection>
+    );
+  }
+
+  const buildExtraSections = (embedded: boolean) =>
+    activePersp === "ee-campaign-results" ? (
+      isFieldScope ? (
+        <>
+          <FilterField embedded={embedded} title="Department" value={execDepartment} onChange={setExecDepartment} options={deptOpts} allLabel="All departments" />
+          <FilterField embedded={embedded} title="Job Category" value={execJobCategory} onChange={setExecJobCategory} options={jobCategoryOpts} allLabel="All job categories" />
+          {roleOpts.length > 0 ? (
+            <FilterField embedded={embedded} title="Role" value={execRole} onChange={setExecRole} options={roleOpts} allLabel="All roles" />
+          ) : null}
+          <FilterField embedded={embedded} title="Tenure" value={execTenure} onChange={setExecTenure} options={tenureOpts} allLabel="All tenures" />
+        </>
+      ) : (
+        <>
+          <FilterField embedded={embedded} title="Employment" value={execEmployment} onChange={setExecEmployment} options={employmentOpts} allLabel="All employment" />
+          <FilterField embedded={embedded} title="Department" value={execDepartment} onChange={setExecDepartment} options={deptOpts} allLabel="All departments" />
+          <FilterField
+            embedded={embedded}
+            title={clientScope.jobCategoryLabel}
+            value={execJobCategory}
+            onChange={setExecJobCategory}
+            options={jobCategoryOpts}
+            allLabel={clientScope.key === "dws" ? "All roles" : "All job categories"}
+          />
+          <FilterField embedded={embedded} title="Generation" value={execGeneration} onChange={setExecGeneration} options={generationOpts} allLabel="All generations" />
+        </>
+      )
+    ) : (activePersp === "ee-department-comparison" || activePersp === "ee-role-comparison") ? (
+      <>
+        {activePersp === "ee-department-comparison" ? (
+          <>
+            <FilterField embedded={embedded} title="Job Category" value={execComparisonJobCategory} onChange={setExecComparisonJobCategory} options={jobCategoryOpts} allLabel="All job categories" />
+            <FilterField embedded={embedded} title="Department" value={execComparisonDepartment} onChange={setExecComparisonDepartment} options={deptOpts} allLabel="All departments" />
+          </>
+        ) : null}
+        <RailSection title="Statement">
+          <select
+            value={execDeptStatementId}
+            onChange={(event) => setExecDeptStatementId(event.target.value)}
+            disabled={!activeExecIndexId}
+            className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+          >
+            <option value={COMPARISON_ALL}>Index average (all statements)</option>
+            {activeDepartmentIndex?.statements.map((statement) => (
+              <option key={statement.id} value={statement.id}>{statement.text}</option>
+            ))}
+          </select>
+        </RailSection>
+      </>
+    ) : activePersp === "ee-location-comparison" ? (
+      // Basin Comparison (redesign): no statement drill-down here — the index
+      // rail beside the chart already picks the index, and a per-statement
+      // filter just adds a control nobody needs on a page whose whole point
+      // is comparing basins at a glance. The legacy (non-embedded) rail keeps
+      // it for other clients/layouts that haven't asked for this yet.
+      embedded ? null : (
+        <RailSection title="Statement">
+          <select
+            value={execBrandStatementId}
+            onChange={(event) => setExecBrandStatementId(event.target.value)}
+            disabled={!activeExecIndexId}
+            className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+          >
+            <option value={COMPARISON_ALL}>Index average (all statements)</option>
+            {activeBrandIndex?.statements.map((statement) => (
+              <option key={statement.id} value={statement.id}>{statement.text}</option>
+            ))}
+          </select>
+        </RailSection>
+      )
+    ) : activePersp === "ee-division-comparison" ? (
+      <RailSection title="Statement">
+        <select
+          value={execBrandStatementId}
+          onChange={(event) => setExecBrandStatementId(event.target.value)}
+          disabled={!activeExecIndexId}
+          className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
+        >
+          <option value={COMPARISON_ALL}>Index average (all statements)</option>
+          {activeBrandIndex?.statements.map((statement) => (
+            <option key={statement.id} value={statement.id}>{statement.text}</option>
+          ))}
+        </select>
+      </RailSection>
+    ) : activePersp === "ee-supervisor-comparison" ? (
+      <>
+        <FilterField embedded={embedded} title="Department" value={execSupervisorDepartment} onChange={setExecSupervisorDepartment} options={deptOpts} allLabel="All departments" />
+        <FilterField
+          embedded={embedded}
+          title={clientScope.jobCategoryLabel}
+          value={execSupervisorJobCategory}
+          onChange={setExecSupervisorJobCategory}
+          options={jobCategoryOpts}
+          allLabel={clientScope.key === "dws" ? "All roles" : "All job categories"}
+        />
+      </>
+    ) : null;
+
+  const renderExecutiveRail = (embedded = false) => clientScope.executivePerspectives.has(activePersp) ? (
     <EEExecutiveRail
+      embedded={embedded}
       logoUrl={logoUrl}
       clientName={data.meta.organizationName}
-      perspectiveTitle={EXECUTIVE_PERSPECTIVE_TITLES[activePersp]}
+      perspectiveTitle={clientScope.executiveTitles[activePersp]}
       campaigns={data.meta.campaigns}
       current={current}
       prior={prior}
@@ -1781,118 +2616,94 @@ export function DwsEmployeeExperienceDashboardClient({
       indexes={executiveIndexes}
       indexId={activeExecIndexId}
       onIndexId={setExecIndexId}
-      showIndexSection={!EXECUTIVE_PERSPECTIVES_WITHOUT_INDEX_FILTER.has(activePersp)}
+      showIndexSection={!clientScope.executiveWithoutIndexFilter.has(activePersp)}
       includeAllIndexOption
+      defaultOpenBrandSection={activePersp === "ee-enps" && activeGroup === clientScope.brandGroupId}
       locations={showExecutiveBrandFilter ? brandLocations : []}
       location={execLocation}
       onLocation={setExecLocation}
-      extraSections={
-        activePersp === "ee-campaign-results" ? (
-          <>
-            <RailSection title="Employment">
-              <select
-                value={execEmployment}
-                onChange={(event) => setExecEmployment(event.target.value)}
-                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
-              >
-                <option value="">All employment</option>
-                {employmentOpts.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            </RailSection>
-            <RailSection title="Department">
-              <select
-                value={execDepartment}
-                onChange={(event) => setExecDepartment(event.target.value)}
-                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
-              >
-                <option value="">All departments</option>
-                {deptOpts.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            </RailSection>
-            <RailSection title="Job Category">
-              <select
-                value={execJobCategory}
-                onChange={(event) => setExecJobCategory(event.target.value)}
-                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
-              >
-                <option value="">All job categories</option>
-                {jobCategoryOpts.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            </RailSection>
-            <RailSection title="Generation">
-              <select
-                value={execGeneration}
-                onChange={(event) => setExecGeneration(event.target.value)}
-                className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
-              >
-                <option value="">All generations</option>
-                {generationOpts.map((item) => (
-                  <option key={item} value={item}>{item}</option>
-                ))}
-              </select>
-            </RailSection>
-          </>
-        ) : activePersp === "ee-department-comparison" ? (
-          <RailSection title="Statement">
-            <select
-              value={execDeptStatementId}
-              onChange={(event) => setExecDeptStatementId(event.target.value)}
-              disabled={!activeExecIndexId}
-              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
-            >
-              <option value={COMPARISON_ALL}>Index average (all statements)</option>
-              {activeDepartmentIndex?.statements.map((statement) => (
-                <option key={statement.id} value={statement.id}>{statement.text}</option>
-              ))}
-            </select>
-          </RailSection>
-        ) : activePersp === "ee-location-comparison" ? (
-          <RailSection title="Statement">
-            <select
-              value={execBrandStatementId}
-              onChange={(event) => setExecBrandStatementId(event.target.value)}
-              disabled={!activeExecIndexId}
-              className="w-full rounded-[11px] border border-[#D4DAD6] bg-white px-3 py-2.5 text-center text-sm font-semibold text-[#152238] focus:border-[#8798AA] focus:outline-none"
-            >
-              <option value={COMPARISON_ALL}>Index average (all statements)</option>
-              {activeBrandIndex?.statements.map((statement) => (
-                <option key={statement.id} value={statement.id}>{statement.text}</option>
-              ))}
-            </select>
-          </RailSection>
-        ) : null
-      }
+      brandLabel={clientScope.brandLabel}
+      extraSections={buildExtraSections(embedded)}
     />
   ) : null;
+  const executiveRail = renderExecutiveRail(false);
 
+  const singleCampaign = data.meta.campaigns.length <= 1;
   const perspectiveHowToRead: Record<PerspectiveId, string> = {
-    "exec-overview": "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
-    "exec-location": "Heat map rows are grouped by brand and demographic/workforce categories. Compare row totals to quickly identify where strengths and watch areas concentrate.",
+    "exec-overview": singleCampaign
+      ? "The center wheel and statement list summarize campaign performance for the current survey."
+      : "The center wheel and statement list summarize campaign performance. Use Current and Compared To in the left rail to evaluate movement.",
+    "exec-location":
+      clientScope.showDivisionHeatmap && clientScope.showLeadershipHeatmap
+        ? `Heat maps show scores by division, ${clientScope.brandLabel.toLowerCase()}, department, and ${clientScope.jobCategoryLabel.toLowerCase()}. Compare row totals to identify where strengths and watch areas concentrate.`
+        : `Heat maps show scores by ${clientScope.brandLabel.toLowerCase()} and department. Compare row totals to identify where strengths and watch areas concentrate.`,
     "ee-campaign-results": "Use Detailed Results filters in the left rail to investigate index and statement movement for specific groups. Green indicates positive movement and red indicates decline.",
-    "ee-department-comparison": "Top section shows job categories and lower section shows departments for the same selected index or statement. Delta compares against the selected comparison campaign.",
-    "ee-location-comparison": "Each row is a brand for the selected index or statement. Delta compares against the selected comparison campaign.",
-    "ee-historical-report": "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
-    "ee-enps": "ENPS is shown as promoter minus detractor percentage points. Use this page for brand and department ENPS comparisons without affecting other index averages.",
-    "hr-index-dive": "Select an index to inspect statement-level scores and brand distribution. Use filters to isolate brand and work-type patterns.",
+    "ee-department-comparison": singleCampaign
+      ? "Each bar shows a department score for the selected index or statement. The dashed line marks the company average."
+      : "Each bar shows a department score for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-role-comparison": singleCampaign
+      ? "Each bar shows a role score for the selected index or statement. The dashed line marks the company average."
+      : "Each bar shows a leadership role score for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-location-comparison": singleCampaign
+      ? `Each row is a ${clientScope.brandLabel.toLowerCase()} for the selected index or statement. The dashed line marks the company average.`
+      : `Each row is a ${clientScope.brandLabel.toLowerCase()} for the selected index or statement. Delta compares against the selected comparison campaign.`,
+    "ee-division-comparison": "Each row is a division for the selected index or statement. Delta compares against the selected comparison campaign.",
+    "ee-division-report": "This report compares each division to organization averages by statement and index across selected campaigns.",
+    "ee-supervisor-comparison": "Leadership-only supervisor view. Top chart ranks supervisor current scores, and the heat map shows statement-level current scores by supervisor.",
+    "ee-historical-report": singleCampaign
+      ? "Statement-level favorability for the current survey."
+      : "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
+    "ee-enps":
+      "ENPS is shown as promoter minus detractor percentage points. For score interpretation in this dashboard, 9-10 is Goal, 7-8 is Acceptable, and 0-6 is Unacceptable.",
+    "hr-index-dive": `Select an index to inspect statement-level scores and ${clientScope.brandLabel.toLowerCase()} distribution. Use filters to isolate ${clientScope.brandLabel.toLowerCase()} and work-type patterns.`,
     "hr-supervisor": "Bars show supervisor scores by statement. The org marker indicates company average for each statement.",
-    "hr-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
+    "hr-open-text": `Open text responses are grouped by question type and can be filtered by ${clientScope.brandLabel.toLowerCase()} to isolate themes and language patterns.`,
     "dept-scorecard": "Scorecards summarize department performance, statement strengths, and focus areas with demographic cuts.",
-    "ee-brand-report": "This report compares each brand to organization averages by statement and index across selected campaigns.",
-    "ee-brand-open-text": "Open text responses are grouped by question type and can be filtered by brand to isolate themes and language patterns.",
-    "ee-department-report": "This report compares each job category to organization averages by statement and index across selected campaigns.",
+    "ee-brand-report": `This report compares each ${clientScope.brandLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
+    "ee-brand-open-text": `Open text responses are grouped by question type and can be filtered by ${clientScope.brandLabel.toLowerCase()} to isolate themes and language patterns.`,
+    "ee-segment-breakdown": `Select an index on the rail to re-score the funnel and heatmap below for every ${clientScope.jobCategoryLabel.toLowerCase()} in the selected ${clientScope.brandLabel.toLowerCase()}.`,
+    "ee-department-report": `This report compares each ${clientScope.jobCategoryLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
     "ee-unit-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
+    "ee-autosep-report": "This report covers the AutoSEP partner designation only. AutoSEP is excluded from all other reports and organization-wide scores.",
   };
+  const isEnpsPerspective = activePersp === "ee-enps";
+  const enpsDescriptorText =
+    "ENPS is promoter minus detractor percentage points. For this dashboard's score interpretation: 9-10 is Goal, 7-8 is Acceptable, and 0-6 is Unacceptable.";
+  const enpsScoreLegendGradient =
+    "linear-gradient(90deg,#C8B9B6 0%,#C8B9B6 70%,#DCE8F8 70%,#DCE8F8 90%,#8EA9CC 90%,#8EA9CC 100%)";
+  const dashboardScoreLegendGradient =
+    "linear-gradient(90deg, #D7B35A 0%, #FFFFFF 50%, #3F5F86 100%)";
+  const enpsScoreLegendTicks = (
+    <div className="relative h-6 text-[10px] font-semibold text-[#6E7E96]">
+      <span className="absolute left-0 top-0 -translate-x-1/2">0</span>
+      <span className="absolute top-0 -translate-x-1/2" style={{ left: "70%" }}>6</span>
+      <span className="absolute top-0 -translate-x-1/2" style={{ left: "90%" }}>8</span>
+      <span className="absolute right-0 top-0 translate-x-1/2">10</span>
+      <span className="absolute top-3 h-2 w-px bg-[#8798AA]" style={{ left: "70%" }} />
+      <span className="absolute top-3 h-2 w-px bg-[#8798AA]" style={{ left: "90%" }} />
+    </div>
+  );
+  const enpsScoreLegendBands = (
+    <div className="space-y-1 text-[10.5px] font-semibold text-[#6E7E96]">
+      <p>0-6 Unacceptable</p>
+      <p>7-8 Acceptable</p>
+      <p>9-10 Goal</p>
+    </div>
+  );
 
   const fixedInfoRail = (
     <aside className="hidden xl:block" style={EE_GUIDANCE_RAIL_STYLE}>
       <div className="flex h-full flex-col gap-4 p-6">
-        <EEContextRail howToRead={perspectiveHowToRead[activePersp]} />
+        <EEContextRail
+          howToRead={perspectiveHowToRead[activePersp]}
+          scale={reportScaleOption}
+          scoreLegendLabel={isEnpsPerspective ? "ENPS Score Bands" : "Score Scale (Yellow-Blue)"}
+          scoreLegendGradient={isEnpsPerspective ? enpsScoreLegendGradient : dashboardScoreLegendGradient}
+          scoreLegendMinLabel={isEnpsPerspective ? "0" : undefined}
+          scoreLegendMaxLabel={isEnpsPerspective ? "10" : undefined}
+          scoreLegendTicks={isEnpsPerspective ? enpsScoreLegendTicks : undefined}
+          scoreLegendBands={isEnpsPerspective ? enpsScoreLegendBands : undefined}
+        />
         {dashboardInstanceId ? (
           <GuidancePinRail
             dashboardInstanceId={dashboardInstanceId}
@@ -1914,7 +2725,17 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const canvasInfoRail = (
     <div className="flex flex-col gap-4 p-2">
-      <EEContextRail howToRead={perspectiveHowToRead[activePersp]} compact />
+      <EEContextRail
+        howToRead={perspectiveHowToRead[activePersp]}
+        compact
+        scale={reportScaleOption}
+        scoreLegendLabel={isEnpsPerspective ? "ENPS Score Bands" : "Score Scale (Yellow-Blue)"}
+        scoreLegendGradient={isEnpsPerspective ? enpsScoreLegendGradient : dashboardScoreLegendGradient}
+        scoreLegendMinLabel={isEnpsPerspective ? "0" : undefined}
+        scoreLegendMaxLabel={isEnpsPerspective ? "10" : undefined}
+        scoreLegendTicks={isEnpsPerspective ? enpsScoreLegendTicks : undefined}
+        scoreLegendBands={isEnpsPerspective ? enpsScoreLegendBands : undefined}
+      />
       {dashboardInstanceId ? (
         <GuidancePinRail
           dashboardInstanceId={dashboardInstanceId}
@@ -1934,7 +2755,8 @@ export function DwsEmployeeExperienceDashboardClient({
   );
 
   function onGroupChange(gid: string) {
-    const g = GROUPS.find((x) => x.id === gid) ?? GROUPS[0];
+    const g = availableGroups.find((x) => x.id === gid) ?? availableGroups[0];
+    if (!g) return;
     setActiveGroup(g.id);
     setActivePersp(g.perspectives[0].id as PerspectiveId);
   }
@@ -1946,7 +2768,7 @@ export function DwsEmployeeExperienceDashboardClient({
       <div className="rounded-[18px] bg-white p-4 text-center shadow-[0_2px_8px_rgba(15,23,42,.07)]" style={{ border: "1px solid #8798AA" }}>
         <ClientMark client={{ name: data.meta.organizationName, logoUrl }} />
         <div className="mt-3 font-bold uppercase" style={{ fontSize: 11.5, letterSpacing: "0.1em", color: "#152238" }}>
-          {EXECUTIVE_PERSPECTIVE_TITLES[activePersp]}
+          {clientScope.executiveTitles[activePersp]}
         </div>
       </div>
 
@@ -1962,8 +2784,8 @@ export function DwsEmployeeExperienceDashboardClient({
       {(activePersp === "hr-index-dive") && (
         <FilterRail
           filters={[
-            { id: "location", label: "Brand", value: idxFilters.location, options: locationOpts },
-            { id: "fieldCategory", label: "Work Type", value: idxFilters.fieldCategory, options: workTypeOpts },
+            { id: "location", label: clientScope.brandLabel, value: idxFilters.location, options: locationOpts },
+            { id: "fieldCategory", label: clientScope.jobCategoryLabel, value: idxFilters.fieldCategory, options: workTypeOpts },
           ]}
           onChange={(id, v) => setIdxFilters((f) => ({ ...f, [id]: v }))}
           onReset={() => setIdxFilters({ location: "", fieldCategory: "" })}
@@ -1972,7 +2794,7 @@ export function DwsEmployeeExperienceDashboardClient({
       {(activePersp === "hr-supervisor") && (
         <FilterRail
           filters={[
-            { id: "location", label: "Brand", value: supFilters.location, options: locationOpts },
+            { id: "location", label: clientScope.brandLabel, value: supFilters.location, options: locationOpts },
             { id: "department", label: "Department", value: supFilters.department, options: deptOpts },
           ]}
           onChange={(id, v) => setSupFilters((f) => ({ ...f, [id]: v }))}
@@ -2069,6 +2891,21 @@ export function DwsEmployeeExperienceDashboardClient({
   );
 
   const content = useMemo(() => {
+    if (availableGroups.length === 0) {
+      return (
+        <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
+          <main className="flex flex-col gap-5" style={EE_PERSPECTIVE_MAIN_STYLE}>
+            <div
+              className="rounded-2xl border border-[#8798AA] bg-white px-6 py-10 text-sm text-[#6E7E96]"
+              style={{ maxWidth: 1320, margin: "0 auto", width: "100%" }}
+            >
+              No Employee Experience perspectives are assigned to this user.
+            </div>
+          </main>
+        </div>
+      );
+    }
+
     switch (activePersp) {
       case "ee-campaign-results":
         return (
@@ -2081,13 +2918,22 @@ export function DwsEmployeeExperienceDashboardClient({
             onIndexId={setExecIndexId}
             compId={activeExecCompId}
             onCompId={setExecCompId}
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            // Basin surface treatment "1b" is now applied dashboard-wide
+            // across every DWS Field perspective, not just the former
+            // "Basin group" trio — see the shared note on ee-brand-report.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
           />
         );
       case "ee-department-comparison":
-        return (
+        return clientScope.key === "dws" ? (
           <EEDepartmentComparison
-            data={reportBundle.departmentComparison}
-            secondaryData={reportBundle.departmentComparisonByDepartment}
+            data={execBrandFilteredBundle.departmentComparisonByDepartment}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            title="Department Comparison"
+            primaryLabel="Department"
+            primaryFilterValue={execComparisonDepartment}
             dashboardInstanceId={dashboardInstanceId}
             canEditGuidance={canEditGuidance}
             executiveRail={executiveRail}
@@ -2097,12 +2943,71 @@ export function DwsEmployeeExperienceDashboardClient({
             onCompId={setExecCompId}
             statementId={execDeptStatementId}
             onStatementId={setExecDeptStatementId}
+            fieldLayout
+            compact
+            showStatementHeatmap={false}
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+          />
+        ) : (
+          <EEDepartmentComparison
+            data={execBrandFilteredBundle.departmentComparison}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            secondaryData={execBrandFilteredBundle.departmentComparisonByDepartment}
+            title="Job / Department Comparison"
+            primaryLabel="Job Category"
+            primaryFilterValue={execComparisonJobCategory}
+            secondaryFilterValue={execComparisonDepartment}
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+            statementId={execDeptStatementId}
+            onStatementId={setExecDeptStatementId}
+            fieldLayout={useIndexRailLayout}
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            // Basin surface treatment "1b" is now applied dashboard-wide
+            // across every DWS Field perspective; this branch is also
+            // reused by CSG, so the scope check keeps CSG unaffected.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+          />
+        );
+      case "ee-role-comparison":
+        return (
+          <EEDepartmentComparison
+            data={clientScope.key === "dws" ? reportBundle.leadershipComparison : execBrandFilteredBundle.departmentComparison}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            title={`${clientScope.jobCategoryLabel} Comparison`}
+            primaryLabel={clientScope.jobCategoryLabel}
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+            statementId={execDeptStatementId}
+            onStatementId={setExecDeptStatementId}
+            fieldLayout={useIndexRailLayout}
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            // Basin surface treatment "1b" is now applied dashboard-wide
+            // across every DWS Field perspective; this case is also reused
+            // by CSG/DWS, so the scope check keeps them unaffected.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
           />
         );
       case "ee-location-comparison":
         return (
           <EELocationComparison
             data={reportBundle.locationComparison}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            title={`${clientScope.brandLabel} Comparison`}
+            primaryLabel={clientScope.brandLabel}
             dashboardInstanceId={dashboardInstanceId}
             canEditGuidance={canEditGuidance}
             executiveRail={executiveRail}
@@ -2112,19 +3017,94 @@ export function DwsEmployeeExperienceDashboardClient({
             onCompId={setExecCompId}
             statementId={execBrandStatementId}
             onStatementId={setExecBrandStatementId}
+            fieldLayout={useIndexRailLayout}
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            // Basin group surface treatment "1b" — this is Basin Comparison
+            // specifically; Division Comparison below reuses this exact
+            // component but stays unaffected.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+          />
+        );
+      case "ee-division-comparison":
+        return (
+          <EELocationComparison
+            data={reportBundle.divisionComparison}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            title="Division Comparison"
+            primaryLabel="Division"
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+            statementId={execBrandStatementId}
+            onStatementId={setExecBrandStatementId}
+            fieldLayout={useIndexRailLayout}
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+          />
+        );
+      case "ee-supervisor-comparison":
+        return isFieldScope ? (
+          <EEDepartmentComparison
+            data={reportBundle.supervisorComparison}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            title="Supervisor Comparison"
+            primaryLabel="Supervisor"
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
+            indexId={activeExecIndexId}
+            onIndexId={setExecIndexId}
+            compId={activeExecCompId}
+            onCompId={setExecCompId}
+            statementId={execDeptStatementId}
+            onStatementId={setExecDeptStatementId}
+            fieldLayout
+            chromeless={redesignActive}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            // This branch only ever renders when isFieldScope is true, so
+            // redesignActive alone is enough to scope this — see the
+            // matching note on ee-segment-breakdown below.
+            basinReportSurface={redesignActive}
+          />
+        ) : (
+          <EESupervisorComparison
+            data={supervisorComparisonReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            dashboardInstanceId={dashboardInstanceId}
+            canEditGuidance={canEditGuidance}
+            executiveRail={executiveRail}
           />
         );
       case "exec-overview":
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+            {/* className carries the redesign-scoped margin reset — this wrapper
+                is a <div>, not <main>, so it needs its own selector (see
+                .fr-embed .fr-persp-main in FieldRedesignShell). Background is
+                made conditional too: this div sits three DOM levels below
+                .fr-embed, past the shell's 2-level "force white/tint"
+                selectors, so EE_PERSPECTIVE_MAIN_STYLE's hardcoded white
+                would otherwise show through as a flat rectangle over the
+                tinted canvas. */}
+            <div
+              className="fr-persp-main"
+              style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0, background: redesignActive && clientScope.key === "dws-field" ? "#F4F4EF" : "#fff" }}
+            >
               <EEHistoricalReport
                 data={reportBundle.historicalReport}
                 embedded
                 variant="overview"
                 currentCampaignLabel={current}
                 selectedIndexId={activeExecIndexId || undefined}
+                chromeless={redesignActive}
+                headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+                basinReportSurface={redesignActive && clientScope.key === "dws-field"}
               />
               
             </div>
@@ -2135,8 +3115,25 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <main style={EE_PERSPECTIVE_MAIN_STYLE}>
-              <ExecLocation data={data} current={current} prior={prior} locationFilter={execLocation} />
+            {/* <main> isn't covered by the shell's div-only "force white/tint"
+                selectors, so its background is made conditional here too —
+                see the matching note on the "fr-persp-main" wrapper above. */}
+            <main style={{ ...EE_PERSPECTIVE_MAIN_STYLE, background: redesignActive && clientScope.key === "dws-field" ? "#F4F4EF" : "#fff" }}>
+              <ExecLocation
+                data={data}
+                current={current}
+                prior={prior}
+                locationFilter={execLocation}
+                brandLabel={clientScope.brandLabel}
+                jobCategoryLabel={clientScope.jobCategoryLabel}
+                showDivisionHeatmap={clientScope.showDivisionHeatmap}
+                showLeadershipHeatmap={clientScope.showLeadershipHeatmap}
+                showJobCategoryHeatmap={clientScope.showJobCategoryHeatmap}
+                showTenureHeatmap={clientScope.showTenureHeatmap}
+                scale={eeScale}
+                chromeless={redesignActive}
+                headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+              />
             </main>
             {fixedInfoRail}
           </div>
@@ -2145,12 +3142,18 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+            <div
+              className="fr-persp-main"
+              style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0, background: redesignActive && clientScope.key === "dws-field" ? "#F4F4EF" : "#fff" }}
+            >
               <EEHistoricalReport
                 data={historyFilteredBundle.historicalReport}
                 embedded
                 currentCampaignLabel={current}
                 selectedIndexId={activeExecIndexId || undefined}
+                chromeless={redesignActive}
+                headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+                basinReportSurface={redesignActive && clientScope.key === "dws-field"}
               />
             </div>
             {fixedInfoRail}
@@ -2160,8 +3163,15 @@ export function DwsEmployeeExperienceDashboardClient({
         return (
           <div className="block" style={EE_PERSPECTIVE_CANVAS_STYLE}>
             {executiveRail}
-            <div style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
-              <EEEnpsReport data={reportBundle.enpsReport} embedded />
+            <div className="fr-persp-main" style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0 }}>
+              <EEEnpsReport
+                data={activeGroup === clientScope.brandGroupId ? brandEnpsReport : reportBundle.enpsReport}
+                embedded
+                variant={activeGroup === clientScope.brandGroupId ? "brand" : "executive"}
+                descriptorText={enpsDescriptorText}
+                chromeless={redesignActive}
+                headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+              />
             </div>
             {fixedInfoRail}
           </div>
@@ -2169,66 +3179,337 @@ export function DwsEmployeeExperienceDashboardClient({
       case "hr-index-dive":
         return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
       case "hr-supervisor":
-        return <EESupervisorReport data={reportBundle.supervisorReport} />;
+        return isFieldScope ? (
+          <EEDepartmentReport
+            key="supervisor-segment-report"
+            chromeless={redesignActive}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            data={reportBundle.supervisorSegmentReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            unitLabel="Supervisor"
+            reportHeading="SUPERVISOR REPORT"
+            enableVisualLocks={false}
+            fieldLayout
+            // This branch only ever renders when isFieldScope is true, so
+            // redesignActive alone is enough to scope this.
+            basinReportSurface={redesignActive}
+          />
+        ) : (
+          <EESupervisorReport data={hrSupervisorReport} benchmarkLabel={clientScope.benchmarkLabel} />
+        );
       case "hr-open-text":
-        return <HrOpenText data={data} current={current} brandFilter={openTextBrand} fieldType={openTextField} />;
+        return (
+          <HrOpenText
+            data={data}
+            current={current}
+            brandFilter={openTextBrand}
+            fieldType={openTextField}
+            fields={openTextFields}
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+          />
+        );
       case "ee-brand-open-text":
-        return <HrOpenText data={data} current={current} brandFilter={openTextBrand} fieldType={openTextField} />;
+        return <HrOpenText data={data} current={current} brandFilter={openTextBrand} fieldType={openTextField} fields={openTextFields} />;
       case "dept-scorecard":
         return <DeptScorecard data={data} current={current} prior={prior} selectedDept={selectedDept || deptOpts[0] || ""} />;
       case "ee-brand-report":
         return (
           <EEDepartmentReport
-            key="brand-report"
+            key={`${clientScope.key}-brand-report`}
+            chromeless={redesignActive}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            // Basin group surface treatment "1b" — shared by Basin Report,
+            // Basin Breakdown, and Basin Comparison. This case is the DWS
+            // Field pilot's "Basin Report" ONLY when clientScope is
+            // "dws-field"; other client scopes reuse this same case for
+            // their own (unaffected) Brand Report.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
             data={reportBundle.brandReport}
-            unitLabel="Brand"
-            reportHeading="BRAND REPORT"
+            benchmarkLabel={clientScope.benchmarkLabel}
+            unitLabel={clientScope.brandLabel}
+            reportHeading={`${clientScope.brandLabel.toUpperCase()} REPORT`}
+            stylePreset={clientScope.key === "csg" ? "division" : "default"}
+            enableVisualLocks={clientScope.enableVisualLocks}
+            exportClientLabel={data.meta.organizationName}
+            fieldLayout={useIndexRailLayout}
+            compact={clientScope.key === "dws"}
           />
         );
+      case "ee-segment-breakdown":
+        return clientScope.key === "dws-field" ? (
+          <EESegmentBreakdown
+            key="segment-breakdown"
+            data={reportBundle.segmentBreakdowns}
+            unitLabel={clientScope.brandLabel}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            chromeless={redesignActive}
+            // Basin group surface treatment "1b" — see the matching note on
+            // ee-brand-report below; Basin Breakdown is dws-field-only so
+            // redesignActive alone is enough to scope this.
+            basinReportSurface={redesignActive}
+          />
+        ) : null;
       case "ee-department-report":
         return (
           <EEDepartmentReport
-            key="job-category-report"
-            data={reportBundle.jobCategoryReport}
-            unitLabel="Job Category"
-            reportHeading="JOB CATEGORY REPORT"
+            key={`${clientScope.key}-job-category-report`}
+            chromeless={redesignActive}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            data={clientScope.key === "dws" ? reportBundle.leadershipReport : reportBundle.jobCategoryReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            unitLabel={clientScope.jobCategoryLabel}
+            reportHeading={`${clientScope.jobCategoryLabel.toUpperCase()} REPORT`}
+            enableVisualLocks={clientScope.enableVisualLocks}
+            fieldLayout={useIndexRailLayout}
+            compact={clientScope.key === "dws"}
+            // Basin surface treatment "1b" is now applied dashboard-wide
+            // across every DWS Field perspective; this case is also reused
+            // by DWS/CSG, so the scope check keeps them unaffected.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+          />
+        );
+      case "ee-division-report":
+        return (
+          <EEDepartmentReport
+            key="division-report"
+            chromeless={redesignActive}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            data={reportBundle.divisionReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            unitLabel="Division"
+            reportHeading="DIVISION REPORT"
+            enableVisualLocks={clientScope.enableVisualLocks}
+            fieldLayout={useIndexRailLayout}
+            compact={clientScope.key === "dws"}
+            // Basin surface treatment "1b" is now applied dashboard-wide
+            // across every DWS Field perspective; this case is also reused
+            // by DWS/CSG, so the scope check keeps them unaffected.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
           />
         );
       case "ee-unit-department-report":
         return (
           <EEDepartmentReport
             key="department-report"
+            chromeless={redesignActive}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             data={reportBundle.departmentReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
             unitLabel="Department"
             reportHeading="DEPARTMENT REPORT"
+            enableVisualLocks={clientScope.enableVisualLocks}
+            fieldLayout={useIndexRailLayout}
+            compact={clientScope.key === "dws"}
+            // Basin surface treatment "1b" is now applied dashboard-wide
+            // across every DWS Field perspective; this case is also reused
+            // by DWS/CSG, so the scope check keeps them unaffected.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+          />
+        );
+      case "ee-autosep-report":
+        return (
+          <EEDepartmentReport
+            key="autosep-report"
+            chromeless={redesignActive}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            data={autosepBundle.departmentReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            unitLabel="Department"
+            reportHeading="AUTOSEP REPORT"
+            enableVisualLocks={clientScope.enableVisualLocks}
+            fieldLayout={clientScope.key === "dws-field"}
+            // Autosep is dws-field-only (fieldLayout is only ever true for
+            // that scope), so redesignActive alone is enough to scope this.
+            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
           />
         );
       default: return null;
     }
-  }, [activePersp, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, selectedDept, deptOpts, reportBundle, campaignResultsBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId]);
+  }, [activePersp, activeGroup, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, openTextFields, selectedDept, deptOpts, jobCategoryOpts, reportBundle, autosepBundle, execBrandFilteredBundle, campaignResultsBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId, execComparisonJobCategory, execComparisonDepartment, supervisorComparisonReport, hrSupervisorReport, brandEnpsReport, availableGroups.length, clientScope, enpsDescriptorText, redesignActive]);
+
+  const exportFilename = buildDashboardExportFilename({
+    client: clientScope.key,
+    perspective: activePersp,
+    campaign: current,
+  });
+
+  const useCompositeExport = true;
+
+  // ── DWS Field layout-redesign pilot ────────────────────────────────────────
+  // Rendered only when clientScope.key === "dws-field" AND ?layout=redesign.
+  if (redesignActive && clientScope.key === "dws-field") {
+    const isOpenText = activePersp === "hr-open-text" || activePersp === "ee-brand-open-text";
+    const isExecutivePersp = clientScope.executivePerspectives.has(activePersp);
+
+    const redesignContextSlot = (
+      <div className="flex flex-col gap-3">
+        {/* Campaign date now lives in the left-rail identity block, under the logo. */}
+        <CompositeVisualExportButton filename={exportFilename} logoUrl={logoUrl} skipGeneratedHeader asContextCard />
+        <EmbeddedFilterCard title={isEnpsPerspective ? "ENPS Score Bands" : "Score Scale"}>
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{isEnpsPerspective ? "0" : String(reportScaleOption?.min ?? 60)}</span>
+            <div className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]" style={{ background: isEnpsPerspective ? enpsScoreLegendGradient : dashboardScoreLegendGradient }} />
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{isEnpsPerspective ? "10" : String(reportScaleOption?.max ?? 85)}</span>
+          </div>
+          {isEnpsPerspective ? <div className="mt-1.5">{enpsScoreLegendTicks}</div> : null}
+          {isEnpsPerspective ? <div className="mt-2">{enpsScoreLegendBands}</div> : null}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #EEF1EE" }}>
+            <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#8798AA", marginBottom: 8 }}>Delta</p>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>Decline</span>
+              <div className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]" style={{ background: "linear-gradient(90deg, #D46A6A 0%, #F5EFEF 50%, #59885D 100%)" }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>Gain</span>
+            </div>
+          </div>
+        </EmbeddedFilterCard>
+        <EmbeddedFilterCard title="How to Read">
+          <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>{perspectiveHowToRead[activePersp]}</p>
+        </EmbeddedFilterCard>
+      </div>
+    );
+
+    const redesignFiltersSlot = isExecutivePersp ? (
+      renderExecutiveRail(true)
+    ) : isOpenText ? (
+      <div className="flex flex-col gap-4">
+        {openTextFields.length > 1 ? (
+          <EmbeddedFilterCard title="Question">
+            <PillOptionRow
+              value={openTextField}
+              onChange={(value) => setOpenTextField(value as OpenTextField)}
+              options={openTextFields.map((field) => ({ id: field.id, label: field.label }))}
+            />
+          </EmbeddedFilterCard>
+        ) : null}
+        <EmbeddedFilterCard title={clientScope.brandLabel}>
+          <PillOptionRow
+            value={openTextBrand}
+            onChange={setOpenTextBrand}
+            options={[
+              { id: "", label: `All ${clientScope.brandLabel.toLowerCase()}s` },
+              ...locationOpts.map((brand) => ({ id: brand, label: brand })),
+            ]}
+          />
+        </EmbeddedFilterCard>
+      </div>
+    ) : (
+      // Report-style perspectives (EEDepartmentReport) portal their own selectors here.
+      <div id={FR_FILTERS_SLOT} />
+    );
+
+    return (
+      <VisualExportProvider active client={data.meta.organizationName} logoUrl={logoUrl}>
+        <FieldRedesignShell
+          clientName={data.meta.organizationName}
+          logoUrl={logoUrl}
+          clientSubline="Field Employee Experience"
+          campaignLabel={current}
+          eyebrow={`${groupDef?.label ?? ""} · ${current}`}
+          reportTitle={clientScope.executiveTitles[activePersp] ?? activePersp}
+          views={availableGroups.map((g) => ({
+            id: g.id,
+            label: g.label,
+            perspectives: g.perspectives.map((p) => ({ id: p.id, label: p.label, dividerBefore: p.dividerBefore })),
+          }))}
+          activeViewId={activeGroup}
+          activeReportId={activePersp}
+          onSelectReport={(viewId, reportId) => {
+            setActiveGroup(viewId as GroupId);
+            setActivePersp(reportId as PerspectiveId);
+          }}
+          contextSlot={redesignContextSlot}
+          filtersSlot={redesignFiltersSlot}
+          headerExtraSlotId={FR_HEADER_EXTRA_SLOT}
+          thickerHeaderDivider
+          titleSuffixSlotId={FR_TITLE_SUFFIX_SLOT}
+          // Basin surface treatment "1b" now applies dashboard-wide across
+          // every DWS Field perspective (not just the former "Basin group"
+          // trio), since the underlying kit is shared. This whole block only
+          // ever renders when clientScope.key === "dws-field" (see the
+          // enclosing `if` above), so no extra scope check is needed here.
+          basinReportSurface={clientScope.key === "dws-field"}
+        >
+          <div id={DASHBOARD_VISUAL_EXPORT_TARGET_ID}>{content}</div>
+        </FieldRedesignShell>
+      </VisualExportProvider>
+    );
+  }
 
   return (
-    <>
+    <VisualExportProvider
+      active
+      client={data.meta.organizationName}
+      logoUrl={logoUrl}
+    >
       <DashboardRibbon
         title="Employee Experience"
-        categories={GROUPS.map((g) => ({ id: g.id, label: g.label }))}
+        categories={availableGroups.map((g) => ({ id: g.id, label: g.label }))}
         activeCategoryId={activeGroup}
         onCategoryChange={onGroupChange}
-        perspectives={groupDef.perspectives.map((p) => ({ id: p.id, label: p.label }))}
+        perspectives={(groupDef?.perspectives ?? []).map((p) => ({ id: p.id, label: p.label }))}
         activePerspectiveId={activePersp}
         onPerspectiveChange={(id) => setActivePersp(id as PerspectiveId)}
         forcePerspectiveSelect
+        legend={
+          <div className="flex items-center gap-2.5">
+            <p className="hidden text-right text-[11px] font-medium leading-snug text-[#60727D] xl:block">
+              {useCompositeExport ? (
+                <>
+                  Export the full
+                  <br />
+                  report as a PNG
+                </>
+              ) : (
+                <>
+                  Export the current
+                  <br />
+                  view as a PNG
+                </>
+              )}
+            </p>
+            {useCompositeExport ? (
+              <CompositeVisualExportButton filename={exportFilename} logoUrl={logoUrl} />
+            ) : (
+              <VisualExportButton
+                targetId={DASHBOARD_VISUAL_EXPORT_TARGET_ID}
+                filename={exportFilename}
+                iconOnly
+              />
+            )}
+          </div>
+        }
       />
-      {EXECUTIVE_PERSPECTIVES.has(activePersp) ||
+      <div id={DASHBOARD_VISUAL_EXPORT_TARGET_ID}>
+      {clientScope.executivePerspectives.has(activePersp) ||
       activePersp === "ee-campaign-results" ||
       activePersp === "ee-department-comparison" ||
       activePersp === "ee-location-comparison" ||
+      activePersp === "ee-division-comparison" ||
+      activePersp === "ee-role-comparison" ||
       activePersp === "hr-supervisor" ||
       activePersp === "ee-brand-report" ||
       activePersp === "ee-department-report" ||
-      activePersp === "ee-unit-department-report"
+      activePersp === "ee-unit-department-report" ||
+      activePersp === "ee-autosep-report" ||
+      activePersp === "ee-division-report"
         ? content
         : <DashboardCanvas leftRail={leftRail} rightRail={canvasInfoRail}>{content}</DashboardCanvas>}
-    </>
+      </div>
+    </VisualExportProvider>
   );
 }
+

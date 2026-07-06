@@ -1,0 +1,14 @@
+---
+description: Auto-deploy workflow after code changes
+alwaysApply: true
+---
+
+# Deployment Default
+
+- For this project, automatically deploy after any completed code change without waiting for the user to ask.
+- Never leave code changes undeployed at the end of a task unless the user explicitly says not to deploy.
+- If a commit is requested, create the commit first, then deploy.
+- After deployment, always return both:
+  - production/live URL
+  - Vercel inspect URL
+- If deployment fails, retry immediately and report the blocker plus what was attempted.

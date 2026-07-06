@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Montserrat","Segoe UI",sans-serif; color: #152238; -webkit-font-smoothing: antialiased; background: #EEF2EE; }
+  [contenteditable="true"] { outline: none; border-radius: 4px; box-shadow: inset 0 -2px 0 rgba(201,154,60,0.55); transition: box-shadow 0.15s ease; cursor: text; }
+  [contenteditable="true"]:hover { box-shadow: inset 0 -2px 0 rgba(201,154,60,0.95); }
+  [contenteditable="true"]:focus { box-shadow: 0 0 0 2px #C99A3C; }
+  .ns-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+  .ns-scroll::-webkit-scrollbar-thumb { background: #C7D0D8; border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+</style>
+</helmet>
+
+<div style="height:100vh; overflow:hidden; background:#EEF2EE; position:relative;">
+
+  <!-- ===== Portal top banner ===== -->
+  <header style="height:64px; display:flex; align-items:center; gap:24px; padding:0 24px; background:linear-gradient(100deg,#242424 0%,#2B2B2B 60%,#2F4A38 150%); box-shadow:0 2px 14px rgba(17,17,17,0.18); position:relative; z-index:50;">
+    <div style="display:flex; align-items:center; gap:11px; padding-right:8px;">
+      <div style="width:30px; height:30px; border-radius:8px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; color:#242424; font-weight:800; font-size:15px;">C</div>
+      <span style="color:#fff; font-weight:600; letter-spacing:0.22em; font-size:13px;">CALIBER</span>
+    </div>
+    <nav style="display:flex; align-items:center; gap:4px;">
+      <span style="color:rgba(255,255,255,0.62); font-size:13px; font-weight:500; padding:7px 12px;">Home</span>
+      <span style="color:rgba(255,255,255,0.62); font-size:13px; font-weight:500; padding:7px 12px;">Dashboards</span>
+      <span style="color:#fff; font-size:13px; font-weight:600; padding:7px 12px; border-radius:999px; background:rgba(232,204,112,0.16);">Insights</span>
+      <span style="color:rgba(255,255,255,0.62); font-size:13px; font-weight:500; padding:7px 12px;">Reports</span>
+      <span style="color:rgba(255,255,255,0.62); font-size:13px; font-weight:500; padding:7px 12px;">Documents</span>
+    </nav>
+    <div style="flex:1;"></div>
+    <div style="display:flex; align-items:center; padding:3px; border-radius:999px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12);">
+      <span style="padding:6px 16px; border-radius:999px; font-size:12.5px; font-weight:600; background:#fff; color:#242424;">Insights</span>
+      <button onClick="{{ openOverview }}" style="padding:6px 16px; border-radius:999px; font-size:12.5px; font-weight:600; background:transparent; color:rgba(255,255,255,0.78); border:none; cursor:pointer; font-family:inherit;">Dashboard</button>
+    </div>
+    <sc-if value="{{ showEditBtn }}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{ toggleEdit }}" style="display:flex; align-items:center; gap:7px; padding:8px 14px; border-radius:999px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid rgba(215,179,90,0.4); background:{{ editBtnBg }}; color:#fff;">{{ editLabel }}</button>
+    </sc-if>
+    <div style="text-align:right; padding-left:4px;">
+      <p style="margin:0; color:#fff; font-size:13px; font-weight:600;">Dana Whitfield</p>
+      <p style="margin:0; color:rgba(232,204,112,0.85); font-size:10.5px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase;">Top Flight · HR</p>
+    </div>
+  </header>
+
+  <!-- ===== INTRO SCREEN ===== -->
+  <sc-if value="{{ isIntro }}" hint-placeholder-val="{{ true }}">
+  <div style="height:calc(100vh - 64px); display:flex; overflow:hidden;">
+
+    <!-- dark welcome panel -->
+    <div style="flex:0 0 500px; background:linear-gradient(160deg,#242424 0%,#22301f 100%); display:flex; flex-direction:column; justify-content:center; padding:64px 52px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:40px;">
+        <span style="width:6px; height:6px; border-radius:999px; background:#E8CC70;"></span>
+        <span contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIEyebrow }}" style="color:rgba(232,204,112,0.8); font-size:11px; font-weight:600; letter-spacing:0.24em; text-transform:uppercase;">{{ ts.iEyebrow }}</span>
+      </div>
+      <h1 contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIHeadline }}" style="margin:0 0 20px; font-family:'Playfair Display',serif; font-size:40px; line-height:1.12; color:#fff; font-weight:600; letter-spacing:-0.01em;">{{ ts.iHeadline }}</h1>
+      <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIBody }}" style="margin:0 0 32px; color:rgba(255,255,255,0.62); font-size:15.5px; line-height:1.65;">{{ ts.iBody }}</p>
+      <div style="display:flex; flex-direction:column; gap:11px; margin-bottom:44px;">
+        <div style="display:flex; align-items:center; gap:12px; color:rgba(255,255,255,0.55); font-size:13px; font-weight:500;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:999px; background:rgba(232,204,112,0.15); color:#E8CC70; font-size:11px; font-weight:700; flex-shrink:0;">6</span>
+          Findings, ordered by impact
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; color:rgba(255,255,255,0.55); font-size:13px; font-weight:500;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:999px; background:rgba(232,204,112,0.15); color:#E8CC70; font-size:11px; font-weight:700; flex-shrink:0;">~8</span>
+          Minutes to read through
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; color:rgba(255,255,255,0.55); font-size:13px; font-weight:500;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:999px; background:rgba(232,204,112,0.15); color:#E8CC70; font-size:13px; flex-shrink:0;">&#8599;</span>
+          Live data behind every finding
+        </div>
+      </div>
+      <button onClick="{{ beginReadout }}" style="align-self:flex-start; display:inline-flex; align-items:center; gap:10px; padding:14px 24px; border-radius:999px; border:none; background:linear-gradient(135deg,#E8CC70,#C99A3C); color:#242424; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(201,154,60,0.3);">Begin your readout <span style="font-size:15px;">&#8594;</span></button>
+    </div>
+
+    <!-- orientation panel -->
+    <div class="ns-scroll" style="flex:1; background:#EFF2ED; overflow-y:auto; padding:56px 52px; display:flex; flex-direction:column; justify-content:center;">
+      <p style="margin:0 0 6px; color:#6E7E96; font-size:11px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase;">What&#8217;s in this readout</p>
+      <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurISubHead }}" style="margin:0 0 28px; font-family:'Playfair Display',serif; color:#152238; font-size:21px; font-weight:600; line-height:1.35;">{{ ts.iSubHead }}</p>
+      <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:36px;">
+        <div style="display:flex; align-items:flex-start; gap:14px; padding:15px 18px; background:#fff; border:1px solid #DCE3DD; border-radius:14px;">
+          <span style="width:8px; height:8px; border-radius:999px; background:#5E7898; flex-shrink:0; margin-top:5px;"></span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS1Title }}" style="margin:0 0 2px; font-size:12.5px; font-weight:700; color:#152238;">{{ ts.iS1Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS1Body }}" style="margin:0; font-size:12px; line-height:1.5; color:#6E7E96;">{{ ts.iS1Body }}</p></div>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:14px; padding:15px 18px; background:#fff; border:1px solid #CDE6D5; border-radius:14px;">
+          <span style="width:8px; height:8px; border-radius:999px; background:#2F9151; flex-shrink:0; margin-top:5px;"></span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS2Title }}" style="margin:0 0 2px; font-size:12.5px; font-weight:700; color:#152238;">{{ ts.iS2Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS2Body }}" style="margin:0; font-size:12px; line-height:1.5; color:#6E7E96;">{{ ts.iS2Body }}</p></div>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:14px; padding:15px 18px; background:#fff; border:1px solid #F0D6D2; border-radius:14px;">
+          <span style="width:8px; height:8px; border-radius:999px; background:#C96B60; flex-shrink:0; margin-top:5px;"></span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS3Title }}" style="margin:0 0 2px; font-size:12.5px; font-weight:700; color:#152238;">{{ ts.iS3Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS3Body }}" style="margin:0; font-size:12px; line-height:1.5; color:#6E7E96;">{{ ts.iS3Body }}</p></div>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:14px; padding:15px 18px; background:#FFFDF5; border:1px solid #F0E2B6; border-radius:14px;">
+          <span style="width:8px; height:8px; border-radius:999px; background:#C99A3C; flex-shrink:0; margin-top:5px;"></span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS4Title }}" style="margin:0 0 2px; font-size:12.5px; font-weight:700; color:#152238;">{{ ts.iS4Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIS4Body }}" style="margin:0; font-size:12px; line-height:1.5; color:#6E7E96;">{{ ts.iS4Body }}</p></div>
+        </div>
+      </div>
+      <div style="padding:16px 20px; background:#fff; border:1px solid #8798AA; border-radius:14px;">
+        <p style="margin:0 0 3px; color:#6E7E96; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">Prepared by</p>
+        <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIPrepBy }}" style="margin:0 0 2px; color:#152238; font-size:14px; font-weight:600;">{{ ts.iPrepBy }}</p>
+        <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurIDateInfo }}" style="margin:0; color:#6E7E96; font-size:12px;">{{ ts.iDateInfo }}</p>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== FINDINGS SCREEN ===== -->
+  <sc-if value="{{ isFindings }}" hint-placeholder-val="{{ false }}">
+  <section style="display:grid; grid-template-columns:332px 1fr; height:calc(100vh - 64px);">
+
+    <!-- ===== Findings rail (shared) ===== -->
+    <aside class="ns-scroll" style="background:linear-gradient(180deg,#242424,#22301f); padding:24px 18px 40px; overflow-y:auto;">
+      <p style="margin:0 0 3px; color:#E8CC70; font-size:11px; font-weight:600; letter-spacing:0.24em; text-transform:uppercase;">Your readout</p>
+      <p style="margin:0 0 14px; color:rgba(255,255,255,0.55); font-size:12.5px; line-height:1.5;">Top Flight · Oct 2025 · {{ beatCount }} findings, ordered by what matters most</p>
+
+      <div style="display:flex; gap:14px; margin:0 0 18px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.05);">
+        <span style="display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.66); font-size:10.5px; font-weight:600;"><span style="width:8px; height:8px; border-radius:999px; background:#2F9151;"></span>Strength</span>
+        <span style="display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.66); font-size:10.5px; font-weight:600;"><span style="width:8px; height:8px; border-radius:999px; background:#C96B60;"></span>Watch</span>
+        <span style="display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.66); font-size:10.5px; font-weight:600;"><span style="width:8px; height:8px; border-radius:999px; background:#5E7898;"></span>Context</span>
+      </div>
+
+      <sc-for list="{{ sections }}" as="section" hint-placeholder-count="4">
+        <div style="margin-bottom:16px;">
+          <div style="display:flex; align-items:center; gap:10px; margin:0 4px 9px;">
+            <span style="color:rgba(255,255,255,0.92); font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">{{ section.label }}</span>
+            <span style="flex:1; height:1px; background:rgba(255,255,255,0.12);"></span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:5px;">
+            <sc-for list="{{ section.items }}" as="beat" hint-placeholder-count="2">
+              <button onClick="{{ beat.goHere }}" style="display:flex; align-items:flex-start; gap:11px; text-align:left; padding:11px 12px; border-radius:12px; border:1px solid {{ beat.railBorder }}; background:{{ beat.railBg }}; cursor:pointer; font-family:inherit; transition:all 0.18s ease;">
+                <span style="width:10px; height:10px; flex-shrink:0; border-radius:999px; background:{{ beat.toneColor }}; margin-top:4px; box-shadow:{{ beat.dotRing }};"></span>
+                <span style="min-width:0;">
+                  <span style="display:block; color:rgba(255,255,255,0.5); font-size:9px; font-weight:600; letter-spacing:0.13em; text-transform:uppercase; margin-bottom:3px;">{{ beat.verdict }}</span>
+                  <span style="display:block; color:{{ beat.railText }}; font-size:13px; font-weight:600; line-height:1.32;">{{ beat.headlineShort }}</span>
+                </span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </aside>
+
+    <!-- ===== Main content (one-page, never scrolls) ===== -->
+    <div style="position:relative; height:calc(100vh - 64px); overflow:hidden; background:#EFF2ED;">
+
+      <!-- editing toast -->
+      <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:8; display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background:#FFFDF5; border:1px solid #F0E2B6; color:#5A4410; font-size:12px; font-weight:500; box-shadow:0 6px 18px rgba(17,17,17,0.1);">
+        <span style="font-size:12px;">&#9998;</span> Editing — click any headline or paragraph to rewrite it.
+      </div>
+      </sc-if>
+
+      <!-- ========== ITERATION 1 · BRIEF ========== -->
+      <sc-if value="{{ isBrief }}" hint-placeholder-val="{{ true }}">
+      <div style="height:100%; display:flex; flex-direction:column; padding:30px 38px 20px;">
+
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:18px;">
+          <span style="width:9px; height:9px; border-radius:999px; background:{{ activeBeat.toneColor }};"></span>
+          <span style="color:#6E7E96; font-size:11.5px; font-weight:600; letter-spacing:0.2em; text-transform:uppercase;">{{ activeBeat.eyebrow }}</span>
+          <span style="padding:3px 11px; border-radius:999px; font-size:10.5px; font-weight:700; background:{{ activeBeat.tintBg }}; color:{{ activeBeat.toneColor }};">{{ activeBeat.verdict }}</span>
+          <span style="flex:1;"></span>
+          <span style="color:#9AA7B4; font-size:11.5px; font-weight:600;">Finding {{ activeBeat.pos }} of {{ beatCount }}</span>
+        </div>
+
+        <div style="flex:1; min-height:0; display:grid; grid-template-columns:0.82fr 1.18fr; gap:34px; align-items:stretch;">
+
+          <!-- narrative column -->
+          <div style="display:flex; flex-direction:column; min-height:0;">
+            <h1 contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ activeBeat.onBlurHeadline }}" style="margin:0; font-family:'Playfair Display',serif; font-weight:600; font-size:33px; line-height:1.14; color:#152238; letter-spacing:-0.01em;">{{ activeBeat.headlineText }}</h1>
+            <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ activeBeat.onBlurDetail }}" style="margin:16px 0 0; color:#3B4B63; font-size:15px; line-height:1.6;">{{ activeBeat.detailText }}</p>
+            <div style="flex:1; min-height:14px;"></div>
+            <sc-if value="{{ activeBeat.hasGuidance }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; flex-direction:column; gap:11px;">
+              <div style="padding:16px 18px; background:#fff; border:1px solid #DCE3DD; border-radius:14px;">
+                <p style="margin:0 0 7px; display:flex; align-items:center; gap:8px; color:#6E7E96; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;"><span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:5px; background:#E9F0F7; color:#5E7898; font-size:10px; font-weight:800;">i</span>The read</p>
+                <p style="margin:0; color:#3B4B63; font-size:13.5px; line-height:1.55;">{{ activeBeat.means }}</p>
+              </div>
+              <div style="padding:16px 18px; background:{{ activeBeat.actBg }}; border:1px solid {{ activeBeat.actBorder }}; border-radius:14px;">
+                <p style="margin:0 0 7px; display:flex; align-items:center; gap:8px; color:{{ activeBeat.toneColor }}; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;"><span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:5px; background:{{ activeBeat.tintBg }}; color:{{ activeBeat.toneColor }}; font-size:11px;">&#8594;</span>Do this next</p>
+                <p style="margin:0 0 13px; color:#3B4B63; font-size:13.5px; line-height:1.55;">{{ activeBeat.act }}</p>
+                <button onClick="{{ activeBeat.openDash }}" style="display:inline-flex; align-items:center; gap:8px; padding:10px 16px; border-radius:999px; background:#242424; color:#fff; border:none; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; box-shadow:0 5px 14px rgba(17,17,17,0.16);">Open {{ activeBeat.persp }}<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:999px; background:#386B45; color:#fff; font-size:11px;">&#8594;</span></button>
+              </div>
+            </div>
+            </sc-if>
+          </div>
+
+          <!-- live data panel -->
+          <div style="display:flex; flex-direction:column; min-height:0; background:#fff; border:1px solid #8798AA; border-radius:16px; box-shadow:7px 9px 20px rgba(15,23,42,0.07),2px 3px 6px rgba(15,23,42,0.04); overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid #E2E8EF; background:#F1F4F7; flex-shrink:0;">
+              <span style="font-size:10.5px; font-weight:700; letter-spacing:0.1em; color:#2B2B2B; text-transform:uppercase;">{{ activeBeat.perspGroup }}</span>
+              <span style="color:#9AA7B4; font-size:12px;">&#8250;</span>
+              <span style="padding:4px 11px; border-radius:999px; background:#242424; color:#fff; font-size:11.5px; font-weight:600;">{{ activeBeat.persp }}</span>
+              <span style="flex:1;"></span>
+              <span style="color:#6E7E96; font-size:11px; font-weight:600;">Oct 2025 · vs Feb 2025</span>
+            </div>
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 22px 6px; flex-shrink:0;">
+              <div>
+                <p style="margin:0; color:#152238; font-size:15px; font-weight:700;">{{ activeBeat.chartTitle }}</p>
+                <p style="margin:3px 0 0; color:#6E7E96; font-size:11px;">{{ activeBeat.chartSub }}</p>
+              </div>
+              <div style="display:flex; gap:8px; flex-shrink:0;">
+                <div style="text-align:center; padding:6px 11px; border-radius:10px; border:1px solid #8798AA; background:rgba(255,255,255,0.85);"><p style="margin:0; font-size:8.5px; font-weight:700; letter-spacing:0.1em; color:#6E7E96; text-transform:uppercase;">Org avg</p><p style="margin:1px 0 0; font-size:17px; font-weight:800; color:#5E7898;">67.7</p></div>
+                <div style="text-align:center; padding:6px 11px; border-radius:10px; border:1px solid #8798AA; background:rgba(255,255,255,0.85);"><p style="margin:0; font-size:8.5px; font-weight:700; letter-spacing:0.1em; color:#6E7E96; text-transform:uppercase;">Resp.</p><p style="margin:1px 0 0; font-size:17px; font-weight:800; color:#152238;">71%</p></div>
+              </div>
+            </div>
+            <div style="flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; padding:8px 22px; overflow:hidden;">{{ activeBeat.chart }}</div>
+            <div style="padding:12px 22px; border-top:1px solid #E2E8EF; background:#FBFCFB; flex-shrink:0;">
+              <p style="margin:0; color:#6E7E96; font-size:11px; line-height:1.5;"><span style="font-weight:700; color:#3B4B63;">How to read:</span> {{ activeBeat.howToRead }}</p>
+            </div>
+          </div>
+        </div>
+
+        {{ footerNav }}
+      </div>
+      </sc-if>
+
+      <!-- ========== ITERATION 2 · STAGE ========== -->
+      <sc-if value="{{ isStage }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%; display:flex; flex-direction:column; padding:28px 40px 20px;">
+
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+          <span style="width:9px; height:9px; border-radius:999px; background:{{ activeBeat.toneColor }};"></span>
+          <span style="color:#6E7E96; font-size:11.5px; font-weight:600; letter-spacing:0.2em; text-transform:uppercase;">{{ activeBeat.eyebrow }}</span>
+          <span style="padding:3px 11px; border-radius:999px; font-size:10.5px; font-weight:700; background:{{ activeBeat.tintBg }}; color:{{ activeBeat.toneColor }};">{{ activeBeat.verdict }}</span>
+          <span style="flex:1;"></span>
+          <span style="color:#9AA7B4; font-size:11.5px; font-weight:600;">Finding {{ activeBeat.pos }} of {{ beatCount }}</span>
+        </div>
+
+        <h1 contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ activeBeat.onBlurHeadline }}" style="margin:0; font-family:'Playfair Display',serif; font-weight:600; font-size:38px; line-height:1.1; color:#152238; letter-spacing:-0.01em; max-width:26ch; flex-shrink:0;">{{ activeBeat.headlineText }}</h1>
+
+        <div style="flex:1; min-height:0; display:grid; grid-template-columns:1.42fr 0.58fr; gap:28px; align-items:stretch; margin-top:20px;">
+
+          <!-- data hero -->
+          <div style="display:flex; flex-direction:column; min-height:0; background:#fff; border:1px solid #8798AA; border-radius:16px; box-shadow:7px 9px 20px rgba(15,23,42,0.08),2px 3px 6px rgba(15,23,42,0.05); overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:10px; padding:13px 22px; border-bottom:1px solid #E2E8EF; background:#F1F4F7; flex-shrink:0;">
+              <span style="font-size:10.5px; font-weight:700; letter-spacing:0.1em; color:#2B2B2B; text-transform:uppercase;">{{ activeBeat.perspGroup }}</span>
+              <span style="color:#9AA7B4; font-size:12px;">&#8250;</span>
+              <span style="padding:4px 11px; border-radius:999px; background:#242424; color:#fff; font-size:11.5px; font-weight:600;">{{ activeBeat.persp }}</span>
+              <span style="flex:1;"></span>
+              <span style="color:#6E7E96; font-size:11px; font-weight:600;">Oct 2025 · vs Feb 2025</span>
+            </div>
+            <div style="padding:18px 24px 4px; flex-shrink:0;">
+              <p style="margin:0; color:#152238; font-size:15.5px; font-weight:700;">{{ activeBeat.chartTitle }}</p>
+              <p style="margin:3px 0 0; color:#6E7E96; font-size:11.5px;">{{ activeBeat.chartSub }}</p>
+            </div>
+            <div style="flex:1; min-height:0; display:flex; flex-direction:column; justify-content:center; padding:6px 24px; overflow:hidden;">{{ activeBeat.chart }}</div>
+            <div style="padding:12px 24px; border-top:1px solid #E2E8EF; background:#FBFCFB; flex-shrink:0;">
+              <p style="margin:0; color:#6E7E96; font-size:11px; line-height:1.5;"><span style="font-weight:700; color:#3B4B63;">How to read:</span> {{ activeBeat.howToRead }}</p>
+            </div>
+          </div>
+
+          <!-- narrative rail -->
+          <div style="display:flex; flex-direction:column; min-height:0; gap:12px;">
+            <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ activeBeat.onBlurDetail }}" style="margin:0; color:#3B4B63; font-size:14.5px; line-height:1.6;">{{ activeBeat.detailText }}</p>
+            <sc-if value="{{ activeBeat.hasStat }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; align-items:baseline; gap:6px; padding:2px 0;">
+              <span style="font-family:'Playfair Display',serif; font-weight:700; font-size:46px; line-height:1; color:{{ activeBeat.toneColor }};">{{ activeBeat.statValue }}</span>
+              <span style="color:#9AA7B4; font-size:15px; font-weight:600;">{{ activeBeat.statUnit }}</span>
+              <span style="margin-left:5px; color:#6E7E96; font-size:12.5px; font-weight:500;">{{ activeBeat.statSub }}</span>
+            </div>
+            </sc-if>
+            <sc-if value="{{ activeBeat.hasGuidance }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:15px 17px; background:#fff; border:1px solid #DCE3DD; border-radius:14px;">
+              <p style="margin:0 0 6px; color:#6E7E96; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">The read</p>
+              <p style="margin:0; color:#3B4B63; font-size:13px; line-height:1.5;">{{ activeBeat.means }}</p>
+            </div>
+            <div style="padding:15px 17px; background:{{ activeBeat.actBg }}; border:1px solid {{ activeBeat.actBorder }}; border-radius:14px;">
+              <p style="margin:0 0 6px; color:{{ activeBeat.toneColor }}; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">Do this next</p>
+              <p style="margin:0 0 12px; color:#3B4B63; font-size:13px; line-height:1.5;">{{ activeBeat.act }}</p>
+              <button onClick="{{ activeBeat.openDash }}" style="display:inline-flex; align-items:center; gap:8px; padding:10px 15px; border-radius:999px; background:#242424; color:#fff; border:none; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; box-shadow:0 5px 14px rgba(17,17,17,0.16);">Open in dashboard<span style="display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:999px; background:#386B45; color:#fff; font-size:11px;">&#8594;</span></button>
+            </div>
+            </sc-if>
+          </div>
+        </div>
+
+        {{ footerNav }}
+      </div>
+      </sc-if>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- ===== OUTRO SCREEN ===== -->
+  <sc-if value="{{ isOutro }}" hint-placeholder-val="{{ false }}">
+  <div style="height:calc(100vh - 64px); display:flex; overflow:hidden;">
+
+    <!-- dark next-steps panel -->
+    <div style="flex:0 0 420px; background:linear-gradient(160deg,#242424 0%,#22301f 100%); display:flex; flex-direction:column; justify-content:center; padding:56px 48px;">
+      <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurONSHead }}" style="margin:0 0 5px; color:rgba(232,204,112,0.8); font-size:11px; font-weight:600; letter-spacing:0.24em; text-transform:uppercase;">{{ ts.oNSHead }}</p>
+      <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurONSHero }}" style="margin:0 0 28px; font-family:'Playfair Display',serif; color:#fff; font-size:20px; font-weight:600; line-height:1.4;">{{ ts.oNSHero }}</p>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:36px;">
+        <div style="display:flex; align-items:flex-start; gap:12px;">
+          <span style="width:22px; height:22px; border-radius:999px; background:rgba(232,204,112,0.15); color:#E8CC70; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">1</span>
+          <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOStep1 }}" style="margin:0; color:rgba(255,255,255,0.65); font-size:13.5px; line-height:1.55;">{{ ts.oStep1 }}</p>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:12px;">
+          <span style="width:22px; height:22px; border-radius:999px; background:rgba(232,204,112,0.15); color:#E8CC70; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">2</span>
+          <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOStep2 }}" style="margin:0; color:rgba(255,255,255,0.65); font-size:13.5px; line-height:1.55;">{{ ts.oStep2 }}</p>
+        </div>
+        <div style="display:flex; align-items:flex-start; gap:12px;">
+          <span style="width:22px; height:22px; border-radius:999px; background:rgba(232,204,112,0.15); color:#E8CC70; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:2px;">3</span>
+          <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOStep3 }}" style="margin:0; color:rgba(255,255,255,0.65); font-size:13.5px; line-height:1.55;">{{ ts.oStep3 }}</p>
+        </div>
+      </div>
+      <div style="padding:16px 18px; border-radius:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.11); margin-bottom:18px;">
+        <p style="margin:0 0 3px; color:rgba(255,255,255,0.45); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">Your Caliber team</p>
+        <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOTeamName }}" style="margin:0 0 2px; color:#fff; font-size:14px; font-weight:600;">{{ ts.oTeamName }}</p>
+        <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOTeamContact }}" style="margin:0; color:rgba(255,255,255,0.5); font-size:12px;">{{ ts.oTeamContact }}</p>
+      </div>
+      <button style="align-self:flex-start; display:inline-flex; align-items:center; gap:10px; padding:13px 22px; border-radius:999px; border:none; background:linear-gradient(135deg,#E8CC70,#C99A3C); color:#242424; font-family:inherit; font-size:13.5px; font-weight:700; cursor:pointer; box-shadow:0 8px 24px rgba(201,154,60,0.28);">Schedule a debrief &#8594;</button>
+    </div>
+
+    <!-- findings summary panel -->
+    <div class="ns-scroll" style="flex:1; background:#EFF2ED; overflow-y:auto; padding:56px 52px; display:flex; flex-direction:column; justify-content:center;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:22px;">
+        <span style="width:8px; height:8px; border-radius:999px; background:#2F9151;"></span>
+        <span contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOCompleteLabel }}" style="color:#2F9151; font-size:11px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase;">{{ ts.oCompleteLabel }}</span>
+      </div>
+      <h1 contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOHeadline }}" style="margin:0 0 10px; font-family:'Playfair Display',serif; font-size:38px; line-height:1.12; color:#152238; font-weight:600; letter-spacing:-0.01em;">{{ ts.oHeadline }}</h1>
+      <p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOBody }}" style="margin:0 0 32px; color:#3B4B63; font-size:15.5px; line-height:1.6;">{{ ts.oBody }}</p>
+      <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:32px;">
+        <div style="display:flex; gap:16px; align-items:flex-start; padding:18px 20px; background:#FCF1EF; border:1px solid #F0D6D2; border-radius:14px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; flex-shrink:0; border-radius:999px; background:#FBEBE9; color:#C96B60; font-size:14px; font-weight:800;">1</span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOP1Title }}" style="margin:0 0 3px; font-size:15px; font-weight:700; color:#152238;">{{ ts.oP1Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOP1Body }}" style="margin:0; font-size:13px; line-height:1.5; color:#3B4B63;">{{ ts.oP1Body }}</p></div>
+        </div>
+        <div style="display:flex; gap:16px; align-items:flex-start; padding:18px 20px; background:#F1F8F3; border:1px solid #CDE6D5; border-radius:14px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; flex-shrink:0; border-radius:999px; background:#E7F2EB; color:#2F9151; font-size:14px; font-weight:800;">2</span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOP2Title }}" style="margin:0 0 3px; font-size:15px; font-weight:700; color:#152238;">{{ ts.oP2Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOP2Body }}" style="margin:0; font-size:13px; line-height:1.5; color:#3B4B63;">{{ ts.oP2Body }}</p></div>
+        </div>
+        <div style="display:flex; gap:16px; align-items:flex-start; padding:18px 20px; background:#FCF1EF; border:1px solid #F0D6D2; border-radius:14px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; flex-shrink:0; border-radius:999px; background:#FBEBE9; color:#C96B60; font-size:14px; font-weight:800;">3</span>
+          <div><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOP3Title }}" style="margin:0 0 3px; font-size:15px; font-weight:700; color:#152238;">{{ ts.oP3Title }}</p><p contentEditable="{{ editing }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ blurOP3Body }}" style="margin:0; font-size:13px; line-height:1.5; color:#3B4B63;">{{ ts.oP3Body }}</p></div>
+        </div>
+      </div>
+      <button onClick="{{ reviewFindings }}" style="align-self:flex-start; display:inline-flex; align-items:center; gap:8px; padding:11px 20px; border-radius:999px; border:1px solid #CBD4CC; background:#fff; color:#3B4B63; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;">&#8592; Review findings again</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ DASHBOARD HAND-OFF OVERLAY ============ -->
+  <sc-if value="{{ overlayOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed; inset:0; z-index:80; background:rgba(20,28,24,0.55); backdrop-filter:blur(3px);">
+    <div class="ns-scroll" style="position:absolute; inset:18px; background:#EEF2EE; border-radius:22px; overflow-y:auto; box-shadow:0 30px 80px rgba(0,0,0,0.4);">
+      <div style="position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:14px; padding:16px 26px; background:rgba(255,255,255,0.94); border-bottom:1px solid #D7DDD4; backdrop-filter:blur(8px); flex-wrap:wrap;">
+        <span style="font-size:15px; font-weight:700; letter-spacing:0.1em; color:#2B2B2B; text-transform:uppercase;">Employee Experience</span>
+        <span style="color:#9AA7B4; font-size:13px;">{{ overlayBeat.perspGroup }} &#8250;</span>
+        <span style="padding:5px 13px; border-radius:999px; background:#242424; color:#fff; font-size:12px; font-weight:600;">{{ overlayBeat.persp }}</span>
+        <div style="flex:1;"></div>
+        <button onClick="{{ closeOverlay }}" style="display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:999px; border:1px solid #386B45; background:#386B45; color:#fff; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;">&#8592; Back to insights</button>
+      </div>
+
+      <div class="ns-scroll" style="display:flex; gap:7px; padding:14px 26px; overflow-x:auto; border-bottom:1px solid #E2E8E2; background:#fff;">
+        <span style="flex-shrink:0; color:#59675C; font-size:12px; font-weight:600; padding:7px 4px;">Perspectives:</span>
+        <sc-for list="{{ perspPills }}" as="pill" hint-placeholder-count="6">
+          <span style="flex-shrink:0; padding:7px 14px; border-radius:999px; font-size:12.5px; font-weight:600; background:{{ pill.bg }}; color:{{ pill.color }}; border:1px solid {{ pill.border }};">{{ pill.label }}</span>
+        </sc-for>
+      </div>
+
+      <div style="padding:24px 26px 40px; max-width:1240px; margin:0 auto;">
+        <div style="display:flex; align-items:flex-start; gap:13px; padding:15px 18px; border-radius:16px; background:#FFFDF5; border:1px solid #F0E2B6; margin-bottom:20px;">
+          <span style="display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; flex-shrink:0; border-radius:999px; background:#E8CC70; color:#5A4410; font-size:14px;">&#9733;</span>
+          <p style="margin:0; color:#5A4410; font-size:13.5px; line-height:1.5;"><strong style="font-weight:600;">You arrived from the insight:</strong> &#8220;{{ overlayBeat.headlineText }}&#8221; &#8212; this is the live view behind it.</p>
+        </div>
+
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px;">
+          <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:18px;"><p style="margin:0; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Index average</p><p style="margin:8px 0 0; font-size:26px; font-weight:800; color:#1E3A5F;">67.7</p></div>
+          <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:18px;"><p style="margin:0; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Change YoY</p><p style="margin:8px 0 0; font-size:26px; font-weight:800; color:#2F9151;">+1.5</p></div>
+          <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:18px;"><p style="margin:0; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Response rate</p><p style="margin:8px 0 0; font-size:26px; font-weight:800; color:#1E3A5F;">71%</p></div>
+          <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:18px;"><p style="margin:0; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Responses</p><p style="margin:8px 0 0; font-size:26px; font-weight:800; color:#1E3A5F;">1,284</p></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:18px; align-items:start;">
+          <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:24px;">
+            <p style="margin:0 0 4px; color:#152238; font-size:14px; font-weight:700;">{{ overlayBeat.chartTitle }}</p>
+            <p style="margin:0 0 18px; color:#6E7E96; font-size:11.5px;">{{ overlayBeat.chartSub }}</p>
+            {{ overlayBeat.chart }}
+          </div>
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:22px;">
+              <p style="margin:0 0 12px; color:#152238; font-size:13px; font-weight:700;">Index results · vs Feb 2025</p>
+              {{ indexTable }}
+            </div>
+            <div style="background:#fff; border:1px solid #8798AA; border-radius:16px; padding:22px;">
+              <p style="margin:0 0 10px; color:#6E7E96; font-size:10.5px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">How to read</p>
+              <p style="margin:0; color:#3B4B63; font-size:13px; line-height:1.55;">{{ overlayBeat.howToRead }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== Iteration switcher (findings only) ===== -->
+  <sc-if value="{{ isFindings }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:90; display:flex; align-items:center; gap:5px; padding:7px 8px 7px 16px; border-radius:999px; background:rgba(20,28,24,0.92); backdrop-filter:blur(10px); box-shadow:0 12px 34px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.1);">
+    <span style="color:rgba(232,204,112,0.85); font-size:10px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; padding-right:6px;">Iteration · {{ switchHint }}</span>
+    <button onClick="{{ goBrief }}" style="padding:7px 15px; border-radius:999px; border:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600; background:{{ briefTabBg }}; color:{{ briefTabColor }};">1 · Brief</button>
+    <button onClick="{{ goStage }}" style="padding:7px 15px; border-radius:999px; border:none; cursor:pointer; font-family:inherit; font-size:12.5px; font-weight:600; background:{{ stageTabBg }}; color:{{ stageTabColor }};">2 · Stage</button>
+  </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;startFormat&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;brief&quot;,&quot;stage&quot;],&quot;default&quot;:&quot;brief&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+
+const TONE = { good: "#2F9151", risk: "#C96B60", neutral: "#5E7898" };
+const TINT = { good: "#E7F2EB", risk: "#FBEBE9", neutral: "#E9F0F7" };
+const ACT_BG = { good: "#F1F8F3", risk: "#FCF1EF", neutral: "#F0F5FA" };
+const ACT_BORDER = { good: "#CDE6D5", risk: "#F0D6D2", neutral: "#D5E2EE" };
+
+const BANDS = [
+  { color: "#C96B60", text: "#fff" }, { color: "#DA8A7D", text: "#fff" }, { color: "#E7B0A5", text: "#1C252A" },
+  { color: "#DCD6CC", text: "#1C252A" }, { color: "#B8C5D4", text: "#1C252A" }, { color: "#8199B4", text: "#fff" }, { color: "#5E7898", text: "#fff" },
+];
+const SCALE = { min: 60, mid: 72.5, max: 85 };
+function bandIndex(v) {
+  if (!isFinite(v)) return 3;
+  const sv = Math.max(SCALE.min, Math.min(SCALE.max, v));
+  if (sv === SCALE.mid) return 3;
+  if (sv < SCALE.mid) { const lr = SCALE.mid - SCALE.min; return Math.min(2, Math.max(0, Math.floor(((sv - SCALE.min) / lr) * 3))); }
+  const hr = SCALE.max - SCALE.mid; return Math.min(6, Math.max(4, 3 + Math.ceil(((sv - SCALE.mid) / hr) * 3)));
+}
+function scoreColor(v) { return v == null ? "#EFE9DB" : BANDS[bandIndex(v)].color; }
+function scoreText(v) { return v == null ? "#6E7E96" : BANDS[bandIndex(v)].text; }
+
+function dStyle(d) {
+  if (d >= 6) return { bg: "#8BA399", fg: "#fff" };
+  if (d >= 4) return { bg: "#9CB2A8", fg: "#fff" };
+  if (d >= 2) return { bg: "#B5C5BE", fg: "#1F332A" };
+  if (d >= 0.05) return { bg: "#E2E9E5", fg: "#355348" };
+  if (d <= -3) return { bg: "#B49F9C", fg: "#fff" };
+  if (d <= -1) return { bg: "#C8B9B6", fg: "#4E3834" };
+  if (d <= -0.05) return { bg: "#E8DFDE", fg: "#5E4441" };
+  return { bg: "#E2E8EF", fg: "#3B4B63" };
+}
+const f1 = (n) => (n >= 0 ? "+" : "\u2212") + Math.abs(n).toFixed(1);
+
+const INDEX_ROWS = [
+  { name: "Manager", cur: 71.1, delta: 0.9 },
+  { name: "Engagement", cur: 69.0, delta: 0.8 },
+  { name: "Culture", cur: 66.7, delta: 1.3 },
+  { name: "Intent to Stay", cur: 64.1, delta: 0.4 },
+];
+
+const SECTIONS = [
+  { id: "stand", label: "Where we stand" },
+  { id: "strength", label: "Strengths" },
+  { id: "watch", label: "Watch areas" },
+  { id: "sowhat", label: "So what" },
+];
+
+const BEATS = [
+  {
+    id: "overview", section: "stand", eyebrow: "Overall favorability", tone: "neutral", verdict: "Holding steady",
+    perspGroup: "Executive & HR", persp: "Campaign Overview",
+    headline: "Favorability is holding at 68 \u2014 steady, but not pulling away.",
+    headlineShort: "Favorability holds at 68",
+    detail: "1,284 employees responded (71%). Three of the four indexes ticked up versus February, but the overall climb has flattened to under a point a cycle.",
+    means: "You're stable and slightly positive \u2014 no crisis, but no breakout either. The real story is hiding inside the averages, where one or two groups pull against the rest.",
+    act: "Don't read \u201868\u2019 as success. Use the index and department cuts to find the place dragging the average down before the next pulse.",
+    stat: { value: "68", unit: "/100", sub: "+0.8 vs Feb 2025" },
+    chartTitle: "Index averages", chartSub: "Oct 2025 \u00b7 dashed line = org average 67.7",
+    howToRead: "Bars are colored on the favorability scale (red low \u2192 blue high). The dashed line marks the org-wide average; anything left of it is below the company.",
+    chart: { type: "favbars", items: INDEX_ROWS.map((r) => ({ label: r.name, value: r.cur, delta: r.delta })), avg: 67.7, axis: { min: 56, max: 80, ticks: [60, 70, 80] } },
+  },
+  {
+    id: "momentum", section: "stand", eyebrow: "Momentum", tone: "good", verdict: "Trending up",
+    perspGroup: "Executive & HR", persp: "Detailed History",
+    headline: "Three campaigns of steady gains \u2014 up +1.5 since July 2024.",
+    headlineShort: "Steady gains, +1.5",
+    detail: "Every index has improved across the last two pulses. The trajectory is real and consistent \u2014 but each step is getting a little smaller.",
+    means: "The culture work of the last year is compounding. The risk now is a plateau: the easy gains are behind you, and the next point will be harder to earn.",
+    act: "Protect the behaviors driving the climb, and pick one lagging area to make the headline of the next pulse.",
+    stat: { value: "+1.5", unit: "pts", sub: "since Jul 2024" },
+    chartTitle: "Overall favorability over time", chartSub: "Jul 2024 \u2192 Oct 2025 \u00b7 faint lines = individual indexes",
+    howToRead: "The bold line is the org-wide average across all indexes; the faint lines behind it are the four indexes. Delta Last compares the latest pulse to the prior one.",
+    chart: { type: "history" },
+  },
+  {
+    id: "manager", section: "strength", eyebrow: "Strength", tone: "good", verdict: "Strength",
+    perspGroup: "Executive & HR", persp: "Detailed Results",
+    headline: "Managers are your strongest asset \u2014 and trust runs deep.",
+    headlineShort: "Manager is strongest at 71",
+    detail: "Manager is the top index at 71. \u2018My manager treats me with respect\u2019 (82) and \u2018I trust my manager\u2019 (76) anchor the entire employee experience.",
+    means: "Frontline management is carrying the experience. This is the one behavior set already working at scale \u2014 worth codifying and exporting to teams that are struggling.",
+    act: "Capture what your strongest managers do day-to-day and build it into onboarding for PCS and Accounting leads.",
+    stat: { value: "71", unit: "/100", sub: "top index \u00b7 +0.9" },
+    chartTitle: "Manager statements", chartSub: "Oct 2025 \u00b7 dashed line = index average 71.1",
+    howToRead: "Each bar is one survey statement within the Manager index, sorted high to low. The dashed line is the index average \u2014 statements below it are the weaker links.",
+    chart: { type: "favbars", items: [
+      { label: "Treats me with respect", value: 82.1 }, { label: "I trust my manager", value: 76.4 },
+      { label: "Cares about me as a person", value: 75.0 }, { label: "Communicates clearly", value: 70.2 },
+      { label: "Removes obstacles to my work", value: 68.5 }, { label: "Recognizes my contributions", value: 67.9 },
+      { label: "Gives me useful feedback", value: 65.8 }, { label: "Helps me grow & develop", value: 63.2 },
+    ], avg: 71.1, axis: { min: 55, max: 88, ticks: [60, 70, 80] } },
+  },
+  {
+    id: "intent", section: "watch", eyebrow: "Watch area", tone: "risk", verdict: "Watch",
+    perspGroup: "Executive & HR", persp: "Detailed Results",
+    headline: "Intent to Stay is the soft spot \u2014 retention risk is quietly building.",
+    headlineShort: "Intent to Stay lags at 64",
+    detail: "At 64, Intent to Stay is the lowest index. \u2018A clear path to grow my career\u2019 sits at 60, and \u2018I\u2019d turn down an offer elsewhere\u2019 at just 56.",
+    means: "People are engaged in the work today but not convinced about tomorrow. Career path \u2014 not pay or workload \u2014 is the specific lever showing up in the data.",
+    act: "Make growth paths visible this quarter, especially for high performers in Sales and Production where engagement is already high.",
+    stat: { value: "64", unit: "/100", sub: "lowest index" },
+    chartTitle: "Intent to Stay statements", chartSub: "Oct 2025 \u00b7 dashed line = index average 64.1",
+    howToRead: "Each bar is one statement within the Intent to Stay index. The two lowest \u2014 career path and turning down offers \u2014 are where retention risk concentrates.",
+    chart: { type: "favbars", items: [
+      { label: "Expect to be here in 2 years", value: 74.6 }, { label: "My future here looks bright", value: 69.3 },
+      { label: "Good reasons to stay", value: 66.1 }, { label: "Clear path to grow my career", value: 60.2 },
+      { label: "Rarely think about leaving", value: 58.9 }, { label: "Would turn down an offer elsewhere", value: 55.7 },
+    ], avg: 64.1, axis: { min: 50, max: 82, ticks: [55, 65, 75] } },
+  },
+  {
+    id: "pcs", section: "watch", eyebrow: "Team to support", tone: "risk", verdict: "Urgent",
+    perspGroup: "Executive & HR", persp: "Job / Department Comparison",
+    headline: "Production Control & Sourcing is falling behind \u2014 fast.",
+    headlineShort: "PCS dropped 7.7 points",
+    detail: "PCS sits at 41 against an org average of 68, and it\u2019s the only team moving backward \u2014 down 7.7 since last year while every other group climbed.",
+    means: "This isn\u2019t a rounding error. One team is diverging hard from the rest of the company and dragging the overall average down with it.",
+    act: "Treat PCS as a standalone intervention now \u2014 leadership listening sessions before the next pulse, not after the scores get worse.",
+    stat: { value: "\u22127.7", unit: "pts", sub: "only team declining" },
+    chartTitle: "Favorability by department", chartSub: "Oct 2025 \u00b7 dashed line = org average 67.7 \u00b7 delta vs last year",
+    howToRead: "Each bar is a department\u2019s overall favorability; the chip on the right is its change since last year. PCS is the only team both below average and falling.",
+    chart: { type: "favbars", highlight: "Production Control & Sourcing", items: [
+      { label: "IT", value: 84.2, delta: 6.0 }, { label: "Production", value: 72.6, delta: 4.0 },
+      { label: "Sales", value: 70.1, delta: 8.3 }, { label: "Shipping & Receiving", value: 67.4, delta: 2.1 },
+      { label: "Customer Service", value: 66.8, delta: 1.5 }, { label: "Accounting", value: 58.3, delta: 5.5 },
+      { label: "Production Control & Sourcing", value: 41.0, delta: -7.7 },
+    ], avg: 67.7, axis: { min: 35, max: 90, ticks: [40, 55, 70, 85] } },
+  },
+  {
+    id: "action", section: "sowhat", eyebrow: "So what \u00b7 next 90 days", tone: "neutral", verdict: "Make the call",
+    perspGroup: "Executive & HR", persp: "Campaign Overview",
+    headline: "Three moves before the next pulse.",
+    headlineShort: "Three moves to make now",
+    detail: "If leadership does nothing else this quarter, these are the highest-leverage actions the Oct 2025 data points to.",
+    means: null, act: null, stat: null,
+    chartTitle: "Recommended priorities", chartSub: "Ranked by leverage \u00d7 winnability",
+    howToRead: "These priorities are drawn straight from the findings on the left \u2014 each links back to the perspective where you can see the supporting detail.",
+    chart: { type: "actions", items: [
+      { title: "Stabilize Production Control & Sourcing", tone: "risk", detail: "Down 7.7 and far below every other team \u2014 the most urgent, and most winnable, intervention you have." },
+      { title: "Protect what managers are doing right", tone: "good", detail: "Manager trust (71) is the engine of the whole experience. Codify it before scaling to weaker teams." },
+      { title: "Get ahead of retention", tone: "risk", detail: "Intent to Stay (64) is the soft spot; career-path clarity scores lowest at 60. Make growth visible now." },
+    ] },
+  },
+];
+
+const ALL_PERSP = ["Campaign Overview", "Detailed Results", "Detailed History", "Heat Maps", "Job / Department Comparison", "Open Text"];
+
+class Component extends DCLogic {
+  state = {
+    page: "intro",
+    proto: this.props.startFormat || "brief",
+    index: 0, overlayIndex: null,
+    editing: false, overrides: {},
+    textStore: {
+      iEyebrow: "Top Flight \u00b7 October 2025",
+      iHeadline: "Dana, here\u2019s what your people are telling you.",
+      iBody: "We\u2019ve distilled 1,284 responses into 6 findings, ordered by what matters most. Each one links directly to the data behind it \u2014 and comes with a clear read on what to do next.",
+      iSubHead: "A full view of where Top Flight stands \u2014 and where to focus first.",
+      iS1Title: "Where we stand", iS1Body: "Overall favorability at 68 \u2014 stable, improving slightly, but the averages hide the real story.",
+      iS2Title: "Strengths", iS2Body: "Manager trust is your strongest asset \u2014 the engine behind the whole experience.",
+      iS3Title: "Watch areas", iS3Body: "One team is falling hard, and retention risk is quietly building in the data.",
+      iS4Title: "So what", iS4Body: "Three concrete moves for the next 90 days, ranked by leverage and winnability.",
+      iPrepBy: "Caliber Consulting \u00b7 Employee Experience Practice",
+      iDateInfo: "October 2025 \u00b7 1,284 responses \u00b7 71% response rate",
+      oNSHead: "Next steps",
+      oNSHero: "Ready to go deeper with your team?",
+      oStep1: "Share this readout with your leadership team before the debrief",
+      oStep2: "Schedule a live debrief \u2014 especially to work through the PCS situation",
+      oStep3: "Pull the department cuts in the dashboard before that team conversation",
+      oTeamName: "Employee Experience Practice",
+      oTeamContact: "caliberconsultingllc.org",
+      oCompleteLabel: "Readout complete",
+      oHeadline: "You\u2019ve seen the full picture.",
+      oBody: "Here\u2019s where the data points for the next 90 days \u2014 three moves, ranked by leverage.",
+      oP1Title: "Stabilize Production Control & Sourcing",
+      oP1Body: "Down 7.7 pts and the only team moving backward. Listening sessions before the next pulse \u2014 not after.",
+      oP2Title: "Protect what managers are doing right",
+      oP2Body: "Manager trust at 71 is the engine. Codify those behaviors before scaling to weaker teams.",
+      oP3Title: "Get ahead of retention risk now",
+      oP3Body: "Intent to Stay at 64 is the soft spot. Career-path clarity at 60 \u2014 make growth visible this quarter.",
+    },
+  };
+
+  saveEdit(id, field, text) {
+    const clean = (text || "").replace(/\s+/g, " ").trim();
+    this.setState((s) => ({ overrides: { ...s.overrides, [id]: { ...s.overrides[id], [field]: clean } } }));
+  }
+
+  saveTextEdit(field, text) {
+    const clean = (text || "").replace(/\s+/g, " ").trim();
+    this.setState((s) => ({ textStore: { ...s.textStore, [field]: clean } }));
+  }
+
+  favBars(cfg) {
+    const h = React.createElement;
+    const { items, avg, axis, highlight } = cfg;
+    const hasDelta = items.some((it) => it.delta != null);
+    const labW = "minmax(0,44%)";
+    const gutter = hasDelta ? 56 : 0;
+    const pct = (v) => `${((Math.max(axis.min, Math.min(axis.max, v)) - axis.min) / (axis.max - axis.min)) * 100}%`;
+    const tmpl = hasDelta ? `${labW} 1fr ${gutter}px` : `${labW} 1fr`;
+    const rowH = items.length > 7 ? 30 : 34;
+
+    return h("div", { style: { position: "relative" } },
+      h("div", { style: { position: "absolute", left: "44%", right: gutter, top: 0, bottom: 26, pointerEvents: "none", zIndex: 1 } },
+        axis.ticks.map((t) => h("div", { key: t, style: { position: "absolute", top: 0, bottom: 0, left: pct(t), borderLeft: "1px dashed #E2E8EF" } })),
+        avg != null ? h("div", { style: { position: "absolute", top: -2, bottom: 0, left: pct(avg), borderLeft: "2px dashed #8798AA" } },
+          h("div", { style: { position: "absolute", top: -2, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap", background: "#E8ECE9", border: "1px solid #D4DAD6", borderRadius: 999, padding: "2px 8px", fontSize: 9.5, fontWeight: 700, color: "#3B4B63" } }, "avg " + avg.toFixed(1))) : null
+      ),
+      items.map((it, i) => {
+        const dim = highlight && it.label !== highlight;
+        const isHi = highlight && it.label === highlight;
+        return h("div", { key: i, style: { display: "grid", gridTemplateColumns: tmpl, minHeight: rowH, alignItems: "center", opacity: dim ? 0.5 : 1 } },
+          h("div", { style: { padding: "3px 16px 3px 0", fontSize: 12.5, lineHeight: 1.18, fontWeight: isHi ? 700 : 500, color: "#3B4B63", zIndex: 2 } }, it.label),
+          h("div", { style: { position: "relative", height: 23, zIndex: 2 } },
+            h("div", { style: { position: "absolute", left: 0, top: 0, bottom: 0, width: pct(it.value), background: scoreColor(it.value), borderRadius: 3 } },
+              h("div", { style: { position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "rgba(21,34,56,.82)", color: "#fff", fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px" } }, it.value.toFixed(1)))
+          ),
+          hasDelta ? h("div", { style: { display: "flex", justifyContent: "flex-end", zIndex: 2 } },
+            it.delta != null ? h("span", { style: { fontSize: 11, fontWeight: 700, borderRadius: 4, padding: "2px 6px", background: dStyle(it.delta).bg, color: dStyle(it.delta).fg } }, f1(it.delta)) : null) : null
+        );
+      }),
+      h("div", { style: { display: "grid", gridTemplateColumns: tmpl, marginTop: 4 } },
+        h("div", null),
+        h("div", { style: { position: "relative", height: 16 } },
+          axis.ticks.map((t) => h("div", { key: t, style: { position: "absolute", left: pct(t), transform: "translateX(-50%)", fontSize: 10.5, color: "#6E7E96", fontWeight: 600 } }, t))),
+        hasDelta ? h("div", null) : null
+      )
+    );
+  }
+
+  history() {
+    const h = React.createElement;
+    const W = 720, H = 250, pad = { l: 34, r: 64, t: 22, b: 34 };
+    const labels = ["Jul \u201924", "Feb \u201925", "Oct \u201925"];
+    const main = [66.2, 66.9, 67.7];
+    const backs = [
+      { id: "mgr", v: [69.2, 70.2, 71.1] }, { id: "eng", v: [67.7, 68.3, 69.0] },
+      { id: "cul", v: [64.3, 65.4, 66.7] }, { id: "int", v: [63.4, 63.7, 64.1] },
+    ];
+    const min = 60, max = 74, n = main.length;
+    const xF = (i) => pad.l + (i / (n - 1)) * (W - pad.l - pad.r);
+    const yF = (v) => pad.t + (1 - (v - min) / (max - min)) * (H - pad.t - pad.b);
+    const path = (vals) => vals.map((v, i) => `${i === 0 ? "M" : "L"}${xF(i)},${yF(v)}`).join(" ");
+    const pts = main.map((v, i) => ({ x: xF(i), y: yF(v), v }));
+    const area = `${path(main)} L${xF(n - 1)},${H - pad.b} L${xF(0)},${H - pad.b} Z`;
+    const yTicks = [62, 66, 70, 74];
+    const backCol = ["#A5B4C7", "#B3BFCE", "#BFC9D6", "#CDD4DE"];
+    return h("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", maxHeight: "100%" } },
+      yTicks.map((t) => h("g", { key: t },
+        h("line", { x1: pad.l, x2: W - pad.r, y1: yF(t), y2: yF(t), stroke: "#D3DDE7", strokeDasharray: "4 6", strokeWidth: 1, opacity: 0.8 }),
+        h("text", { x: pad.l - 8, y: yF(t) + 4, textAnchor: "end", fill: "#6E7E96", fontSize: 10, fontWeight: 700 }, t))),
+      labels.map((_, i) => h("line", { key: i, x1: xF(i), x2: xF(i), y1: pad.t, y2: H - pad.b, stroke: "#E2E8EF", strokeDasharray: "3 8", strokeWidth: 1 })),
+      h("path", { d: area, fill: "rgba(129,153,180,.20)" }),
+      backs.map((s, i) => h("path", { key: s.id, d: path(s.v), fill: "none", stroke: backCol[i], strokeWidth: 1.4, opacity: 0.7 })),
+      h("path", { d: path(main), fill: "none", stroke: "#3F5F86", strokeWidth: 2.4, strokeLinecap: "round", strokeLinejoin: "round" }),
+      pts.map((p, i) => h("g", { key: i },
+        h("rect", { x: p.x - 20, y: p.y - 31, width: 40, height: 22, rx: 6, fill: "#3B4B63" }),
+        h("text", { x: p.x, y: p.y - 15, textAnchor: "middle", fill: "#fff", fontSize: 12, fontWeight: 800 }, p.v.toFixed(1)),
+        h("circle", { cx: p.x, cy: p.y, r: 4.5, fill: "#fff", stroke: "#3F5F86", strokeWidth: 1.9 }),
+        h("text", { x: p.x, y: H - 12, textAnchor: i === 0 ? "start" : i === n - 1 ? "end" : "middle", fill: "#3B4B63", fontSize: 11.5, fontWeight: 700 }, labels[i]))),
+      h("g", null,
+        h("rect", { x: xF(n - 1) + 8, y: pts[n - 1].y - 11, width: 54, height: 20, rx: 10, fill: "#fff", stroke: "#8798AA" }),
+        h("text", { x: xF(n - 1) + 35, y: pts[n - 1].y + 3, textAnchor: "middle", fill: "#1C252A", fontSize: 10, fontWeight: 800 }, "Overall"))
+    );
+  }
+
+  actions(items) {
+    const h = React.createElement;
+    return h("div", { style: { display: "flex", flexDirection: "column", gap: 11 } },
+      items.map((it, i) => h("div", { key: i, style: { display: "flex", gap: 14, alignItems: "flex-start", padding: 16, borderRadius: 14, background: ACT_BG[it.tone], border: `1px solid ${ACT_BORDER[it.tone]}` } },
+        h("span", { style: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, flexShrink: 0, borderRadius: 999, background: TINT[it.tone], color: TONE[it.tone], fontSize: 14, fontWeight: 800 } }, i + 1),
+        h("div", null,
+          h("p", { style: { margin: 0, fontSize: 15.5, fontWeight: 700, color: "#152238" } }, it.title),
+          h("p", { style: { margin: "5px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#3B4B63" } }, it.detail))
+      ))
+    );
+  }
+
+  indexTable() {
+    const h = React.createElement;
+    const sep = "3px solid #8798AA";
+    const hCell = { background: "#E2E8EF", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#6E7E96", padding: "9px 8px" };
+    return h("div", { style: { overflow: "hidden", border: "1px solid #8798AA", borderRadius: 12 } },
+      h("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 12.5 } },
+        h("thead", null, h("tr", null,
+          h("th", { style: { ...hCell, textAlign: "left" } }, "Index"),
+          h("th", { style: { ...hCell, textAlign: "center", width: 70, borderRight: sep, borderLeft: sep } }, "Oct \u201925"),
+          h("th", { style: { ...hCell, textAlign: "center", width: 64 } }, "\u0394 Feb"))),
+        h("tbody", null, INDEX_ROWS.map((r, i) => h("tr", { key: i, style: { borderTop: "1px solid #D3DDE7" } },
+          h("td", { style: { padding: "9px 12px", fontWeight: 700, color: "#152238" } }, r.name),
+          h("td", { style: { padding: "8px", textAlign: "center", fontWeight: 700, borderRight: sep, borderLeft: sep, background: scoreColor(r.cur), color: scoreText(r.cur) } }, r.cur.toFixed(1)),
+          h("td", { style: { padding: "8px", textAlign: "center", fontWeight: 700, background: dStyle(r.delta).bg, color: dStyle(r.delta).fg } }, f1(r.delta)))))
+      )
+    );
+  }
+
+  chartFor(beat) {
+    const c = beat.chart;
+    if (c.type === "favbars") return this.favBars(c);
+    if (c.type === "history") return this.history();
+    if (c.type === "actions") return this.actions(c.items);
+    return null;
+  }
+
+  footerNav(beats, index) {
+    const h = React.createElement;
+    const isFirst = index === 0;
+    const isLast = index === beats.length - 1;
+    return h("div", { style: { display: "flex", alignItems: "center", gap: 14, marginTop: 16, paddingTop: 14, borderTop: "1px solid #DCE3DD", flexShrink: 0 } },
+      h("div", { style: { display: "flex", alignItems: "center", gap: 7, flex: 1 } },
+        beats.map((b, i) => h("button", { key: i, onClick: b.goHere, "aria-label": "Go to finding", style: { width: i === index ? 30 : 7, height: 7, borderRadius: 999, border: "none", cursor: "pointer", padding: 0, background: i === index ? "#386B45" : "#CBD4CC", transition: "all .3s ease" } }))),
+      h("span", { style: { color: "#9AA7B4", fontSize: 11.5, fontWeight: 600, marginRight: 4 } }, beats[index].verdict),
+      h("button", {
+        onClick: isFirst
+          ? () => this.setState({ page: "intro" })
+          : () => this.setState((st) => ({ index: Math.max(0, st.index - 1) })),
+        style: { display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 15px", borderRadius: 999, border: "1px solid #CBD4CC", background: "#fff", color: "#3B4B63", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }
+      }, isFirst ? "\u2190 Intro" : "\u2190 Prev"),
+      h("button", {
+        onClick: isLast
+          ? () => this.setState({ page: "outro" })
+          : () => this.setState((st) => ({ index: Math.min(BEATS.length - 1, st.index + 1) })),
+        style: { display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 17px", borderRadius: 999, border: "none", background: isLast ? "#386B45" : "#242424", color: "#fff", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }
+      }, isLast ? "Finish \u2192" : "Next \u2192")
+    );
+  }
+
+  renderVals() {
+    const s = this.state, ov = s.overrides, proto = s.proto, editing = s.editing;
+    const tabBg = (on) => (on ? "#E8CC70" : "rgba(255,255,255,0.08)");
+    const tabCol = (on) => (on ? "#242424" : "rgba(255,255,255,0.8)");
+    const ts = s.textStore;
+    const se = (f) => (e) => this.saveTextEdit(f, e.target.innerText);
+
+    const beats = BEATS.map((b, i) => {
+      const o = ov[b.id] || {};
+      const active = i === s.index;
+      return {
+        ...b,
+        toneColor: TONE[b.tone], tintBg: TINT[b.tone],
+        actBg: ACT_BG[b.tone], actBorder: ACT_BORDER[b.tone],
+        pos: i + 1,
+        headlineText: o.headline ?? b.headline,
+        detailText: o.detail ?? b.detail,
+        hasStat: !!b.stat, hasGuidance: !!b.means,
+        statValue: b.stat ? b.stat.value : "", statUnit: b.stat ? b.stat.unit : "", statSub: b.stat ? b.stat.sub : "",
+        chart: this.chartFor(b),
+        dotRing: active ? "0 0 0 3px rgba(232,204,112,0.35)" : "none",
+        railBg: active ? "rgba(232,204,112,0.14)" : "transparent",
+        railBorder: active ? "rgba(232,204,112,0.45)" : "rgba(255,255,255,0.07)",
+        railText: active ? "#fff" : "rgba(255,255,255,0.74)",
+        goHere: () => this.setState({ index: i, page: "findings" }),
+        openDash: () => this.setState({ overlayIndex: i }),
+        onBlurHeadline: (e) => this.saveEdit(b.id, "headline", e.target.innerText),
+        onBlurDetail: (e) => this.saveEdit(b.id, "detail", e.target.innerText),
+      };
+    });
+
+    const sections = SECTIONS.map((sec) => {
+      const items = beats.filter((b) => b.section === sec.id);
+      return { ...sec, items, count: items.length };
+    });
+
+    const overlayBeat = s.overlayIndex !== null ? beats[s.overlayIndex] : beats[0];
+    const perspPills = ALL_PERSP.map((label) => {
+      const on = label === overlayBeat.persp;
+      return { label, bg: on ? "#242424" : "#fff", color: on ? "#fff" : "#59675C", border: on ? "#242424" : "#D7DDD4" };
+    });
+
+    const page = s.page;
+
+    return {
+      beats, sections, beatCount: beats.length,
+      isIntro: page === "intro",
+      isFindings: page === "findings",
+      isOutro: page === "outro",
+      beginReadout: () => this.setState({ page: "findings", index: 0 }),
+      reviewFindings: () => this.setState({ page: "findings", index: 0 }),
+
+      isBrief: proto === "brief", isStage: proto === "stage",
+      goBrief: () => this.setState({ proto: "brief" }),
+      goStage: () => this.setState({ proto: "stage" }),
+      switchHint: proto === "brief" ? "narrative + data" : "data on stage",
+      briefTabBg: tabBg(proto === "brief"), briefTabColor: tabCol(proto === "brief"),
+      stageTabBg: tabBg(proto === "stage"), stageTabColor: tabCol(proto === "stage"),
+
+      activeBeat: beats[s.index],
+      footerNav: this.footerNav(beats, s.index),
+
+      overlayOpen: s.overlayIndex !== null,
+      overlayBeat, perspPills, indexTable: this.indexTable(),
+      openOverview: () => this.setState({ overlayIndex: 0 }),
+      closeOverlay: () => this.setState({ overlayIndex: null }),
+
+      ts,
+      blurIEyebrow: se("iEyebrow"), blurIHeadline: se("iHeadline"), blurIBody: se("iBody"), blurISubHead: se("iSubHead"),
+      blurIS1Title: se("iS1Title"), blurIS1Body: se("iS1Body"),
+      blurIS2Title: se("iS2Title"), blurIS2Body: se("iS2Body"),
+      blurIS3Title: se("iS3Title"), blurIS3Body: se("iS3Body"),
+      blurIS4Title: se("iS4Title"), blurIS4Body: se("iS4Body"),
+      blurIPrepBy: se("iPrepBy"), blurIDateInfo: se("iDateInfo"),
+      blurONSHead: se("oNSHead"), blurONSHero: se("oNSHero"),
+      blurOStep1: se("oStep1"), blurOStep2: se("oStep2"), blurOStep3: se("oStep3"),
+      blurOTeamName: se("oTeamName"), blurOTeamContact: se("oTeamContact"),
+      blurOCompleteLabel: se("oCompleteLabel"), blurOHeadline: se("oHeadline"), blurOBody: se("oBody"),
+      blurOP1Title: se("oP1Title"), blurOP1Body: se("oP1Body"),
+      blurOP2Title: se("oP2Title"), blurOP2Body: se("oP2Body"),
+      blurOP3Title: se("oP3Title"), blurOP3Body: se("oP3Body"),
+      showEditBtn: true,
+      editing,
+      toggleEdit: () => this.setState((st) => ({ editing: !st.editing })),
+      editLabel: editing ? "Done editing" : "Edit narrative",
+      editBtnBg: editing ? "#386B45" : "rgba(255,255,255,0.08)",
+    };
+  }
+}
+
+</script>
+</body>
+</html>

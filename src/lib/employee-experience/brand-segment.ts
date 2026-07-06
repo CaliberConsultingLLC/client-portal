@@ -1,4 +1,4 @@
-export const BRAND_SEGMENT_COLUMN_ALIASES = ["Company", "Brand", "Location", "Site"] as const;
+export const BRAND_SEGMENT_COLUMN_ALIASES = ["Company", "Brand", "Location", "Site", "Basin"] as const;
 export const UNKNOWN_BRAND_LABEL = "Unknown Brand";
 
 export function isKnownBrandSegment(value: string) {

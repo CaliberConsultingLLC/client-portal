@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: "Montserrat","Segoe UI",sans-serif; -webkit-font-smoothing: antialiased; }
+</style>
+</helmet>
+
+<div style="width:max-content; min-width:100%; min-height:100vh; padding:48px; background:#e7e5df; box-sizing:border-box;">
+
+  <!-- Page header -->
+  <div style="margin-bottom:40px;">
+    <p style="margin:0 0 4px; font-size:11px; font-weight:700; letter-spacing:0.22em; text-transform:uppercase; color:#8A8A82;">CALIBER ADMIN · WORKFLOW MOCKUP</p>
+    <h1 style="margin:0 0 6px; font-family:'Playfair Display',serif; font-size:28px; font-weight:600; color:#242424;">Readout Manager</h1>
+    <p style="margin:0; font-size:14px; color:#6E7E8A; line-height:1.5;">Super admin flow for creating, configuring, and publishing executive readouts. Static reference — 4 screens in order.</p>
+  </div>
+
+  <!-- Row 1: Screens 1 + 2 -->
+  <div style="display:flex; gap:48px; align-items:flex-start; margin-bottom:64px;">
+
+    <!-- ===== SCREEN 1: Readout List ===== -->
+    <div style="flex:none; width:1120px;">
+      <p style="margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8A8A82;">01 · Readout list</p>
+      <div style="background:#EEF2EE; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.1); height:780px; overflow:hidden; display:flex; flex-direction:column;">
+
+        <!-- Admin header -->
+        <header style="height:52px; flex-shrink:0; display:flex; align-items:center; gap:20px; padding:0 20px; background:linear-gradient(100deg,#242424 0%,#2B2B2B 60%,#2F4A38 150%);">
+          <div style="display:flex; align-items:center; gap:9px;">
+            <div style="width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; color:#242424; font-weight:800; font-size:13px;">C</div>
+            <span style="color:#fff; font-weight:600; letter-spacing:0.22em; font-size:12px;">CALIBER</span>
+          </div>
+          <nav style="display:flex; align-items:center; gap:2px;">
+            <span style="color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; padding:5px 10px;">Clients</span>
+            <span style="color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; padding:5px 10px;">Users</span>
+            <span style="color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; padding:5px 10px;">Campaigns</span>
+            <span style="color:#fff; font-size:12px; font-weight:600; padding:5px 10px; border-radius:999px; background:rgba(232,204,112,0.18);">Readouts</span>
+          </nav>
+          <div style="flex:1;"></div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; background:rgba(232,204,112,0.2); color:#E8CC70; letter-spacing:0.1em;">SUPER ADMIN</span>
+            <p style="margin:0; color:#fff; font-size:12px; font-weight:600;">Sarah Chen</p>
+          </div>
+        </header>
+
+        <!-- Body: sidebar + content -->
+        <div style="flex:1; display:flex; min-height:0;">
+
+          <!-- Sidebar -->
+          <aside style="width:210px; border-right:1px solid #D4DAD4; background:#F5F8F5; flex-shrink:0; padding:16px 0;">
+            <p style="margin:0 0 8px; padding:0 16px; color:#8A9A8C; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase;">Clients</p>
+            <div style="padding:0 8px;">
+              <div style="padding:8px 10px; border-radius:8px; background:#E4EDE5; display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+                <span style="width:6px; height:6px; border-radius:999px; background:#386B45; flex-shrink:0;"></span>
+                <span style="font-size:12.5px; font-weight:600; color:#152238;">Top Flight</span>
+                <span style="margin-left:auto; font-size:10px; font-weight:700; color:#386B45; background:#C8E0CB; padding:1px 7px; border-radius:999px;">3</span>
+              </div>
+              <div style="padding:8px 10px; display:flex; align-items:center; gap:8px; border-radius:8px;">
+                <span style="width:6px; height:6px; border-radius:999px; background:#C7D0D8; flex-shrink:0;"></span>
+                <span style="font-size:12.5px; color:#6E7E96;">DWS Manufacturing</span>
+              </div>
+              <div style="padding:8px 10px; display:flex; align-items:center; gap:8px; border-radius:8px;">
+                <span style="width:6px; height:6px; border-radius:999px; background:#C7D0D8; flex-shrink:0;"></span>
+                <span style="font-size:12.5px; color:#6E7E96;">CSG Partners</span>
+              </div>
+              <div style="padding:8px 10px; display:flex; align-items:center; gap:8px; border-radius:8px;">
+                <span style="width:6px; height:6px; border-radius:999px; background:#C7D0D8; flex-shrink:0;"></span>
+                <span style="font-size:12.5px; color:#6E7E96;">Meridian Health</span>
+              </div>
+            </div>
+          </aside>
+
+          <!-- Main content -->
+          <main style="flex:1; overflow-y:auto; padding:28px 32px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:22px;">
+              <div>
+                <p style="margin:0 0 2px; font-size:11px; font-weight:600; color:#8A9A8C;">Top Flight</p>
+                <h2 style="margin:0; font-size:18px; font-weight:700; color:#152238;">Readouts</h2>
+              </div>
+              <div style="flex:1;"></div>
+              <button style="display:inline-flex; align-items:center; gap:7px; padding:9px 16px; border-radius:999px; border:none; background:#386B45; color:#fff; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;">+ New readout</button>
+            </div>
+
+            <!-- Table -->
+            <div style="background:#fff; border:1px solid #D4DAD4; border-radius:14px; overflow:hidden;">
+              <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                  <tr style="background:#F1F5F1; border-bottom:2px solid #D4DAD4;">
+                    <th style="text-align:left; padding:11px 18px; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#6E7E96;">Name</th>
+                    <th style="text-align:left; padding:11px 14px; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#6E7E96;">Campaign</th>
+                    <th style="text-align:left; padding:11px 14px; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#6E7E96;">Status</th>
+                    <th style="text-align:left; padding:11px 14px; font-size:10.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:#6E7E96;">Last updated</th>
+                    <th style="padding:11px 18px;"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style="border-bottom:1px solid #EEF2EE;">
+                    <td style="padding:14px 18px; font-weight:600; color:#152238;">Oct 2025 EE Readout</td>
+                    <td style="padding:14px 14px; color:#3B4B63;">Oct 2025 Employee Experience</td>
+                    <td style="padding:14px 14px;"><span style="padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#E4EDE5; color:#2F7048;">Published</span></td>
+                    <td style="padding:14px 14px; color:#6E7E96;">Jun 18, 2026</td>
+                    <td style="padding:14px 18px; text-align:right; display:flex; gap:12px; justify-content:flex-end; align-items:center;">
+                      <span style="font-size:12.5px; font-weight:600; color:#386B45; cursor:pointer;">Edit</span>
+                      <span style="font-size:12.5px; font-weight:600; color:#6E7E96; cursor:pointer;">View</span>
+                    </td>
+                  </tr>
+                  <tr style="border-bottom:1px solid #EEF2EE;">
+                    <td style="padding:14px 18px; font-weight:600; color:#152238;">Feb 2025 EE Readout</td>
+                    <td style="padding:14px 14px; color:#3B4B63;">Feb 2025 Employee Experience</td>
+                    <td style="padding:14px 14px;"><span style="padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#E4EDE5; color:#2F7048;">Published</span></td>
+                    <td style="padding:14px 14px; color:#6E7E96;">Mar 4, 2026</td>
+                    <td style="padding:14px 18px; text-align:right; display:flex; gap:12px; justify-content:flex-end; align-items:center;">
+                      <span style="font-size:12.5px; font-weight:600; color:#386B45; cursor:pointer;">Edit</span>
+                      <span style="font-size:12.5px; font-weight:600; color:#6E7E96; cursor:pointer;">View</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 18px; font-weight:600; color:#152238;">Q4 2025 Preview</td>
+                    <td style="padding:14px 14px; color:#9AA7B4;">No campaign linked</td>
+                    <td style="padding:14px 14px;"><span style="padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#FDF4E3; color:#8A5E0A;">Draft</span></td>
+                    <td style="padding:14px 14px; color:#6E7E96;">Jun 21, 2026</td>
+                    <td style="padding:14px 18px; text-align:right; display:flex; gap:12px; justify-content:flex-end; align-items:center;">
+                      <span style="font-size:12.5px; font-weight:600; color:#386B45; cursor:pointer;">Edit</span>
+                      <span style="font-size:12.5px; font-weight:600; color:#5E7898; cursor:pointer;">Publish</span>
+                      <span style="font-size:12.5px; font-weight:600; color:#C96B60; cursor:pointer;">Delete</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p style="margin:16px 0 0; font-size:12px; color:#8A9A8C; font-style:italic;">Only published readouts appear in the client's Insights tab. Drafts are never visible to executives.</p>
+          </main>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SCREEN 2: Editor — Intro tab ===== -->
+    <div style="flex:none; width:1120px;">
+      <p style="margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8A8A82;">02 · Readout editor — Intro</p>
+      <div style="background:#EEF2EE; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.1); height:780px; overflow:hidden; display:flex; flex-direction:column;">
+
+        <!-- Admin header (same) -->
+        <header style="height:52px; flex-shrink:0; display:flex; align-items:center; gap:20px; padding:0 20px; background:linear-gradient(100deg,#242424 0%,#2B2B2B 60%,#2F4A38 150%);">
+          <div style="display:flex; align-items:center; gap:9px;">
+            <div style="width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; color:#242424; font-weight:800; font-size:13px;">C</div>
+            <span style="color:#fff; font-weight:600; letter-spacing:0.22em; font-size:12px;">CALIBER</span>
+          </div>
+          <nav style="display:flex; align-items:center; gap:2px;">
+            <span style="color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; padding:5px 10px;">Clients</span>
+            <span style="color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; padding:5px 10px;">Users</span>
+            <span style="color:rgba(255,255,255,0.5); font-size:12px; font-weight:500; padding:5px 10px;">Campaigns</span>
+            <span style="color:#fff; font-size:12px; font-weight:600; padding:5px 10px; border-radius:999px; background:rgba(232,204,112,0.18);">Readouts</span>
+          </nav>
+          <div style="flex:1;"></div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; background:rgba(232,204,112,0.2); color:#E8CC70; letter-spacing:0.1em;">SUPER ADMIN</span>
+            <p style="margin:0; color:#fff; font-size:12px; font-weight:600;">Sarah Chen</p>
+          </div>
+        </header>
+
+        <!-- Editor breadcrumb + tabs -->
+        <div style="flex-shrink:0; background:#fff; border-bottom:1px solid #D4DAD4;">
+          <div style="display:flex; align-items:center; gap:10px; padding:12px 24px 0;">
+            <span style="font-size:12px; color:#8A9A8C; font-weight:500;">Top Flight</span>
+            <span style="color:#C7D0D8;">›</span>
+            <span style="font-size:12px; color:#8A9A8C; font-weight:500;">Readouts</span>
+            <span style="color:#C7D0D8;">›</span>
+            <span style="font-size:12px; font-weight:600; color:#152238;">Oct 2025 EE Readout</span>
+            <div style="flex:1;"></div>
+            <span style="padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#E4EDE5; color:#2F7048;">Published</span>
+            <button style="padding:7px 14px; border-radius:999px; border:1px solid #D4DAD4; background:#fff; color:#3B4B63; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">Save draft</button>
+            <button style="padding:7px 14px; border-radius:999px; border:none; background:#386B45; color:#fff; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">Publish update</button>
+          </div>
+          <div style="display:flex; gap:0; padding:0 24px; margin-top:10px;">
+            <span style="padding:8px 18px; font-size:13px; font-weight:700; color:#386B45; border-bottom:2px solid #386B45; cursor:pointer;">Intro</span>
+            <span style="padding:8px 18px; font-size:13px; font-weight:500; color:#6E7E96; border-bottom:2px solid transparent; cursor:pointer;">Findings</span>
+            <span style="padding:8px 18px; font-size:13px; font-weight:500; color:#6E7E96; border-bottom:2px solid transparent; cursor:pointer;">Outro</span>
+          </div>
+        </div>
+
+        <!-- Editor body -->
+        <div style="flex:1; overflow-y:auto; padding:24px 28px; background:#F5F8F5;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:22px;">
+
+            <!-- Left column: executive address + welcome copy -->
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div style="background:#fff; border:1px solid #D4DAD4; border-radius:12px; padding:18px;">
+                <p style="margin:0 0 12px; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Executive address</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:600; color:#3B4B63; margin-bottom:4px;">First name (used in headline)</label>
+                    <input style="width:100%; padding:8px 12px; border:1px solid #C8D4CE; border-radius:8px; font-family:inherit; font-size:13px; color:#152238; background:#fff;" value="Dana" readonly />
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:600; color:#3B4B63; margin-bottom:4px;">Role / team</label>
+                    <input style="width:100%; padding:8px 12px; border:1px solid #C8D4CE; border-radius:8px; font-family:inherit; font-size:13px; color:#152238; background:#fff;" value="Top Flight · HR" readonly />
+                  </div>
+                </div>
+              </div>
+              <div style="background:#fff; border:1px solid #D4DAD4; border-radius:12px; padding:18px;">
+                <p style="margin:0 0 12px; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Welcome copy</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:600; color:#3B4B63; margin-bottom:4px;">Headline</label>
+                    <textarea style="width:100%; padding:8px 12px; border:1px solid #C8D4CE; border-radius:8px; font-family:inherit; font-size:13px; color:#152238; background:#fff; resize:none; height:52px;" readonly>Dana, here's what your people are telling you.</textarea>
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:600; color:#3B4B63; margin-bottom:4px;">Body paragraph</label>
+                    <textarea style="width:100%; padding:8px 12px; border:1px solid #C8D4CE; border-radius:8px; font-family:inherit; font-size:13px; color:#152238; background:#fff; resize:none; height:80px;" readonly>We've distilled 1,284 responses into 6 findings, ordered by what matters most. Each one links directly to the data behind it — and comes with a clear read on what to do next.</textarea>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right column: section previews + attribution -->
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div style="background:#fff; border:1px solid #D4DAD4; border-radius:12px; padding:18px;">
+                <p style="margin:0 0 12px; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Section previews</p>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                  <div style="display:grid; grid-template-columns:1fr 1.6fr; gap:8px; align-items:start; padding-bottom:10px; border-bottom:1px solid #EEF2EE;">
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#152238;" value="Where we stand" readonly />
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#6E7E96;" value="Overall favorability at 68 — stable, improving slightly..." readonly />
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1.6fr; gap:8px; align-items:start; padding-bottom:10px; border-bottom:1px solid #EEF2EE;">
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#152238;" value="Strengths" readonly />
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#6E7E96;" value="Manager trust is your strongest asset..." readonly />
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1.6fr; gap:8px; align-items:start; padding-bottom:10px; border-bottom:1px solid #EEF2EE;">
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#152238;" value="Watch areas" readonly />
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#6E7E96;" value="One team is falling hard, and retention risk..." readonly />
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1.6fr; gap:8px; align-items:start;">
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#152238;" value="So what" readonly />
+                    <input style="padding:7px 10px; border:1px solid #C8D4CE; border-radius:7px; font-family:inherit; font-size:12px; color:#6E7E96;" value="Three concrete moves for the next 90 days..." readonly />
+                  </div>
+                </div>
+              </div>
+              <div style="background:#fff; border:1px solid #D4DAD4; border-radius:12px; padding:18px;">
+                <p style="margin:0 0 12px; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Attribution</p>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:600; color:#3B4B63; margin-bottom:4px;">Prepared by</label>
+                    <input style="width:100%; padding:8px 12px; border:1px solid #C8D4CE; border-radius:8px; font-family:inherit; font-size:13px; color:#152238;" value="Caliber Consulting · Employee Experience Practice" readonly />
+                  </div>
+                  <div>
+                    <label style="display:block; font-size:11.5px; font-weight:600; color:#3B4B63; margin-bottom:4px;">Date &amp; response stats</label>
+                    <input style="width:100%; padding:8px 12px; border:1px solid #C8D4CE; border-radius:8px; font-family:inherit; font-size:13px; color:#6E7E96;" value="October 2025 · 1,284 responses · 71% response rate" readonly />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Screens 3 + 4 -->
+  <div style="display:flex; gap:48px; align-items:flex-start;">
+
+    <!-- ===== SCREEN 3: Editor — Findings tab ===== -->
+    <div style="flex:none; width:1120px;">
+      <p style="margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8A8A82;">03 · Readout editor — Findings</p>
+      <div style="background:#EEF2EE; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.1); height:780px; overflow:hidden; display:flex; flex-direction:column;">
+
+        <!-- Admin header -->
+        <header style="height:52px; flex-shrink:0; display:flex; align-items:center; gap:20px; padding:0 20px; background:linear-gradient(100deg,#242424 0%,#2B2B2B 60%,#2F4A38 150%);">
+          <div style="display:flex; align-items:center; gap:9px;">
+            <div style="width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; color:#242424; font-weight:800; font-size:13px;">C</div>
+            <span style="color:#fff; font-weight:600; letter-spacing:0.22em; font-size:12px;">CALIBER</span>
+          </div>
+          <div style="flex:1;"></div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; background:rgba(232,204,112,0.2); color:#E8CC70; letter-spacing:0.1em;">SUPER ADMIN</span>
+            <p style="margin:0; color:#fff; font-size:12px; font-weight:600;">Sarah Chen</p>
+          </div>
+        </header>
+
+        <!-- Breadcrumb + tabs -->
+        <div style="flex-shrink:0; background:#fff; border-bottom:1px solid #D4DAD4;">
+          <div style="display:flex; align-items:center; gap:10px; padding:12px 24px 0;">
+            <span style="font-size:12px; color:#8A9A8C;">Top Flight</span>
+            <span style="color:#C7D0D8;">›</span>
+            <span style="font-size:12px; color:#8A9A8C;">Readouts</span>
+            <span style="color:#C7D0D8;">›</span>
+            <span style="font-size:12px; font-weight:600; color:#152238;">Oct 2025 EE Readout</span>
+            <div style="flex:1;"></div>
+            <span style="padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#E4EDE5; color:#2F7048;">Published</span>
+            <button style="padding:7px 14px; border-radius:999px; border:1px solid #D4DAD4; background:#fff; color:#3B4B63; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">Save draft</button>
+            <button style="padding:7px 14px; border-radius:999px; border:none; background:#386B45; color:#fff; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;">Publish update</button>
+          </div>
+          <div style="display:flex; gap:0; padding:0 24px; margin-top:10px;">
+            <span style="padding:8px 18px; font-size:13px; font-weight:500; color:#6E7E96; border-bottom:2px solid transparent; cursor:pointer;">Intro</span>
+            <span style="padding:8px 18px; font-size:13px; font-weight:700; color:#386B45; border-bottom:2px solid #386B45; cursor:pointer;">Findings</span>
+            <span style="padding:8px 18px; font-size:13px; font-weight:500; color:#6E7E96; border-bottom:2px solid transparent; cursor:pointer;">Outro</span>
+          </div>
+        </div>
+
+        <!-- Findings list -->
+        <div style="flex:1; overflow-y:auto; padding:24px 28px; background:#F5F8F5;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+            <p style="margin:0; font-size:13.5px; font-weight:600; color:#152238;">6 of 6 findings enabled</p>
+            <div style="flex:1;"></div>
+            <p style="margin:0; font-size:12px; color:#8A9A8C;">Drag to reorder · toggle to enable / disable</p>
+          </div>
+          <div style="background:#fff; border:1px solid #D4DAD4; border-radius:12px; overflow:hidden;">
+            <!-- Finding rows -->
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #EEF2EE; background:#fff;">
+              <span style="color:#C7D0D8; font-size:16px; cursor:grab; flex-shrink:0;">⣿</span>
+              <div style="width:32px; height:18px; border-radius:999px; background:#386B45; position:relative; flex-shrink:0;"><div style="position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:999px; background:#fff;"></div></div>
+              <span style="padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; background:#E9F0F7; color:#5E7898; flex-shrink:0;">Context</span>
+              <span style="flex:1; font-size:13px; color:#152238; font-weight:500;">Favorability is holding at 68 — steady, but not pulling away.</span>
+              <span style="font-size:12px; color:#386B45; font-weight:600; flex-shrink:0; cursor:pointer;">Edit copy</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #EEF2EE; background:#fff;">
+              <span style="color:#C7D0D8; font-size:16px; cursor:grab; flex-shrink:0;">⣿</span>
+              <div style="width:32px; height:18px; border-radius:999px; background:#386B45; position:relative; flex-shrink:0;"><div style="position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:999px; background:#fff;"></div></div>
+              <span style="padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; background:#E7F2EB; color:#2F9151; flex-shrink:0;">Trending up</span>
+              <span style="flex:1; font-size:13px; color:#152238; font-weight:500;">Three campaigns of steady gains — up +1.5 since July 2024.</span>
+              <span style="font-size:12px; color:#386B45; font-weight:600; flex-shrink:0; cursor:pointer;">Edit copy</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #EEF2EE; background:#fff;">
+              <span style="color:#C7D0D8; font-size:16px; cursor:grab; flex-shrink:0;">⣿</span>
+              <div style="width:32px; height:18px; border-radius:999px; background:#386B45; position:relative; flex-shrink:0;"><div style="position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:999px; background:#fff;"></div></div>
+              <span style="padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; background:#E7F2EB; color:#2F9151; flex-shrink:0;">Strength</span>
+              <span style="flex:1; font-size:13px; color:#152238; font-weight:500;">Managers are your strongest asset — and trust runs deep.</span>
+              <span style="font-size:12px; color:#386B45; font-weight:600; flex-shrink:0; cursor:pointer;">Edit copy</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #EEF2EE; background:#fff;">
+              <span style="color:#C7D0D8; font-size:16px; cursor:grab; flex-shrink:0;">⣿</span>
+              <div style="width:32px; height:18px; border-radius:999px; background:#386B45; position:relative; flex-shrink:0;"><div style="position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:999px; background:#fff;"></div></div>
+              <span style="padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; background:#FBEBE9; color:#C96B60; flex-shrink:0;">Watch</span>
+              <span style="flex:1; font-size:13px; color:#152238; font-weight:500;">Intent to Stay is the soft spot — retention risk is quietly building.</span>
+              <span style="font-size:12px; color:#386B45; font-weight:600; flex-shrink:0; cursor:pointer;">Edit copy</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid #EEF2EE; background:#fff;">
+              <span style="color:#C7D0D8; font-size:16px; cursor:grab; flex-shrink:0;">⣿</span>
+              <div style="width:32px; height:18px; border-radius:999px; background:#386B45; position:relative; flex-shrink:0;"><div style="position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:999px; background:#fff;"></div></div>
+              <span style="padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; background:#FBEBE9; color:#C96B60; flex-shrink:0;">Urgent</span>
+              <span style="flex:1; font-size:13px; color:#152238; font-weight:500;">Production Control &amp; Sourcing is falling behind — fast.</span>
+              <span style="font-size:12px; color:#386B45; font-weight:600; flex-shrink:0; cursor:pointer;">Edit copy</span>
+            </div>
+            <!-- Disabled finding -->
+            <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; background:#F9FAFA; opacity:0.6;">
+              <span style="color:#C7D0D8; font-size:16px; cursor:grab; flex-shrink:0;">⣿</span>
+              <div style="width:32px; height:18px; border-radius:999px; background:#C7D0D8; position:relative; flex-shrink:0;"><div style="position:absolute; left:2px; top:2px; width:14px; height:14px; border-radius:999px; background:#fff;"></div></div>
+              <span style="padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; background:#E9F0F7; color:#5E7898; flex-shrink:0;">Make the call</span>
+              <span style="flex:1; font-size:13px; color:#6E7E96; font-weight:500; text-decoration:line-through;">Three moves before the next pulse.</span>
+              <span style="font-size:11px; color:#9AA7B4; font-weight:500; flex-shrink:0;">Disabled — not shown to executive</span>
+            </div>
+          </div>
+          <p style="margin:12px 0 0; font-size:12px; color:#8A9A8C; font-style:italic;">Disabled findings are hidden from the executive view. Findings appear in the order shown here.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SCREEN 4: Publish gate ===== -->
+    <div style="flex:none; width:1120px;">
+      <p style="margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.16em; text-transform:uppercase; color:#8A8A82;">04 · Publish gate</p>
+      <div style="background:#EEF2EE; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.1); height:780px; overflow:hidden; display:flex; flex-direction:column; position:relative;">
+
+        <!-- Admin header -->
+        <header style="height:52px; flex-shrink:0; display:flex; align-items:center; gap:20px; padding:0 20px; background:linear-gradient(100deg,#242424 0%,#2B2B2B 60%,#2F4A38 150%);">
+          <div style="display:flex; align-items:center; gap:9px;">
+            <div style="width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; color:#242424; font-weight:800; font-size:13px;">C</div>
+            <span style="color:#fff; font-weight:600; letter-spacing:0.22em; font-size:12px;">CALIBER</span>
+          </div>
+          <div style="flex:1;"></div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; background:rgba(232,204,112,0.2); color:#E8CC70; letter-spacing:0.1em;">SUPER ADMIN</span>
+            <p style="margin:0; color:#fff; font-size:12px; font-weight:600;">Sarah Chen</p>
+          </div>
+        </header>
+
+        <!-- Background (dimmed findings screen) -->
+        <div style="flex:1; overflow:hidden; filter:blur(1.5px); opacity:0.35; padding:16px 24px; background:#F5F8F5;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; background:#fff; border-bottom:1px solid #D4DAD4; padding:10px 0 6px; margin:-16px -24px 14px; padding:10px 24px 0;">
+            <span style="font-size:12px; color:#8A9A8C;">Top Flight › Readouts › Oct 2025 EE Readout</span>
+            <div style="flex:1;"></div>
+            <span style="padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; background:#FDF4E3; color:#8A5E0A;">Draft</span>
+          </div>
+          <div style="background:#fff; border:1px solid #D4DAD4; border-radius:12px; overflow:hidden; margin-top:32px;">
+            <div style="padding:12px 16px; border-bottom:1px solid #EEF2EE; color:#152238; font-size:13px;">Favorability is holding at 68 — steady, but not pulling away.</div>
+            <div style="padding:12px 16px; border-bottom:1px solid #EEF2EE; color:#152238; font-size:13px;">Three campaigns of steady gains — up +1.5 since July 2024.</div>
+            <div style="padding:12px 16px; border-bottom:1px solid #EEF2EE; color:#152238; font-size:13px;">Managers are your strongest asset — and trust runs deep.</div>
+          </div>
+        </div>
+
+        <!-- Modal overlay -->
+        <div style="position:absolute; inset:52px 0 0; background:rgba(20,32,26,0.5); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(2px);">
+          <div style="background:#fff; border-radius:20px; padding:36px; width:460px; box-shadow:0 24px 64px rgba(0,0,0,0.28);">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:24px;">
+              <div style="width:40px; height:40px; border-radius:12px; background:#E4EDE5; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                <span style="font-size:20px;">&#128228;</span>
+              </div>
+              <div>
+                <h3 style="margin:0 0 2px; font-size:17px; font-weight:700; color:#152238;">Publish this readout?</h3>
+                <p style="margin:0; font-size:12.5px; color:#6E7E96;">Oct 2025 EE Readout · Top Flight</p>
+              </div>
+            </div>
+
+            <!-- Pre-flight checklist -->
+            <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:20px; padding:16px; background:#F5F8F5; border-radius:12px;">
+              <p style="margin:0 0 8px; font-size:10.5px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:#6E7E96;">Pre-flight check</p>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="width:20px; height:20px; border-radius:999px; background:#E4EDE5; color:#2F9151; font-size:12px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800;">&#10003;</span>
+                <span style="font-size:13px; color:#152238;">Intro configured</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="width:20px; height:20px; border-radius:999px; background:#E4EDE5; color:#2F9151; font-size:12px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800;">&#10003;</span>
+                <span style="font-size:13px; color:#152238;">5 findings selected and ordered</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="width:20px; height:20px; border-radius:999px; background:#E4EDE5; color:#2F9151; font-size:12px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:800;">&#10003;</span>
+                <span style="font-size:13px; color:#152238;">Outro configured</span>
+              </div>
+            </div>
+
+            <!-- Who sees it -->
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding:13px 16px; border:1px solid #D4DAD4; border-radius:12px;">
+              <div style="width:34px; height:34px; border-radius:999px; background:linear-gradient(135deg,#E8CC70,#C99A3C); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:#242424; flex-shrink:0;">D</div>
+              <div>
+                <p style="margin:0 0 1px; font-size:13px; font-weight:600; color:#152238;">Dana Whitfield</p>
+                <p style="margin:0; font-size:11.5px; color:#6E7E96;">Top Flight · HR Executive</p>
+              </div>
+            </div>
+
+            <!-- Warning -->
+            <div style="padding:11px 14px; border-radius:10px; background:#FFFDF5; border:1px solid #F0E2B6; margin-bottom:22px;">
+              <p style="margin:0; font-size:12.5px; color:#7A5C0A; line-height:1.5;"><strong style="font-weight:700;">Goes live immediately.</strong> Dana will see this readout in her Insights tab as soon as you publish. You can update or unpublish at any time.</p>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex; gap:10px;">
+              <button style="flex:1; padding:12px; border-radius:999px; border:none; background:#386B45; color:#fff; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer;">Publish now</button>
+              <button style="padding:12px 20px; border-radius:999px; border:1px solid #D4DAD4; background:#fff; color:#3B4B63; font-family:inherit; font-size:14px; font-weight:600; cursor:pointer;">Save as draft</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

@@ -4,21 +4,22 @@ import Image from "next/image";
 interface NspLogoMarkProps {
   className?: string;
   size?: number;
+  variant?: "default" | "light";
 }
 
-export function NspLogoMark({ className, size = 40 }: NspLogoMarkProps) {
+export function NspLogoMark({ className, size = 40, variant = "default" }: NspLogoMarkProps) {
   return (
     <div
-      className={cn("relative overflow-hidden", className)}
+      className={cn("relative", className)}
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
       <Image
-        src="/logo.png"
+        src={variant === "light" ? "/NSlogo4white.png" : "/NSLogoClean.png"}
         alt=""
         fill
         sizes={`${size}px`}
-        className="object-cover object-[50%_8%] scale-[1.62]"
+        className="object-contain"
         priority={size >= 96}
       />
     </div>

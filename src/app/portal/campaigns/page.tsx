@@ -27,11 +27,15 @@ export default async function PortalCampaignsPage() {
         <Card className="rounded-[28px] border-[#D6DEE3] bg-white shadow-sm">
           <CardHeader>
             <CardTitle className="text-base font-semibold uppercase tracking-[0.2em] text-[#2B2B2B]">
-              Campaign Controls
+              Live Fielding Controls
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-relaxed text-[#60727D]">
-            <p>Phase 2 is read-only. Campaign creation and configuration arrive in Phase 3.</p>
+            <p>
+              Live fielding tracks active SurveyMonkey workflows tied to census uploads. Historical survey
+              waves in dashboards come from CSV analytics files instead.
+            </p>
+            <p>Phase 2 is read-only. Live fielding creation and configuration arrive in Phase 3.</p>
             <p>Automation remains demo-only and dry-run by default.</p>
           </CardContent>
         </Card>
@@ -40,12 +44,12 @@ export default async function PortalCampaignsPage() {
         <Card className="rounded-[28px] border-[#D6DEE3] bg-white shadow-sm">
           <CardHeader>
             <CardTitle className="text-base font-semibold uppercase tracking-[0.2em] text-[#2B2B2B]">
-              Campaign Automation
+              Live Fielding Automation
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-relaxed text-[#60727D]">
             <p>
-              Campaigns connect one census upload to one SurveyMonkey survey and keep response state
+              Live fieldings connect one census upload to one SurveyMonkey survey and keep response state
               in a campaign-specific recipient map.
             </p>
             <p>
@@ -60,14 +64,14 @@ export default async function PortalCampaignsPage() {
           <div>
             <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-[#60727D]">
               <Megaphone className="h-4 w-4" />
-              Campaigns
+              Live Fielding
             </p>
             <h1 className="mt-3 text-xl font-semibold uppercase tracking-[0.24em] text-[#2B2B2B] sm:text-2xl">
-              Survey Campaign Automation
+              Survey Live Fielding
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#60727D]">
-              Read-only campaign operations workspace for survey launch, reminder, and response
-              tracking workflows.
+              Read-only workspace for survey launch, reminder, and response tracking workflows. Dashboard
+              analytics use historical survey waves from CSV files — not these live fielding records.
             </p>
           </div>
           <CampaignCreateModal
@@ -77,10 +81,10 @@ export default async function PortalCampaignsPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
-          <SummaryCard label="Campaigns" value={campaigns.length} />
-          <SummaryCard label="Active Workflows" value={activeCampaigns.length} />
+          <SummaryCard label="Live fieldings" value={campaigns.length} />
+          <SummaryCard label="Active workflows" value={activeCampaigns.length} />
           <SummaryCard
-            label="Dry Run Campaigns"
+            label="Dry-run fieldings"
             value={campaigns.filter((campaign) => campaign.config.dryRun).length}
           />
         </div>

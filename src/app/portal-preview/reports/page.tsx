@@ -1,5 +1,5 @@
-import PortalReportsPage from "@/app/portal/reports/page";
+import { redirect } from "next/navigation";
 
 export default function PortalPreviewReportsPage() {
-  return <PortalReportsPage />;
+  redirect("/portal/insights");
 }

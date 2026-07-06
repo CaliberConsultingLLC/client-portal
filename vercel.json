@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync-responses",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/warm-dashboards",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

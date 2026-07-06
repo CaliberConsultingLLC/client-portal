@@ -5,7 +5,9 @@ export type UserRole =
   | "admin"
   | "analyst"
   | "client_admin"
-  | "client_viewer"
+  | "executive"
+  | "management"
+  | "employee"
   | "nsp_admin";
 export type CampaignStatus = "draft" | "active" | "paused" | "completed" | "archived";
 export type SurveyStatus = "draft" | "active" | "closed";

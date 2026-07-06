@@ -1,0 +1,14 @@
+---
+description: Use a consistent side-rail layout for filtered portal perspectives
+alwaysApply: true
+---
+
+# Filtered Perspective Layout
+
+- In this client portal project, any dashboard perspective or report page with active filters or selections should use the filtered-page layout by default.
+- Structure filtered pages as: left filter rail, full-height vertical divider, right main content column.
+- The filter rail should span the full vertical length of the perspective/report, not stop after the first card.
+- Use the wider filtered-content canvas treatment already used by the Brand Report and filtered longitudinal pages.
+- Keep the main visual or primary content immediately visible without requiring users to scroll past setup text.
+- Do not place filters in the main content column when the page is intended to behave like a filtered report.
+- Keep descriptive header copy concise: title plus a short utility description unless the user explicitly asks for more narrative framing.

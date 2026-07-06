@@ -54,6 +54,10 @@ export interface CampaignSummary {
   campaignId: string;
   clientId: string;
   censusId: string;
+  /** Optional dashboard instance this live fielding supports. */
+  dashboardInstanceId?: string | null;
+  /** Optional CSV survey wave label once fielding closes. */
+  surveyWaveLabel?: string | null;
   surveyLabel: string;
   smSurveyId: string;
   status: CampaignStatus;

@@ -65,6 +65,8 @@ export interface EmployeeExperienceRespondent {
   rateType: string;
   tenure: string;
   rating: string;
+  // Organizational role (e.g. Employee / Supervisor / Director) — distinct from job title/category.
+  role?: string;
   scores: Record<number, number | null>;
   comments: {
     strengths: string;
@@ -121,6 +123,10 @@ export interface EmployeeExperienceDashboardData {
     totalSupervisors: number;
     campaigns: string[];
     dataSourceLabel: string;
+    // Optional per-client override for the demographic "Results by Segment" dimensions.
+    // When present, these (and only these) segment dimensions are built — keyed to real
+    // database columns for the client. When absent, the default segment set is used.
+    segmentFields?: Array<{ id: string; label: string; field: keyof EmployeeExperienceRespondent }>;
   };
   settings: {
     minimumSegmentSize: number;
@@ -129,6 +135,10 @@ export interface EmployeeExperienceDashboardData {
   questions: EmployeeExperienceQuestionDefinition[];
   enpsDefinitions?: EmployeeExperienceQuestionDefinition[];
   respondents: EmployeeExperienceRespondent[];
+  // External/partner respondents (e.g. AutoSEP) that are excluded from every
+  // org-wide score and view, but surfaced in their own dedicated report.
+  partnerRespondents?: EmployeeExperienceRespondent[];
+  partnerLabel?: string;
   overview: {
     experienceIndex: number;
     previousIndex: number | null;

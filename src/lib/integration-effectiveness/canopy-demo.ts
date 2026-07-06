@@ -1,4 +1,5 @@
 import { readFileSync } from "fs";
+import { getFirebaseAdminStorage } from "@/lib/firebase/admin";
 import type {
   IntegrationCommentTheme,
   IntegrationBrandReport,
@@ -6,6 +7,8 @@ import type {
   IntegrationDimensionMetric,
   IntegrationGroupMetric,
   IntegrationHeatmap,
+  IntegrationLongitudinalScope,
+  IntegrationLongitudinalSeries,
   IntegrationPriority,
   IntegrationQuestionMetric,
   IntegrationVoiceEntry,
@@ -15,6 +18,84 @@ const DATABASE_PATH =
   "C:\\Users\\dusti\\OneDrive\\Client Data\\Canopy\\Canopy Integration Database 2026.csv";
 const CAMPAIGN_PATH =
   "C:\\Users\\dusti\\OneDrive\\Client Data\\Canopy\\Canopy Integration Campaign 2026.csv";
+const DATABASE_STORAGE_PATH = "clients/csg/data/Canopy Integration Database 2026.csv";
+const CAMPAIGN_STORAGE_PATH = "clients/csg/data/Canopy Integration Campaign 2026.csv";
+
+const SYNTHETIC_BRANDS = [
+  "Atlas Roofing",
+  "Beacon Home Services",
+  "Cedar Creek Exteriors",
+  "Keystone Remodelers",
+  "Summit Field Services",
+] as const;
+const SYNTHETIC_DEPARTMENTS = ["Sales", "Operations", "Customer Success", "Field Service"] as const;
+const SYNTHETIC_JOB_TITLES = [
+  "Branch Manager",
+  "Project Coordinator",
+  "Sales Consultant",
+  "Field Supervisor",
+  "Customer Care Lead",
+  "Installer",
+] as const;
+const SYNTHETIC_CAMPAIGNS = [
+  { label: "Campaign 1", date: "January 2026", baseScore: 65 },
+  { label: "Campaign 2", date: "March 2026", baseScore: 65 },
+  { label: "Campaign 3", date: "May 2026", baseScore: 65 },
+] as const;
+const SYNTHETIC_BRAND_OFFSETS = [4, -2, 1, -5, 6] as const;
+const SYNTHETIC_BRAND_CAMPAIGN_OFFSETS = [
+  [0, 7, 12],
+  [5, -2, 4],
+  [8, 6, 5],
+  [-3, 5, 1],
+  [4, 9, 8],
+] as const;
+const SYNTHETIC_DEPARTMENT_OFFSETS: Record<(typeof SYNTHETIC_DEPARTMENTS)[number], number> = {
+  Sales: 3,
+  Operations: -4,
+  "Customer Success": 1,
+  "Field Service": -2,
+};
+const SYNTHETIC_ITEM_OFFSETS: Record<number, number> = {
+  1: -3,
+  2: -6,
+  3: 4,
+  4: -4,
+  5: -1,
+  6: -5,
+  7: -7,
+  8: -2,
+  9: -3,
+  10: 5,
+  11: 2,
+};
+const SYNTHETIC_ITEM_CAMPAIGN_OFFSETS: Record<number, readonly [number, number, number]> = {
+  1: [-2, 4, 8],
+  2: [-7, -1, 6],
+  3: [5, 3, 2],
+  4: [-4, 2, 1],
+  5: [0, 3, 2],
+  6: [-5, 1, 5],
+  7: [-8, -3, 4],
+  8: [-1, 1, -2],
+  9: [-3, 4, 3],
+  10: [6, 7, 9],
+  11: [2, 5, 4],
+};
+
+const SYNTHETIC_QUESTION_STATEMENTS: Record<number, string> = {
+  1: "I understand the benefits this integration is expected to create for our customers and employees.",
+  2: "Leadership communicates integration updates clearly and consistently.",
+  3: "The strengths of our original brand are being respected during the integration.",
+  4: "I understand how my role and responsibilities may change as integration work continues.",
+  5: "Employee feedback is being heard and acted on during the integration.",
+  6: "Corporate support teams are responsive when we need help solving integration issues.",
+  7: "The integration process feels organized, sequenced, and well managed.",
+  8: "The pace of change feels manageable for my team.",
+  9: "I know where to go when I have questions or concerns about the integration.",
+  10: "I am confident the integration will improve our long-term growth opportunities.",
+  11: "Overall, I feel positive about joining the Canopy Services Group platform.",
+};
 
 const DIMENSION_DEFINITIONS = [
   {
@@ -98,6 +179,21 @@ interface ParsedRespondent {
   };
 }
 
+async function readCsvFromStorageOrLocal(storagePath: string, localPath: string) {
+  try {
+    const bucket = getFirebaseAdminStorage().bucket();
+    const [buffer] = await bucket.file(storagePath).download();
+    return buffer.toString("utf8").replace(/^\uFEFF/, "");
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(`Falling back to local file for ${storagePath}.`, error);
+      return readFileSync(localPath, "utf8").replace(/^\uFEFF/, "");
+    }
+
+    throw new Error(`Unable to load required CSV from Firebase Storage: ${storagePath}`);
+  }
+}
+
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
   let currentRow: string[] = [];
@@ -172,6 +268,127 @@ function cleanLabel(value: string | undefined, fallback: string) {
   return trimmed ? trimmed : fallback;
 }
 
+function clampRawScore(value: number) {
+  return Math.max(38, Math.min(94, Math.round(value)));
+}
+
+function csvCell(value: string | number) {
+  const text = String(value);
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function buildSyntheticCampaignCsv() {
+  const rows = [
+    ["Item ID", "Index", "Statement"],
+    ...Object.entries(SYNTHETIC_QUESTION_STATEMENTS).map(([itemId, statement]) => {
+      const numericItemId = Number.parseInt(itemId, 10);
+      const dimension =
+        DIMENSION_DEFINITIONS.find((definition) =>
+          (definition.itemIds as readonly number[]).includes(numericItemId)
+        )?.label ?? "Integration";
+      return [itemId, dimension, statement];
+    }),
+  ];
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function buildSyntheticComment(
+  brand: string,
+  department: string,
+  campaign: string,
+  field: keyof ParsedRespondent["comments"]
+) {
+  const snippets: Record<keyof ParsedRespondent["comments"], string[]> = {
+    improvement: [
+      `${brand} needs clearer communication and more transparent updates for ${department}.`,
+      `More training, resources, and guidance would help ${department} move faster.`,
+      `The integration process is better, but local teams still need stronger support.`,
+    ],
+    strengths: [
+      `${department} appreciates the stronger leadership visibility in ${campaign}.`,
+      `Cross-brand collaboration is improving and feels more aligned than before.`,
+      `The growth support from Canopy is becoming more concrete and helpful.`,
+    ],
+    preserve: [
+      `Keep the local customer relationships and brand trust that made ${brand} successful.`,
+      `Preserve local decision speed while adding Canopy's support structure.`,
+      `Do not lose the team culture that keeps morale positive.`,
+    ],
+    additional: [
+      `The team is more confident, but wants continued clarity on rollout timing.`,
+      `Managers need consistent talking points so employees hear the same direction.`,
+      `Support is improving, but unresolved process questions still create stress.`,
+    ],
+  };
+
+  const index = Math.abs(brand.length + department.length + campaign.length) % snippets[field].length;
+  return snippets[field][index];
+}
+
+function buildSyntheticDatabaseCsv() {
+  const headers = [
+    "ID",
+    "Brand",
+    "Department",
+    "Job Title",
+    "Campaign Date",
+    "Campaign",
+    ...Array.from({ length: 15 }, (_, index) => String(index + 1)),
+  ];
+  const rows: Array<Array<string | number>> = [headers];
+
+  SYNTHETIC_BRANDS.forEach((brand, brandIndex) => {
+    SYNTHETIC_CAMPAIGNS.forEach((campaign, campaignIndex) => {
+      Array.from({ length: 6 }).forEach((_, respondentIndex) => {
+        const department =
+          SYNTHETIC_DEPARTMENTS[(brandIndex + respondentIndex + campaignIndex) % SYNTHETIC_DEPARTMENTS.length];
+        const jobTitle =
+          SYNTHETIC_JOB_TITLES[(brandIndex * 2 + respondentIndex + campaignIndex) % SYNTHETIC_JOB_TITLES.length];
+        const brandWaveOffset =
+          SYNTHETIC_BRAND_CAMPAIGN_OFFSETS[brandIndex]?.[campaignIndex] ?? 0;
+        const respondentNoise = ((respondentIndex % 3) - 1) * 2;
+        const scores = Array.from({ length: 11 }, (_, index) => {
+          const itemId = index + 1;
+          const itemWaveOffset =
+            SYNTHETIC_ITEM_CAMPAIGN_OFFSETS[itemId]?.[campaignIndex] ?? 0;
+          const changeFriction =
+            campaignIndex === 0 && [2, 4, 6, 7, 9].includes(itemId) ? -2 : 0;
+          const stabilizationLift =
+            campaignIndex === 2 && [2, 6, 7, 9].includes(itemId) ? 2 : 0;
+          return clampRawScore(
+            campaign.baseScore +
+              SYNTHETIC_BRAND_OFFSETS[brandIndex] +
+              SYNTHETIC_DEPARTMENT_OFFSETS[department] +
+              (SYNTHETIC_ITEM_OFFSETS[itemId] ?? 0) +
+              brandWaveOffset +
+              itemWaveOffset +
+              respondentNoise +
+              changeFriction +
+              stabilizationLift
+          );
+        });
+
+        rows.push([
+          `INT-${brandIndex + 1}-${campaignIndex + 1}-${respondentIndex + 1}`,
+          brand,
+          department,
+          jobTitle,
+          campaign.date,
+          campaign.label,
+          ...scores,
+          buildSyntheticComment(brand, department, campaign.label, "improvement"),
+          buildSyntheticComment(brand, department, campaign.label, "strengths"),
+          buildSyntheticComment(brand, department, campaign.label, "preserve"),
+          buildSyntheticComment(brand, department, campaign.label, "additional"),
+        ]);
+      });
+    });
+  });
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
 function shortLabelForItem(itemId: number) {
   const labels: Record<number, string> = {
     1: "Benefit narrative",
@@ -212,8 +429,8 @@ function buildAssessment(score: number) {
   return "Integration is landing positively overall, but the weaker pockets still deserve direct intervention.";
 }
 
-function parseQuestions(): ParsedQuestion[] {
-  const rows = parseCSV(readFileSync(CAMPAIGN_PATH, "utf8").replace(/^\uFEFF/, ""));
+function parseQuestions(campaignCsvText: string): ParsedQuestion[] {
+  const rows = parseCSV(campaignCsvText);
   return rows
     .slice(1)
     .map((row) => ({
@@ -223,8 +440,8 @@ function parseQuestions(): ParsedQuestion[] {
     .filter((row) => Number.isFinite(row.itemId) && row.itemId >= 1 && row.itemId <= 11);
 }
 
-function parseRespondents(questionIds: number[]): ParsedRespondent[] {
-  const rows = parseCSV(readFileSync(DATABASE_PATH, "utf8").replace(/^\uFEFF/, ""));
+function parseRespondents(questionIds: number[], databaseCsvText: string): ParsedRespondent[] {
+  const rows = parseCSV(databaseCsvText);
   const headers = rows[0] ?? [];
   const records = rows.slice(1);
 
@@ -309,7 +526,7 @@ function buildDimensionMetrics(
         values.length
       ),
       questionIds: questionMetrics
-        .filter((question) => definition.itemIds.includes(question.itemId))
+        .filter((question) => (definition.itemIds as readonly number[]).includes(question.itemId))
         .map((question) => question.id),
     };
   }).sort((left, right) => left.score - right.score);
@@ -345,6 +562,121 @@ function buildGroupMetrics(
     }))
     .filter((group) => group.respondentCount >= minimumCount)
     .sort((left, right) => left.score - right.score || right.respondentCount - left.respondentCount);
+}
+
+type CampaignSlot = "campaign1" | "campaign2" | "campaign3";
+type LongitudinalScoreAccessor = (respondent: ParsedRespondent) => Array<number | null>;
+
+function campaignSlotForLabel(label: string): CampaignSlot | null {
+  const normalized = label.trim().toLowerCase();
+  if (
+    normalized === "initial" ||
+    normalized === "campaign 1" ||
+    normalized === "wave 1" ||
+    normalized.includes("campaign 1") ||
+    normalized.includes("wave 1")
+  ) {
+    return "campaign1";
+  }
+  if (
+    normalized === "midpoint" ||
+    normalized === "campaign 2" ||
+    normalized === "wave 2" ||
+    normalized.includes("campaign 2") ||
+    normalized.includes("wave 2")
+  ) {
+    return "campaign2";
+  }
+  if (
+    normalized === "final" ||
+    normalized === "campaign 3" ||
+    normalized === "wave 3" ||
+    normalized.includes("campaign 3") ||
+    normalized.includes("wave 3")
+  ) {
+    return "campaign3";
+  }
+  return null;
+}
+
+function buildLongitudinalSeries(
+  id: string,
+  label: string,
+  respondents: ParsedRespondent[],
+  scoreAccessor: LongitudinalScoreAccessor
+): IntegrationLongitudinalSeries {
+  const series: IntegrationLongitudinalSeries = {
+    id,
+    label,
+    campaign1: null,
+    campaign2: null,
+    campaign3: null,
+  };
+
+  for (const campaign of Array.from(new Set(respondents.map((respondent) => respondent.campaign)))) {
+    const slot = campaignSlotForLabel(campaign);
+    if (!slot) continue;
+    const values = respondents
+      .filter((respondent) => respondent.campaign === campaign)
+      .flatMap(scoreAccessor)
+      .filter((value): value is number => value !== null);
+
+    series[slot] = values.length > 0 ? round2(average(values)) : null;
+  }
+
+  return series;
+}
+
+function buildLongitudinalScope(
+  respondents: ParsedRespondent[],
+  brands: string[],
+  scoreAccessor: LongitudinalScoreAccessor
+): IntegrationLongitudinalScope {
+  return {
+    organization: buildLongitudinalSeries("organization", "Organization", respondents, scoreAccessor),
+    brands: brands.map((brand) =>
+      buildLongitudinalSeries(
+        brand.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        brand,
+        respondents.filter((respondent) => respondent.brand === brand),
+        scoreAccessor
+      )
+    ),
+  };
+}
+
+function buildLongitudinalData(
+  respondents: ParsedRespondent[],
+  questions: ParsedQuestion[]
+): IntegrationDashboardData["longitudinal"] {
+  const brands = Array.from(new Set(respondents.map((respondent) => respondent.brand)));
+  const departments = Array.from(new Set(respondents.map((respondent) => respondent.department)));
+
+  return {
+    overall: buildLongitudinalScope(
+      respondents,
+      brands,
+      (respondent) => Object.values(respondent.scores)
+    ),
+    statements: Object.fromEntries(
+      questions.map((question) => [
+        `question-${question.itemId}`,
+        buildLongitudinalScope(respondents, brands, (respondent) => [
+          respondent.scores[question.itemId] ?? null,
+        ]),
+      ])
+    ),
+    departments: Object.fromEntries(
+      departments.map((department) => [
+        department,
+        buildLongitudinalScope(
+          respondents.filter((respondent) => respondent.department === department),
+          brands,
+          (respondent) => Object.values(respondent.scores)
+        ),
+      ])
+    ),
+  };
 }
 
 function buildHeatmapForGrouping(
@@ -556,9 +888,17 @@ function buildCommentThemes(entries: IntegrationVoiceEntry[]): IntegrationCommen
     .sort((left, right) => right.mentionCount - left.mentionCount);
 }
 
-export function loadCanopyIntegrationDashboardData(): IntegrationDashboardData {
-  const questions = parseQuestions();
-  const respondents = parseRespondents(questions.map((question) => question.itemId));
+export async function loadCanopyIntegrationDashboardData(
+  options: { demo?: boolean } = {}
+): Promise<IntegrationDashboardData> {
+  const [databaseCsvText, campaignCsvText] = options.demo
+    ? [buildSyntheticDatabaseCsv(), buildSyntheticCampaignCsv()]
+    : await Promise.all([
+        readCsvFromStorageOrLocal(DATABASE_STORAGE_PATH, DATABASE_PATH),
+        readCsvFromStorageOrLocal(CAMPAIGN_STORAGE_PATH, CAMPAIGN_PATH),
+      ]);
+  const questions = parseQuestions(campaignCsvText);
+  const respondents = parseRespondents(questions.map((question) => question.itemId), databaseCsvText);
   const questionMetrics = buildQuestionMetrics(respondents, questions);
   const dimensionMetrics = buildDimensionMetrics(respondents, questionMetrics);
   const departmentMetrics = buildGroupMetrics(
@@ -605,7 +945,9 @@ export function loadCanopyIntegrationDashboardData(): IntegrationDashboardData {
       totalDepartments: new Set(respondents.map((respondent) => respondent.department)).size,
       brands: Array.from(new Set(respondents.map((respondent) => respondent.brand))),
       campaigns: Array.from(new Set(respondents.map((respondent) => respondent.campaign))),
-      dataSourceLabel: "Canopy Integration Database 2026.csv + Canopy Integration Campaign 2026.csv",
+      dataSourceLabel: options.demo
+        ? "Static integration demo dataset: 5 brands x 3 campaigns"
+        : "Canopy Integration Database 2026.csv + Canopy Integration Campaign 2026.csv",
     },
     overview: {
       integrationIndex,
@@ -650,6 +992,7 @@ export function loadCanopyIntegrationDashboardData(): IntegrationDashboardData {
       ),
     },
     brandReports,
+    longitudinal: buildLongitudinalData(respondents, questions),
     priorities: buildPriorityList(questionMetrics, departmentMetrics),
     strengths: buildStrengthList(questionMetrics, departmentMetrics),
     commentThemes: buildCommentThemes(improvementVoice),

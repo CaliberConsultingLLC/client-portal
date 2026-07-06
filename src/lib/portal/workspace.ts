@@ -4,7 +4,7 @@ import { getPortalClientById } from "@/lib/portal/clients";
 const sharedAssets: PortalAsset[] = [
   {
     id: "collaboration-dashboard",
-    title: "Collaboration Dashboard",
+    title: "Collaboration",
     description:
       "Interactive collaboration reporting designed to surface relationship friction, trust patterns, and action priorities.",
     type: "dashboard",
@@ -16,7 +16,7 @@ const sharedAssets: PortalAsset[] = [
   },
   {
     id: "integration-dashboard",
-    title: "Integration Dashboard",
+    title: "Integration Effectiveness",
     description:
       "Integration effectiveness reporting with statement breakdowns, segment views, and employee voice analysis.",
     type: "dashboard",
@@ -59,10 +59,38 @@ const sharedAssets: PortalAsset[] = [
 ];
 
 const clientSpecificAssets: Record<string, PortalAsset[]> = {
+  csg: [
+    {
+      id: "csg-integration-dashboard",
+      title: "Integration Effectiveness",
+      description:
+        "A client-ready view of integration results across survey statements, campaign lenses, brand cuts, and employee feedback to help leaders spot strengths, risks, and priority actions.",
+      type: "dashboard",
+      status: "active",
+      href: "/portal/dashboards/csg-integration-dashboard",
+      previewHref: "/integration-effectiveness/csg",
+      updatedLabel: "Updated today",
+      tags: ["Dashboard", "Integration"],
+    },
+  ],
+  tf: [
+    {
+      id: "tf-collaboration",
+      title: "Top Flight Collaboration",
+      description:
+        "Collaboration reporting for Top Flight, Inc. built from the client's collaboration database and statement map.",
+      type: "dashboard",
+      status: "active",
+      href: "/portal/dashboards/tf-collaboration",
+      previewHref: "/portal/dashboards/tf-collaboration",
+      updatedLabel: "Updated today",
+      tags: ["Dashboard", "Collaboration"],
+    },
+  ],
   dws: [
     {
       id: "dws-employee-experience",
-      title: "DWS Employee Experience Dashboard",
+      title: "DWS Employee Experience",
       description:
         "A DWS-specific employee experience environment rebuilt from the Power BI reporting package and current CSV workspace.",
       type: "dashboard",

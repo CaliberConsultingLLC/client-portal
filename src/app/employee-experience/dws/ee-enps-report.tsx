@@ -1,15 +1,29 @@
 "use client";
 
-import { DateHead, EEReportStyles, deltaStyle, f1 } from "./ee-report-kit";
+import { DateHead, EEReportStyles, HeaderKpiPortal, deltaStyle, f1 } from "./ee-report-kit";
 import type { EnpsGroupRow, EnpsReportProjection } from "./ee-live-projections";
-import { scoreScaleColor, scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import { useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
+import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
+
+const ENPS_SCALE = {
+  detractorMaxExclusive: 7,
+  passiveMaxExclusive: 9,
+  detractorColor: "#C8B9B6",
+  passiveColor: "#DCE8F8",
+  promoterColor: "#8EA9CC",
+  darkText: "#1C252A",
+  lightText: "#FFFFFF",
+} as const;
 
 function bandColor(score: number) {
-  return scoreScaleColor(score, 6, 7.5, 9);
+  if (score < ENPS_SCALE.detractorMaxExclusive) return ENPS_SCALE.detractorColor;
+  if (score < ENPS_SCALE.passiveMaxExclusive) return ENPS_SCALE.passiveColor;
+  return ENPS_SCALE.promoterColor;
 }
 
 function textColor(score: number) {
-  return scoreScaleTextColor(score, 7.5, 0.8, 6, 9);
+  return score >= ENPS_SCALE.passiveMaxExclusive ? ENPS_SCALE.lightText : ENPS_SCALE.darkText;
 }
 
 function EnpsTable({ rows, title }: { rows: EnpsGroupRow[]; title: string }) {
@@ -62,7 +76,33 @@ function EnpsTable({ rows, title }: { rows: EnpsGroupRow[]; title: string }) {
   );
 }
 
-export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProjection; embedded?: boolean }) {
+export function EEEnpsReport({
+  data,
+  embedded = false,
+  variant = "executive",
+  descriptorText,
+  chromeless = false,
+  headerPortalId,
+}: {
+  data: EnpsReportProjection;
+  embedded?: boolean;
+  variant?: "executive" | "brand";
+  descriptorText?: string;
+  chromeless?: boolean;
+  headerPortalId?: string;
+}) {
+  const exportRegistry = useVisualExportRegistry();
+  const registryActive = useVisualRegistryActive();
+  const registryOn = registryActive && Boolean(exportRegistry);
+  const exportFile = (section: string) =>
+    buildDashboardExportFilename({ client: "dws", perspective: `enps-${section}`, campaign: data.current?.label });
+  if (registryOn && exportRegistry) {
+    exportRegistry.setMeta({
+      title: "ENPS",
+      filters: [data.current?.label].filter((value): value is string => Boolean(value)),
+    });
+  }
+
   if (!data.hasEnpsData) {
     return (
       <div className={`canvas${embedded ? " embedded" : ""}`} style={embedded ? { minHeight: "auto" } : undefined}>
@@ -90,10 +130,34 @@ export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProje
       <EEReportStyles />
       <main className="center">
         <div className="center-inner">
+          {chromeless ? (
+            <>
+              <HeaderKpiPortal
+                portalId={headerPortalId}
+                items={[
+                  { label: "ENPS Score", value: data.summary.score.toFixed(1) },
+                  {
+                    label: "Delta",
+                    value: data.summary.delta == null ? "—" : f1(data.summary.delta),
+                    color: data.summary.delta == null ? "#6E7E96" : data.summary.delta >= 0 ? "#9CB2A8" : "#C8B9B6",
+                  },
+                  { label: "Responses", value: String(data.summary.responses) },
+                ]}
+              />
+              <p className="max-w-[760px] text-[12.5px] leading-relaxed text-[#3B4B63]" style={{ marginBottom: 18 }}>
+                {descriptorText ??
+                  "ENPS reflects promoter minus detractor percentage points. This view uses a 10-point response interpretation: 9-10 is Goal, 7-8 is Acceptable, and 0-6 is Unacceptable."}
+              </p>
+            </>
+          ) : (
           <div className="hero">
             <div>
               <h2>ENPS</h2>
               <p className="hero-sub">{data.current.label} results</p>
+              <p className="mt-2 max-w-[760px] text-[12.5px] leading-relaxed text-[#3B4B63]">
+                {descriptorText ??
+                  "ENPS reflects promoter minus detractor percentage points. This view uses a 10-point response interpretation: 9-10 is Goal, 7-8 is Acceptable, and 0-6 is Unacceptable."}
+              </p>
             </div>
             <div className="kpi-strip">
               <div className="kpi">
@@ -122,12 +186,25 @@ export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProje
               </div>
             </div>
           </div>
+          )}
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <EnpsTable rows={data.brandRows} title="Brand Comparison" />
-            <EnpsTable rows={data.departmentRows} title="Department Comparison" />
+            {variant === "brand" ? null : (
+              <RegisteredVisualExportFrame order={10} label="Download table" filename={exportFile("brand-comparison")}>
+                <EnpsTable rows={data.brandRows} title="Brand Comparison" />
+              </RegisteredVisualExportFrame>
+            )}
+            <RegisteredVisualExportFrame order={20} label="Download table" filename={exportFile("department-comparison")}>
+              <EnpsTable rows={data.departmentRows} title="Department Comparison" />
+            </RegisteredVisualExportFrame>
+            {variant === "brand" ? (
+              <RegisteredVisualExportFrame order={30} label="Download table" filename={exportFile("supervisor-comparison")}>
+                <EnpsTable rows={data.supervisorRows} title="Supervisor Comparison" />
+              </RegisteredVisualExportFrame>
+            ) : null}
           </div>
 
+          <RegisteredVisualExportFrame order={40} label="Download table" filename={exportFile("trend")}>
           <div className="card" style={{ marginTop: 18, marginBottom: 18 }}>
             <div className="card-head">
               <h3 className="card-title">ENPS Trend</h3>
@@ -162,6 +239,7 @@ export function EEEnpsReport({ data, embedded = false }: { data: EnpsReportProje
               </div>
             </div>
           </div>
+          </RegisteredVisualExportFrame>
         </div>
       </main>
     </div>

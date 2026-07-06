@@ -8,6 +8,7 @@ import type {
   CampaignStatus,
   CampaignSummary,
 } from "@/types/campaign";
+import { getSurveyMonkeyToken, requireSurveyMonkeyToken } from "@/lib/surveymonkey/token";
 import { getCensusPreviewById } from "./census-store";
 import { getFirebaseAdminFirestore } from "./admin";
 
@@ -93,6 +94,14 @@ function toChannels(value: unknown): CampaignChannel[] {
   );
 }
 
+function toDryRun(value: unknown) {
+  if (value === false || value === "false") {
+    return false;
+  }
+
+  return true;
+}
+
 function mapConfig(value: unknown): CampaignConfig {
   const config = typeof value === "object" && value ? value as Record<string, unknown> : {};
   const reminderSchedule =
@@ -120,7 +129,7 @@ function mapConfig(value: unknown): CampaignConfig {
     },
     targetResponseRate: toNumber(config.targetResponseRate, 0),
     autoCloseOnTarget: config.autoCloseOnTarget === true,
-    dryRun: config.dryRun !== false,
+    dryRun: toDryRun(config.dryRun),
   };
 }
 
@@ -152,6 +161,9 @@ function mapCampaignSummary(id: string, data: FirebaseFirestore.DocumentData): C
     campaignId: typeof data.campaignId === "string" ? data.campaignId : id,
     clientId: typeof data.clientId === "string" ? data.clientId : "",
     censusId: typeof data.censusId === "string" ? data.censusId : "",
+    dashboardInstanceId:
+      typeof data.dashboardInstanceId === "string" ? data.dashboardInstanceId : null,
+    surveyWaveLabel: typeof data.surveyWaveLabel === "string" ? data.surveyWaveLabel : null,
     surveyLabel: typeof data.surveyLabel === "string" ? data.surveyLabel : "Untitled Campaign",
     smSurveyId: typeof data.smSurveyId === "string" ? data.smSurveyId : "",
     status: typeof data.status === "string" ? data.status as CampaignStatus : "draft",
@@ -219,12 +231,16 @@ function mapActivityLog(id: string, data: FirebaseFirestore.DocumentData): Campa
   };
 }
 
-async function surveyMonkeyRequest(method: string, path: string, body?: unknown) {
-  const token = process.env.SURVEYMONKEY_TOKEN;
-
-  if (!token) {
-    throw new Error("Missing SURVEYMONKEY_TOKEN.");
+function assertSurveyMonkeyTokenIfLive(dryRun: boolean) {
+  if (!dryRun && !getSurveyMonkeyToken()) {
+    throw new Error(
+      "Missing SurveyMonkey API token. Set SURVEYMONKEY_ACCESS_TOKEN (or SURVEYMONKEY_TOKEN) in the environment, or turn dry-run mode back on."
+    );
   }
+}
+
+async function surveyMonkeyRequest(method: string, path: string, body?: unknown) {
+  const token = requireSurveyMonkeyToken();
 
   const response = await fetch(`https://api.surveymonkey.com/v3${path}`, {
     method,
@@ -330,6 +346,25 @@ export async function listCampaignsForClientIds(clientIds: string[]) {
     .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
 }
 
+const SYNCABLE_CAMPAIGN_STATUSES: CampaignStatus[] = ["launched", "active", "closing"];
+
+/**
+ * Returns every campaign that is currently in-flight, across all clients.
+ * Used by the nightly cron to refresh response rates without a client scope.
+ */
+export async function listActiveCampaignsForSync() {
+  const firestore = getFirebaseAdminFirestore();
+  const snapshots = await Promise.all(
+    chunkArray(SYNCABLE_CAMPAIGN_STATUSES, 10).map((chunk) =>
+      firestore.collection(CAMPAIGNS_COLLECTION).where("status", "in", chunk).get()
+    )
+  );
+
+  return snapshots
+    .flatMap((snapshot) => snapshot.docs.map((doc) => mapCampaignSummary(doc.id, doc.data())))
+    .sort((left, right) => (right.updatedAt ?? "").localeCompare(left.updatedAt ?? ""));
+}
+
 export async function getCampaignById(campaignId: string) {
   const snapshot = await getFirebaseAdminFirestore()
     .collection(CAMPAIGNS_COLLECTION)
@@ -376,7 +411,7 @@ function buildConfig(input: CampaignConfigInput) {
     },
     targetResponseRate: input.targetResponseRate,
     autoCloseOnTarget: input.autoCloseOnTarget,
-    dryRun: input.dryRun !== false,
+    dryRun: toDryRun(input.dryRun),
   };
 }
 
@@ -537,6 +572,7 @@ export async function launchCampaign(campaignId: string, actor: CampaignActionAc
   }
 
   const dryRun = campaign.config.dryRun;
+  assertSurveyMonkeyTokenIfLive(dryRun);
   const preview = await getCensusPreviewById(campaign.censusId);
 
   if (!preview.upload || preview.rows.length === 0) {
@@ -643,6 +679,8 @@ export async function syncCampaignResponses(campaignId: string, actor: CampaignA
 
     return { success: true, dryRun: true, newResponses: 0 };
   }
+
+  assertSurveyMonkeyTokenIfLive(false);
 
   const responsePayload = await surveyMonkeyRequest(
     "GET",
@@ -791,6 +829,8 @@ export async function closeCampaign(campaignId: string, actor: CampaignActionAct
   assertAutomationClientAllowed(campaign.clientId);
 
   if (campaign.collectors.email?.smCollectorId) {
+    assertSurveyMonkeyTokenIfLive(campaign.config.dryRun);
+
     await executeCampaignAction({
       campaignId,
       action: "COLLECTOR_CLOSED",
