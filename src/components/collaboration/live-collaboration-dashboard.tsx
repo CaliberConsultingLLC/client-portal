@@ -48,6 +48,7 @@ import {
   type CollaborationDataset,
 } from "@/lib/collaboration/collaboration-dataset";
 import { succinctCiStatementLabel } from "@/lib/collaboration/display-format";
+import { cn } from "@/lib/utils";
 
 interface LiveFilters {
   department: string;
@@ -57,6 +58,25 @@ interface LiveFilters {
 }
 
 const ALL_FILTERS: LiveFilters = { department: "all", role: "all", generation: "all", tenure: "all" };
+
+interface DashboardModeSection {
+  id: string;
+  label: string;
+  tabIds: string[];
+}
+
+const MODE_SECTIONS: DashboardModeSection[] = [
+  {
+    id: "executive",
+    label: "Executive",
+    tabIds: ["overview", "executive-summary", "cdrs-heatmap", "cdrs", "ci", "segment-signals"],
+  },
+  {
+    id: "department",
+    label: "Department",
+    tabIds: ["department-360", "dept", "department-ci-report", "comments"],
+  },
+];
 
 interface LiveCollaborationDashboardProps {
   dataset: CollaborationDataset;
@@ -93,6 +113,79 @@ function RailClientCard({
   );
 }
 
+function RailReportNav({
+  sections,
+  activeMode,
+  activeTab,
+  onModeChange,
+  onTabChange,
+  labelFor,
+}: {
+  sections: DashboardModeSection[];
+  activeMode: string;
+  activeTab: string;
+  onModeChange: (id: string) => void;
+  onTabChange: (id: string) => void;
+  labelFor: (id: string) => string;
+}) {
+  const active = sections.find((section) => section.id === activeMode) ?? sections[0];
+  if (!active) return null;
+  return (
+    <div className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
+      <div className="border-b border-border-subtle px-4 py-3">
+        <span className="text-[11.5px] font-bold uppercase tracking-[0.18em] text-text-muted">
+          Reports
+        </span>
+      </div>
+      <div className="space-y-3 px-4 py-3">
+        <div className="flex gap-2">
+          {sections.map((section) => (
+            <button
+              key={section.id}
+              type="button"
+              onClick={() => onModeChange(section.id)}
+              className={cn(
+                "flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                section.id === active.id
+                  ? "bg-[#D7B35A] text-[#242424]"
+                  : "border border-[#D4DAD6] bg-[#F5F7F5] text-[#3B4B63] hover:border-[#386B45] hover:bg-[#386B45] hover:text-white"
+              )}
+            >
+              {section.label}
+            </button>
+          ))}
+        </div>
+        <div className="space-y-1">
+          {active.tabIds.map((id) => {
+            const isActive = id === activeTab;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onTabChange(id)}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors",
+                  isActive
+                    ? "border border-[#8798AA] bg-white text-text-primary shadow-[0_1px_3px_rgba(15,23,42,0.08)]"
+                    : "border border-transparent text-text-secondary hover:bg-[#EEF2EE]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "h-1.5 w-1.5 shrink-0 rounded-full",
+                    isActive ? "bg-[#C99A3C]" : "bg-[#C8D2CF]"
+                  )}
+                />
+                {labelFor(id)}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RailSection({
   title,
   defaultOpen = true,
@@ -104,7 +197,7 @@ function RailSection({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white">
+    <div className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -159,17 +252,15 @@ function RightRailGuidance({
   paragraphs: string[];
 }) {
   return (
-    <div className="xl:sticky xl:top-24 xl:self-start">
-      <RailSection title={title} defaultOpen>
-        <div className="space-y-3">
-          {paragraphs.map((paragraph) => (
-            <p key={paragraph} className="text-sm leading-relaxed text-text-secondary">
-              {paragraph}
-            </p>
-          ))}
-        </div>
-      </RailSection>
-    </div>
+    <RailSection title={title} defaultOpen>
+      <div className="space-y-3">
+        {paragraphs.map((paragraph) => (
+          <p key={paragraph} className="text-sm leading-relaxed text-text-secondary">
+            {paragraph}
+          </p>
+        ))}
+      </div>
+    </RailSection>
   );
 }
 
@@ -507,17 +598,19 @@ export function LiveCollaborationDashboard({
   const guidance =
     PERSPECTIVE_GUIDANCE[activeTab] ?? {
       title: "About this report",
-      paragraphs: ["Use the left rail to change perspective or filter the active segment."],
+      paragraphs: ["Use the Reports panel to change perspective or filter the active segment."],
     };
   const showDepartmentSection = activeMode === "department";
   const showCiStatementSection = activeTab === "department-ci-report";
   const showSegmentSection = activeTab === "cdrs" || activeTab === "ci";
+  const hasFilters = showDepartmentSection || showCiStatementSection || showSegmentSection;
   const segmentActive =
     reportFilters.department !== "all" ||
     reportFilters.role !== "all" ||
     reportFilters.generation !== "all" ||
     reportFilters.tenure !== "all";
 
+  // Left rail: client identity only. Filters + report navigation live on the right.
   const leftRail = (
     <div className="space-y-3 xl:sticky xl:top-6 xl:self-start">
       <RailClientCard
@@ -525,8 +618,13 @@ export function LiveCollaborationDashboard({
         organizationName={organizationName}
         reportName={reportName}
       />
-      {showDepartmentSection ? (
-        <RailSection title="Department">
+    </div>
+  );
+
+  const filterSections = hasFilters ? (
+    <RailSection title="Filters">
+      <div className="space-y-4">
+        {showDepartmentSection ? (
           <RailSelect
             label="Selected department"
             value={effectiveSelectedDepartment}
@@ -538,15 +636,11 @@ export function LiveCollaborationDashboard({
               </option>
             ))}
           </RailSelect>
-        </RailSection>
-      ) : null}
-      {showCiStatementSection ? (
-        <RailSection title="Statement">
+        ) : null}
+        {showCiStatementSection ? (
           <RailSelect
             label="Flow chart focus"
-            value={
-              selectedCiStatement === "all" ? "all" : String(selectedCiStatement)
-            }
+            value={selectedCiStatement === "all" ? "all" : String(selectedCiStatement)}
             onChange={(value) =>
               setSelectedCiStatement(value === "all" ? "all" : Number(value))
             }
@@ -558,11 +652,9 @@ export function LiveCollaborationDashboard({
               </option>
             ))}
           </RailSelect>
-        </RailSection>
-      ) : null}
-      {showSegmentSection ? (
-        <RailSection title="Segment">
-          <div className="space-y-3">
+        ) : null}
+        {showSegmentSection ? (
+          <>
             <RailSelect
               label="Department"
               value={reportFilters.department}
@@ -590,9 +682,7 @@ export function LiveCollaborationDashboard({
             <RailSelect
               label="Generation"
               value={reportFilters.generation}
-              onChange={(value) =>
-                setReportFilters((prev) => ({ ...prev, generation: value }))
-              }
+              onChange={(value) => setReportFilters((prev) => ({ ...prev, generation: value }))}
             >
               <option value="all">All generations</option>
               {generations.map((generation) => (
@@ -604,9 +694,7 @@ export function LiveCollaborationDashboard({
             <RailSelect
               label="Tenure"
               value={reportFilters.tenure}
-              onChange={(value) =>
-                setReportFilters((prev) => ({ ...prev, tenure: value }))
-              }
+              onChange={(value) => setReportFilters((prev) => ({ ...prev, tenure: value }))}
             >
               <option value="all">All tenures</option>
               {tenures.map((tenure) => (
@@ -628,16 +716,32 @@ export function LiveCollaborationDashboard({
                 Reset
               </button>
             ) : null}
-          </div>
-        </RailSection>
-      ) : null}
+          </>
+        ) : null}
+      </div>
+    </RailSection>
+  ) : null;
+
+  // Right rail: report groupings (navigation) + active filters + guidance.
+  const rightRail = (
+    <div className="space-y-3 xl:sticky xl:top-6 xl:self-start">
+      <RailReportNav
+        sections={MODE_SECTIONS}
+        activeMode={activeMode}
+        activeTab={activeTab}
+        onModeChange={(id) => {
+          const nextSection = MODE_SECTIONS.find((section) => section.id === id);
+          if (!nextSection) return;
+          setActiveMode(nextSection.id);
+          setActiveTab(nextSection.tabIds[0] ?? "");
+        }}
+        onTabChange={setActiveTab}
+        labelFor={(id) => PERSPECTIVE_LABELS[id] ?? id}
+      />
+      {filterSections}
+      <RightRailGuidance title={guidance.title} paragraphs={guidance.paragraphs} />
     </div>
   );
-
-  const rightRail =
-    activeTab === "overview" ? null : (
-      <RightRailGuidance title={guidance.title} paragraphs={guidance.paragraphs} />
-    );
 
   return (
     <CollaborationDashboardClient
@@ -647,34 +751,13 @@ export function LiveCollaborationDashboard({
       leftRailOverride={leftRail}
       rightRailOverride={rightRail}
       hideTitleRow
+      hideRibbonNav
+      centerBackgroundClassName="bg-[#F4F4EF]"
       activeModeId={activeMode}
       onActiveModeChange={setActiveMode}
       activeTabId={activeTab}
       onActiveTabChange={setActiveTab}
-      modeSections={[
-        {
-          id: "executive",
-          label: "Executive",
-          tabIds: [
-            "overview",
-            "executive-summary",
-            "cdrs-heatmap",
-            "cdrs",
-            "ci",
-            "segment-signals",
-          ],
-        },
-        {
-          id: "department",
-          label: "Department",
-          tabIds: [
-            "department-360",
-            "dept",
-            "department-ci-report",
-            "comments",
-          ],
-        },
-      ]}
+      modeSections={MODE_SECTIONS}
       tabOverrides={[
         { id: "cdrs-heatmap", label: "Heatmap" },
         {

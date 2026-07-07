@@ -1,9 +1,10 @@
 export function getDataBoxSurfaceStyle() {
+  // Matches the Employee Experience KPI tile treatment: soft light panel,
+  // strong border, and the standard directional EE panel shadow.
   return {
-    backgroundImage:
-      "linear-gradient(180deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.28) 32%, rgba(61,78,101,0.1) 100%)",
-    borderColor: "rgba(98, 112, 133, 0.3)",
+    backgroundColor: "#F5F7F8",
+    borderColor: "#8798AA",
     boxShadow:
-      "0 14px 26px rgba(44, 60, 84, 0.1), inset 0 1px 0 rgba(255,255,255,0.42)",
+      "7px 9px 20px rgba(15,23,42,0.09), 2px 3px 6px rgba(15,23,42,0.05)",
   } as const;
 }

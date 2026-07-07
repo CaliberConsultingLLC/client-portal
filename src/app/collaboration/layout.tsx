@@ -11,7 +11,7 @@ export default function CollaborationLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-surface-2">
+    <div className="min-h-screen bg-[#EEF2EE]">
       <AppTopBanner
         homeHref="/login"
         items={[

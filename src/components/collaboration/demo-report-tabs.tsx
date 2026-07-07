@@ -350,10 +350,13 @@ function ReportSummaryHeader({
   metrics?: Array<{ label: string; value: string | number; sublabel?: string }>;
 }) {
   return (
-    <Card className="border-border-strong">
+    <Card className="border-border-strong bg-white">
       <CardContent className="flex flex-col gap-6 p-6 xl:flex-row xl:items-center xl:justify-between">
-        <div className="space-y-4 xl:max-w-2xl">
-          <CardTitle className="text-4xl font-extrabold tracking-tight text-text-primary">
+        <div className="min-w-0 space-y-3 xl:max-w-2xl">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8798AA]">
+            Collaboration
+          </p>
+          <CardTitle className="text-[28px] font-extrabold leading-[1.1] tracking-[-0.02em] text-[#152238]">
             {title}
           </CardTitle>
           {description ? (
@@ -367,13 +370,13 @@ function ReportSummaryHeader({
             {metrics.map((metric) => (
               <div
                 key={metric.label}
-                className="flex h-[132px] w-[132px] shrink-0 flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-3 px-3 py-3 text-center"
+                className="flex min-h-[92px] min-w-[120px] shrink-0 flex-col items-center justify-center rounded-2xl border px-4 py-3 text-center"
                 style={getDataBoxSurfaceStyle()}
               >
-                <p className="text-[10px] font-semibold uppercase leading-tight tracking-[0.16em] text-text-primary">
+                <p className="text-[10px] font-semibold uppercase leading-tight tracking-[0.16em] text-[#8798AA]">
                   {metric.label}
                 </p>
-                <p className="mt-2 text-2xl font-extrabold leading-none text-text-primary">
+                <p className="mt-2 text-2xl font-extrabold leading-none text-[#152238]">
                   {metric.value}
                 </p>
                 {metric.sublabel ? (

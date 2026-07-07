@@ -56,6 +56,10 @@ interface DashboardProps {
   rightRailOverride?: ReactNode;
   /** Hide the redundant per-tab title row above the canvas content. */
   hideTitleRow?: boolean;
+  /** Hide the category/perspective selectors in the top ribbon (moved to a rail). */
+  hideRibbonNav?: boolean;
+  /** Background of the center canvas column. Defaults to solid white. */
+  centerBackgroundClassName?: string;
   /** Controlled active perspective (tab) id. */
   activeTabId?: string;
   onActiveTabChange?: (id: string) => void;
@@ -86,6 +90,8 @@ export function CollaborationDashboardClient({
   leftRailOverride,
   rightRailOverride,
   hideTitleRow = false,
+  hideRibbonNav = false,
+  centerBackgroundClassName,
   activeTabId,
   onActiveTabChange,
   activeModeId,
@@ -212,7 +218,11 @@ export function CollaborationDashboardClient({
       <VisualExportMetaSetter title={activeTabLabel} filters={[campaignName]} />
       <DashboardRibbon
         title={campaignName}
-        categories={(modeSections ?? []).map((section) => ({ id: section.id, label: section.label }))}
+        categories={
+          hideRibbonNav
+            ? []
+            : (modeSections ?? []).map((section) => ({ id: section.id, label: section.label }))
+        }
         activeCategoryId={activeModeSection?.id}
         onCategoryChange={(nextModeId) => {
           const nextModeSection =
@@ -225,7 +235,9 @@ export function CollaborationDashboardClient({
           setActiveMode(nextModeSection.id);
           setActiveTab(nextModeSection.tabIds[0] ?? "");
         }}
-        perspectives={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
+        perspectives={
+          hideRibbonNav ? [] : visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))
+        }
         activePerspectiveId={resolvedActiveTabId}
         onPerspectiveChange={setActiveTab}
         legend={
@@ -238,6 +250,7 @@ export function CollaborationDashboardClient({
       <div>
       <DashboardCanvas
         leftRail={leftRail}
+        centerBackgroundClassName={centerBackgroundClassName}
         rightRail={
           rightRailOverride !== undefined ? (
             rightRailOverride
@@ -864,7 +877,7 @@ function Card({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-border-strong bg-white p-5 shadow-sm ${className ?? ""}`}
+      className={`nsp-card-shadow overflow-hidden rounded-2xl border border-border-strong bg-white p-5 ${className ?? ""}`}
     >
       {title && (
         <div className="mb-4">

@@ -43,6 +43,7 @@ interface DashboardRibbonProps {
   legend?: React.ReactNode;
 
   toolbar?: React.ReactNode;
+  sticky?: boolean;
 
 }
 
@@ -287,6 +288,7 @@ export function DashboardRibbon({
   legend,
 
   toolbar,
+  sticky = true,
 
 }: DashboardRibbonProps) {
 
@@ -299,11 +301,8 @@ export function DashboardRibbon({
   return (
 
     <div
-
-      className="sticky z-40 -mt-px w-full"
-
-      style={{ top: "var(--app-top-banner-height, 78px)" }}
-
+      className={cn(sticky ? "sticky z-40 -mt-px w-full" : "relative z-10 w-full")}
+      style={sticky ? { top: "var(--app-top-banner-height, 78px)" } : undefined}
     >
 
       <section className="mx-4 overflow-hidden rounded-b-[28px] border-x border-b border-[#D4DAD6] bg-white/96 shadow-sm backdrop-blur sm:mx-6">
@@ -424,6 +423,8 @@ interface DashboardCanvasProps {
 
   rightRail?: React.ReactNode;
 
+  centerBackgroundClassName?: string;
+
 }
 
 
@@ -440,6 +441,8 @@ export function DashboardCanvas({
 
   rightRail,
 
+  centerBackgroundClassName,
+
 }: DashboardCanvasProps) {
 
   return (
@@ -453,6 +456,8 @@ export function DashboardCanvas({
       centerMaxWidthClassName={cn("min-h-[700px]", maxWidthClassName)}
 
       centerClassName={className}
+
+      centerBackgroundClassName={centerBackgroundClassName}
 
     >
 

@@ -7,6 +7,8 @@ interface PortalPageFrameProps {
   centerMaxWidthClassName?: string;
   className?: string;
   centerClassName?: string;
+  /** Background of the center canvas column. Defaults to solid white. */
+  centerBackgroundClassName?: string;
 }
 
 export function PortalPageFrame({
@@ -16,6 +18,7 @@ export function PortalPageFrame({
   centerMaxWidthClassName = "max-w-[1320px]",
   className,
   centerClassName,
+  centerBackgroundClassName = "bg-white",
 }: PortalPageFrameProps) {
   return (
     <div
@@ -35,7 +38,7 @@ export function PortalPageFrame({
         </div>
       </aside>
 
-      <div className="min-w-0 bg-white px-6 py-8">
+      <div className={cn("min-w-0 px-6 py-8", centerBackgroundClassName)}>
         <div className={cn("mx-auto w-full", centerMaxWidthClassName, centerClassName)}>{children}</div>
       </div>
 
