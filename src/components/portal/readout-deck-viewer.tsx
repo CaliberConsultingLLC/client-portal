@@ -4,7 +4,7 @@ import { toCanvas } from "html-to-image";
 import { jsPDF } from "jspdf";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ReadoutEditableText } from "@/components/portal/readout-editable-text";
+import { ReadoutEditableText, sanitizeReadoutHtml } from "@/components/portal/readout-editable-text";
 import { ReadoutImageSlot } from "@/components/portal/readout-image-slot";
 import {
   READOUT_COLOR_PRESETS,
@@ -40,7 +40,6 @@ import type {
   ReadoutTextBlock,
   ReadoutVisualBlock,
 } from "@/types/readout";
-import type { ReactNode } from "react";
 
 interface ReadoutDeckViewerProps {
   readout: Readout;
@@ -92,6 +91,7 @@ function ReadoutDeckViewerInner({
   const [menuOpen, setMenuOpen] = useState(false);
   const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const [busyAll, setBusyAll] = useState(false);
   const dragRef = useRef<DragState>(null);
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -621,10 +621,19 @@ function ReadoutDeckViewerInner({
 
   return (
     <div
-      className="relative min-h-[calc(100vh-var(--app-top-banner-height))] overflow-hidden bg-[#ECEFED] text-[#152238]"
+      className="readout-deck relative min-h-[calc(100vh-var(--app-top-banner-height))] overflow-hidden bg-[#ECEFED] text-[#152238]"
       style={{ height: "calc(100vh - var(--app-top-banner-height))" }}
     >
-      <style>{`[contenteditable="true"]{outline:1px dashed rgba(201,154,60,0.55);outline-offset:3px;border-radius:2px;}`}</style>
+      {/* Tailwind's reset strips list markers; readout copy needs them back. */}
+      <style>{`
+        [contenteditable="true"]{outline:1px dashed rgba(201,154,60,0.55);outline-offset:3px;border-radius:2px;}
+        .readout-deck ul{list-style:disc;padding-left:1.15em;margin:0.15em 0;}
+        .readout-deck ol{list-style:decimal;padding-left:1.3em;margin:0.15em 0;}
+        .readout-deck li{margin:0.12em 0;}
+        .readout-deck b,.readout-deck strong{font-weight:700;}
+        .readout-deck i,.readout-deck em{font-style:italic;}
+        .readout-deck u{text-decoration:underline;}
+      `}</style>
 
       {/* Content slides */}
       {deck.order.map((key, idx) => {
@@ -745,41 +754,67 @@ function ReadoutDeckViewerInner({
             </header>
 
             <div className="relative min-h-0 flex-1">
-              <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-0.5">
+              {/* overflow-hidden, never auto: a slide must not scroll. */}
+              <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden pb-0.5">
                 {(() => {
                   const rows = sl.rows ?? [];
 
-                  const dropStrip = (at: number) => (
-                    <div
-                      key={`drop-${key}-${at}`}
-                      className="shrink-0 rounded-full"
-                      style={{
-                        height: handleVisible ? 10 : 0,
-                        background: "transparent",
-                      }}
-                      onDragOver={(e) => {
-                        if (!handleVisible) return;
-                        e.preventDefault();
-                        e.currentTarget.style.background = "rgba(201,154,60,0.35)";
-                      }}
-                      onDragLeave={(e) => {
-                        e.currentTarget.style.background = "transparent";
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.currentTarget.style.background = "transparent";
-                        dropOn(key, null, at);
-                      }}
-                    />
-                  );
+                  /**
+                   * Drop intent from where the cursor sits in a row: near the
+                   * top or bottom edge starts a new row, anywhere else joins
+                   * the row. Avoids the old hairline gaps, which were easy to
+                   * hit by accident and hard to aim for on purpose.
+                   */
+                  const edgeZone = (e: React.DragEvent, rowIdx: number) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const y = e.clientY - rect.top;
+                    const edge = Math.max(10, Math.min(28, rect.height * 0.22));
+                    if (y < edge) return { newRowAt: rowIdx, hint: "above" as const };
+                    if (y > rect.height - edge) return { newRowAt: rowIdx + 1, hint: "below" as const };
+                    return { newRowAt: null, hint: "into" as const };
+                  };
 
-                  return rows.flatMap((row, rowIdx) => {
-                    const rowEl = (
+                  return rows.map((row, rowIdx) => {
+                    // A row holding a height-flexible visual shares the leftover
+                    // space; everything else is content-height.
+                    const flexible = row.items.some((item) => {
+                      const b = sl.blocks[item.blockId];
+                      return b?.type === "visual" && !b.h;
+                    });
+                    return (
                       <div
                         key={row.id}
-                        className="grid min-w-0 shrink-0 items-stretch"
-                        style={{ gridTemplateColumns: gridTemplate, gap: ROW_GAP }}
+                        data-row="1"
+                        className="grid min-h-0 min-w-0 items-stretch"
+                        style={{
+                          gridTemplateColumns: gridTemplate,
+                          gap: ROW_GAP,
+                          flex: flexible ? "1 1 0" : "0 0 auto",
+                        }}
+                        onDragOver={(e) => {
+                          if (!dragging) return;
+                          e.preventDefault();
+                          const { hint } = edgeZone(e, rowIdx);
+                          e.currentTarget.style.boxShadow =
+                            hint === "above"
+                              ? "inset 0 3px 0 0 #C99A3C"
+                              : hint === "below"
+                                ? "inset 0 -3px 0 0 #C99A3C"
+                                : "none";
+                        }}
+                        onDragLeave={(e) => {
+                          e.currentTarget.style.boxShadow = "none";
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const { newRowAt } = edgeZone(e, rowIdx);
+                          e.currentTarget.style.boxShadow = "none";
+                          if (newRowAt !== null) {
+                            dropOn(key, null, newRowAt);
+                            setDragging(false);
+                          }
+                          // Mid-row drops are handled by the cell under the cursor.
+                        }}
                       >
                         {row.items.map((item) => {
                           const block = sl.blocks[item.blockId];
@@ -787,8 +822,17 @@ function ReadoutDeckViewerInner({
                           return (
                             <div
                               key={item.blockId}
-                              className="flex min-w-0 flex-col"
+                              className="flex min-h-0 min-w-0 flex-col"
                               style={{ gridColumn: `span ${item.span}` }}
+                              onDragOver={(e) => {
+                                if (dragging) e.preventDefault();
+                              }}
+                              onDrop={(e) => {
+                                // Catches drops on cell padding, not just the card.
+                                e.preventDefault();
+                                dropOn(key, item.blockId, null);
+                                setDragging(false);
+                              }}
                             >
                               <DeckCard
                                 readoutId={readout.id}
@@ -802,6 +846,7 @@ function ReadoutDeckViewerInner({
                                 onSpanChange={(span) => setBlockSpan(key, item.blockId, span)}
                                 onDragStart={(e) => {
                                   dragRef.current = { slideKey: key, blockId: item.blockId };
+                                  setDragging(true);
                                   e.dataTransfer.effectAllowed = "move";
                                   try {
                                     e.dataTransfer.setData("text/plain", item.blockId);
@@ -817,7 +862,9 @@ function ReadoutDeckViewerInner({
                                   e.preventDefault();
                                   e.stopPropagation();
                                   dropOn(key, item.blockId, null);
+                                  setDragging(false);
                                 }}
+                                onDragEnd={() => setDragging(false)}
                                 onUpdate={(patch) => updateBlock(key, item.blockId, patch)}
                                 onRemove={() => removeBlock(key, item.blockId)}
                                 onVResize={(e) => startVisualResize(key, item.blockId, e)}
@@ -834,8 +881,7 @@ function ReadoutDeckViewerInner({
                         })}
                       </div>
                     );
-                    return [dropStrip(rowIdx), rowEl] as ReactNode[];
-                  }).concat(rows.length > 0 ? [dropStrip(rows.length)] : []);
+                  });
                 })()}
               </div>
 
@@ -1518,6 +1564,7 @@ function DeckCard({
   chromeVisible,
   onSpanChange,
   onDragStart,
+  onDragEnd,
   onDrop,
   onUpdate,
   onRemove,
@@ -1536,6 +1583,7 @@ function DeckCard({
   chromeVisible: boolean;
   onSpanChange: (span: number) => void;
   onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
   onDrop: (e: React.DragEvent) => void;
   onUpdate: (patch: Partial<ReadoutBlock>) => void;
   onRemove: () => void;
@@ -1565,25 +1613,29 @@ function DeckCard({
         ? `${widthPct}%`
         : `calc(${widthPct}% - 6px)`;
   const dragEnabled = isVisual && editing;
+  const bodyRef = useRef<HTMLElement | null>(null);
 
   return (
     <div
       data-card="1"
       draggable={dragEnabled}
       onDragStart={dragEnabled ? onDragStart : undefined}
-      className={`relative flex shrink-0 flex-col overflow-hidden${dragEnabled ? " cursor-grab active:cursor-grabbing" : ""}`}
+      onDragEnd={onDragEnd}
+      className={`relative flex min-h-0 flex-col overflow-hidden${dragEnabled ? " cursor-grab active:cursor-grabbing" : ""}`}
       style={{
+        // A height-free visual fills its row rather than claiming a fixed
+        // basis, so slide content can never grow past the slide.
         flex: isVisual
           ? fixedH
             ? "0 0 auto"
-            : "1 1 240px"
+            : "1 1 0"
           : isDataPoint
             ? `0 0 ${widthStyle}`
             : "0 0 auto",
         width: isDataPoint || isVisual ? widthStyle : undefined,
         maxWidth: isDataPoint || isVisual ? "100%" : undefined,
         minWidth: isDataPoint ? 120 : isVisual ? 150 : undefined,
-        minHeight: isVisual ? (fixedH ? 0 : 200) : isDataPoint ? (fixedH ? 0 : 96) : 0,
+        minHeight: isDataPoint && !fixedH ? 96 : 0,
         height: fixedH ? fixedH : "auto",
         borderRadius: isVisual ? 16 : isDataPoint ? 18 : 14,
         border: `1px solid ${isVisual ? "#8798AA" : preset.border}`,
@@ -1807,6 +1859,9 @@ function DeckCard({
               editing={editing}
               value={textBlock.body}
               onChange={(body) => onUpdate({ body })}
+              onElement={(el) => {
+                bodyRef.current = el;
+              }}
               className="min-w-0 overflow-wrap-anywhere whitespace-pre-wrap"
               style={{
                 fontSize: size.body,
@@ -1816,6 +1871,31 @@ function DeckCard({
             />
             {editing ? (
               <div className="mt-[11px] flex items-center gap-[7px]">
+                <button
+                  type="button"
+                  title="Bullet list"
+                  // Keep the caret in the body; a blur would drop the selection.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    const el = bodyRef.current;
+                    if (!el) return;
+                    if (document.activeElement !== el) {
+                      el.focus();
+                      const range = document.createRange();
+                      range.selectNodeContents(el);
+                      range.collapse(false);
+                      const selection = window.getSelection();
+                      selection?.removeAllRanges();
+                      selection?.addRange(range);
+                    }
+                    document.execCommand("insertUnorderedList");
+                    onUpdate({ body: sanitizeReadoutHtml(el.innerHTML) });
+                  }}
+                  className="border-none bg-transparent px-0.5 text-[13px] leading-none text-[#9AA7B4] hover:text-[#C99A3C]"
+                >
+                  ☰
+                </button>
+                <span className="mx-0.5 h-4 w-px bg-[#D8DEE2]" />
                 {[0, 1, 2].map((sz) => (
                   <button
                     key={sz}
