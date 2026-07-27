@@ -195,12 +195,17 @@ export function IndexRailTabs({
   activeId,
   onSelect,
   compact = false,
+  summaryId,
   surfaceTreatment,
 }: {
   indexes: Array<{ id: string; name: string }>;
   activeId: string;
   onSelect: (id: string) => void;
   compact?: boolean;
+  /** Optional id of a roll-up tab (e.g. "All Indexes") that sits above the real
+   * indexes: it gets uppercase treatment and a gap so it reads as a summary of
+   * the tabs below rather than one more peer index. */
+  summaryId?: string;
   /** @deprecated no longer changes fill — the active tab and its attached
    * chart card are both white so the data visual pops against the tinted
    * canvas. Kept as a no-op prop so existing call sites don't need updating. */
@@ -210,6 +215,7 @@ export function IndexRailTabs({
     <div style={{ display: "flex", flexDirection: "column", gap: 0, width: compact ? 150 : 168, flexShrink: 0, paddingTop: compact ? 12 : 22, paddingBottom: compact ? 12 : 22 }}>
       {indexes.map((index, indexIndex) => {
         const active = index.id === activeId;
+        const isSummary = summaryId != null && index.id === summaryId;
         return (
           <button
             key={index.id}
@@ -232,7 +238,13 @@ export function IndexRailTabs({
               lineHeight: 1.15,
               transition: "all .16s",
               position: "relative",
-              marginBottom: indexIndex === indexes.length - 1 ? 0 : -1,
+              marginBottom: indexIndex === indexes.length - 1 ? 0 : isSummary ? 7 : -1,
+              // The roll-up tab is set apart from the attached index stack
+              // below it: uppercase, tracked out, and floated off by a small
+              // gap so it reads as "everything below, together".
+              ...(isSummary
+                ? { letterSpacing: ".1em", textTransform: "uppercase", fontSize: compact ? 10.5 : 11.5 }
+                : null),
               ...(active
                 ? {
                     background: "#fff",

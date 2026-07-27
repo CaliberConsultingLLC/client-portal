@@ -2323,7 +2323,13 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-segment-breakdown":
         return projectBreakdownSet(data, options, "basin", dims);
       case "ee-division-breakdown":
-        return projectBreakdownSet(data, options, "division", dims);
+        // Pilot surface for the All Indexes rail tab + score/delta toggle.
+        // Every other breakdown page stays on the original projection until
+        // these are rolled out more widely.
+        return projectBreakdownSet(data, options, "division", dims, {
+          allIndexesTab: true,
+          priorCampaigns: true,
+        });
       case "ee-department-breakdown":
         return projectBreakdownSet(data, options, "department", dims);
       case "ee-role-breakdown":
@@ -2846,7 +2852,7 @@ export function DwsEmployeeExperienceDashboardClient({
     "ee-brand-report": `This report compares each ${clientScope.brandLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
     "ee-brand-open-text": `Open text responses are grouped by question type and can be filtered by ${clientScope.brandLabel.toLowerCase()} to isolate themes and language patterns.`,
     "ee-segment-breakdown": `Select an index on the rail to re-score the funnel and heatmap below for every ${clientScope.jobCategoryLabel.toLowerCase()} in the selected ${clientScope.brandLabel.toLowerCase()}.`,
-    "ee-division-breakdown": "Pick a division, then select an index to re-score the sub-segment funnel and statement heatmap within it.",
+    "ee-division-breakdown": "Pick a division, then select an index — or All Indexes — to re-score the sub-segment funnel and heatmap within it. Use the toggle under the funnel to switch between the current score and the change since the Compared To campaign.",
     "ee-department-breakdown": "Pick a department, then select an index to re-score the sub-segment funnel and statement heatmap within it.",
     "ee-role-breakdown": `Pick a ${clientScope.jobCategoryLabel.toLowerCase()}, then select an index to re-score the sub-segment funnel and statement heatmap within it.`,
     "ee-supervisor-breakdown": "Pick a supervisor, then select an index to re-score the sub-segment funnel and statement heatmap within their team.",
@@ -3473,6 +3479,12 @@ export function DwsEmployeeExperienceDashboardClient({
             key="division-breakdown"
             data={activeBreakdown ?? []}
             unitLabel="Division"
+            // Campaign lives in the page's own Filters tab here (this report
+            // isn't on the executive rail), alongside the Compared To picker
+            // the delta toggle reads from.
+            campaignValue={current}
+            campaignOptions={data.meta.campaigns}
+            onCampaignChange={setCurrent}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}

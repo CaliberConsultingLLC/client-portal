@@ -27,11 +27,14 @@ import {
   IndexRailTabs,
   isLightBand,
   makeGradientColor,
+  dwsDeltaStyle,
 } from "./ee-report-kit";
 import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
 import { useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
 import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
+import { ALL_INDEXES_ID } from "./ee-live-projections";
 import type {
+  SegmentBreakdownPriorCampaign,
   SegmentBreakdownProjection,
   SegmentBreakdownStatementRow,
   SegmentBreakdownValue,
@@ -39,6 +42,34 @@ import type {
 
 function textFor(color: string) {
   return isLightBand(color) ? "#1C252A" : "#fff";
+}
+
+/** Which number every visual on the page is showing. */
+type ScoreMode = "score" | "delta";
+
+// A delta cell with no prior-campaign data (segment didn't exist, or was below
+// the minimum response threshold last time) — neutral, never a fake 0.0.
+const DELTA_EMPTY = { bg: "#EDF1F5", ink: "#8798AA" } as const;
+
+function deltaOf(current: number | null | undefined, prior: number | null | undefined) {
+  if (current == null || prior == null) return null;
+  return Math.round((current - prior) * 10) / 10;
+}
+
+function formatDelta(delta: number | null) {
+  if (delta == null) return "—";
+  return `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+}
+
+/** Fill + ink for one number, in whichever mode the page is in. */
+function cellPaint(mode: ScoreMode, score: number, delta: number | null, scoreColor: (value: number) => string) {
+  if (mode === "score") {
+    const bg = scoreColor(score);
+    return { bg, ink: textFor(bg) };
+  }
+  if (delta == null) return { bg: DELTA_EMPTY.bg, ink: DELTA_EMPTY.ink };
+  const tone = dwsDeltaStyle(delta);
+  return { bg: tone.bg, ink: tone.text };
 }
 
 // Field job-category names are compound industry terms (Roughneck, Leadhand,
@@ -72,21 +103,47 @@ function hyphenateLabel(label: string): string {
 function SegmentFunnel({
   segments,
   scoreByKey,
+  priorByKey,
   scoreColor,
+  mode,
+  onModeChange,
+  comparisonLabel,
   statementsOpen,
   onToggleStatements,
 }: {
   segments: SegmentBreakdownValue[];
   scoreByKey: Record<string, number>;
+  priorByKey?: Record<string, number | null>;
   scoreColor: (value: number) => string;
+  mode: ScoreMode;
+  /** Omitted when the campaign has nothing to compare against — no toggle. */
+  onModeChange?: (mode: ScoreMode) => void;
+  comparisonLabel?: string;
   statementsOpen: boolean;
   onToggleStatements: () => void;
 }) {
+  const deltaMode = mode === "delta";
   const ranked = segments
-    .map((segment) => ({ ...segment, score: scoreByKey[segment.key] ?? 0 }))
-    .sort((left, right) => right.score - left.score);
-  const min = Math.min(...ranked.map((row) => row.score));
-  const max = Math.max(...ranked.map((row) => row.score));
+    .map((segment) => {
+      const score = scoreByKey[segment.key] ?? 0;
+      return { ...segment, score, delta: deltaOf(score, priorByKey?.[segment.key]) };
+    })
+    // Ranking follows whatever the funnel is showing — biggest score, or
+    // biggest gain. Segments with no prior campaign sink to the bottom in
+    // delta mode rather than sorting as if they were flat.
+    .sort((left, right) =>
+      deltaMode
+        ? (right.delta ?? Number.NEGATIVE_INFINITY) - (left.delta ?? Number.NEGATIVE_INFINITY)
+        : right.score - left.score
+    );
+
+  // Bar width is driven by whichever metric is on screen; in delta mode rows
+  // with no prior data get the narrowest bar.
+  const metrics = ranked
+    .map((row) => (deltaMode ? row.delta : row.score))
+    .filter((value): value is number => value != null);
+  const min = metrics.length ? Math.min(...metrics) : 0;
+  const max = metrics.length ? Math.max(...metrics) : 0;
 
   // Density tiers: with many segments (e.g. every Department inside a Division)
   // the default 42px rows make the funnel scroll off the page. Rows compress in
@@ -106,10 +163,10 @@ function SegmentFunnel({
     <div className="card" style={{ position: "relative", flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "visible" }}>
       <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: rowGap, padding: `${bodyPadV}px 26px` }}>
         {ranked.map((row) => {
-          const t = max === min ? 1 : (row.score - min) / (max - min);
+          const metric = deltaMode ? row.delta : row.score;
+          const t = metric == null ? 0 : max === min ? 1 : (metric - min) / (max - min);
           const width = 46 + t * 52;
-          const bg = scoreColor(row.score);
-          const ink = textFor(bg);
+          const { bg, ink } = cellPaint(mode, row.score, row.delta, scoreColor);
           return (
             <div
               key={row.key}
@@ -146,7 +203,9 @@ function SegmentFunnel({
                 </span>
                 <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.6, color: "#1C252A", flexShrink: 0 }}>n={row.n}</span>
               </span>
-              <span style={{ fontSize: scoreFont, fontWeight: 800, flexShrink: 0 }}>{row.score.toFixed(1)}</span>
+              <span style={{ fontSize: scoreFont, fontWeight: 800, flexShrink: 0 }}>
+                {deltaMode ? formatDelta(row.delta) : row.score.toFixed(1)}
+              </span>
             </div>
           );
         })}
@@ -182,20 +241,86 @@ function SegmentFunnel({
       >
         {statementsOpen ? <ChevronUp style={{ width: 16, height: 16 }} /> : <ChevronDown style={{ width: 16, height: 16 }} />}
       </button>
+
+      {/* Current score ⇄ change from the previous survey. Sits on the funnel
+          card's bottom border like the statement chevron above, but pinned
+          right, so the two controls read as one family of "things attached to
+          this card" instead of a floating widget. Same white/#8798AA shell as
+          the chevron; the active side takes the gold used by every active
+          filter pill in the portal. */}
+      {onModeChange ? (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            right: 22,
+            transform: "translateY(50%)",
+            zIndex: 3,
+            display: "flex",
+            alignItems: "center",
+            gap: 2,
+            padding: 3,
+            borderRadius: 99,
+            background: "#fff",
+            border: "1px solid #8798AA",
+            boxShadow: "0 2px 8px rgba(15,23,42,0.14)",
+          }}
+        >
+          {([
+            { id: "score" as ScoreMode, label: "Score", title: "Current campaign score" },
+            {
+              id: "delta" as ScoreMode,
+              label: comparisonLabel ? `Δ vs ${comparisonLabel}` : "Δ Change",
+              title: comparisonLabel ? `Change vs ${comparisonLabel}` : "Change vs previous survey",
+            },
+          ]).map((option) => {
+            const active = mode === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onModeChange(option.id)}
+                title={option.title}
+                aria-pressed={active}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: 99,
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.02em",
+                  whiteSpace: "nowrap",
+                  background: active ? "#D7B35A" : "transparent",
+                  color: active ? "#242424" : "#6E7E96",
+                  transition: "all .15s",
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function SegmentHeatmap({
-  indexName,
+  rowHeader,
   segments,
   rows,
+  priorRows,
+  mode,
   scoreColor,
   accent,
 }: {
-  indexName: string;
+  /** Column header for the first column — statements, or indexes on the All Indexes tab. */
+  rowHeader: string;
   segments: SegmentBreakdownValue[];
   rows: SegmentBreakdownStatementRow[];
+  priorRows?: SegmentBreakdownPriorCampaign["statementsByIndex"][string];
+  mode: ScoreMode;
   scoreColor: (value: number) => string;
   accent: string;
 }) {
@@ -271,8 +396,9 @@ function SegmentHeatmap({
   // Cells stay on a plain white grid; only a rounded chip behind the number
   // carries the score color, sized as a share of the (now capped) column
   // width so every cell reads as the same size with even breathing room.
-  const chip = (value: number, keySuffix: string, groupStart = false) => {
-    const bg = scoreColor(value);
+  const chip = (value: number, prior: number | null | undefined, keySuffix: string, groupStart = false) => {
+    const delta = deltaOf(value, prior);
+    const { bg, ink } = cellPaint(mode, value, delta, scoreColor);
     return (
       <td
         key={keySuffix}
@@ -286,12 +412,12 @@ function SegmentHeatmap({
             padding: "7px 0",
             borderRadius: 9,
             background: bg,
-            color: textFor(bg),
+            color: ink,
             fontSize: manyColumns ? 12 : 13,
             fontWeight: 800,
           }}
         >
-          {value.toFixed(1)}
+          {mode === "delta" ? formatDelta(delta) : value.toFixed(1)}
         </div>
       </td>
     );
@@ -309,7 +435,7 @@ function SegmentHeatmap({
         </colgroup>
         <thead>
           <tr>
-            <th style={{ textAlign: "left", verticalAlign: "bottom" }}>{indexName} statements</th>
+            <th style={{ textAlign: "left", verticalAlign: "bottom" }}>{rowHeader}</th>
             {segments.map((segment) =>
               manyColumns ? (
                 <th key={segment.key} style={{ ...verticalHeaderCellStyle, borderLeft: "1px solid var(--border-subtle)" }}>
@@ -331,13 +457,18 @@ function SegmentHeatmap({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr className="stmt-row" key={rowIndex}>
-              <td className="stmt" style={{ fontSize: 12.5 }}>{row.text}</td>
-              {segments.map((segment) => chip(row.scores[segment.key] ?? 0, segment.key))}
-              {chip(row.overall, "overall", true)}
-            </tr>
-          ))}
+          {rows.map((row, rowIndex) => {
+            const prior = priorRows?.[row.key];
+            return (
+              <tr className="stmt-row" key={row.key ?? rowIndex}>
+                <td className="stmt" style={{ fontSize: 12.5 }}>{row.text}</td>
+                {segments.map((segment) =>
+                  chip(row.scores[segment.key] ?? 0, prior?.scores[segment.key], segment.key)
+                )}
+                {chip(row.overall, prior?.overall, "overall", true)}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -351,6 +482,9 @@ function SegmentDimensionSection({
   registryOn,
   order,
   basinReportSurface = false,
+  mode,
+  onModeChange,
+  comparisonId,
 }: {
   projection: SegmentBreakdownProjection;
   deptId: string;
@@ -358,6 +492,9 @@ function SegmentDimensionSection({
   registryOn: boolean;
   order: number;
   basinReportSurface?: boolean;
+  mode: ScoreMode;
+  onModeChange?: (mode: ScoreMode) => void;
+  comparisonId?: string;
 }) {
   const scoreColor = useMemo(
     () => makeGradientColor(projection.scale.min, projection.scale.max),
@@ -385,6 +522,10 @@ function SegmentDimensionSection({
   const accent = activeIndex ? scoreColor(activeIndex.score) : "#8798AA";
   const funnelScores = activeIndex ? unit.funnelByIndex[activeIndex.id] ?? {} : {};
   const statementRows = activeIndex ? unit.statementsByIndex[activeIndex.id] ?? [] : [];
+  const prior = comparisonId ? unit.priorByCampaign?.[comparisonId] : undefined;
+  const priorFunnel = activeIndex ? prior?.funnelByIndex[activeIndex.id] : undefined;
+  const priorStatements = activeIndex ? prior?.statementsByIndex[activeIndex.id] : undefined;
+  const isAllIndexes = activeIndex?.id === ALL_INDEXES_ID;
 
   return (
     <RegisteredVisualExportFrame
@@ -406,11 +547,21 @@ function SegmentDimensionSection({
         {/* minHeight is a floor only — the row grows to fit more segments;
             without it, a short segment list would crush the index tabs. */}
         <div style={{ display: "flex", gap: 0, alignItems: "stretch", minHeight: 300 }}>
-          <IndexRailTabs indexes={unit.indexes} activeId={activeIndex?.id ?? ""} onSelect={setActiveIndexId} surfaceTreatment={basinReportSurface ? "1b" : undefined} />
+          <IndexRailTabs
+            indexes={unit.indexes}
+            activeId={activeIndex?.id ?? ""}
+            onSelect={setActiveIndexId}
+            summaryId={ALL_INDEXES_ID}
+            surfaceTreatment={basinReportSurface ? "1b" : undefined}
+          />
           <SegmentFunnel
             segments={unit.segments}
             scoreByKey={funnelScores}
+            priorByKey={priorFunnel}
             scoreColor={scoreColor}
+            mode={mode}
+            onModeChange={onModeChange}
+            comparisonLabel={prior?.label}
             statementsOpen={statementsOpen}
             onToggleStatements={() => setStatementsOpen((v) => !v)}
           />
@@ -434,9 +585,11 @@ function SegmentDimensionSection({
           }}
         >
           <SegmentHeatmap
-            indexName={activeIndex?.name ?? ""}
+            rowHeader={isAllIndexes ? "Index" : `${activeIndex?.name ?? ""} statements`}
             segments={unit.segments}
             rows={statementRows}
+            priorRows={priorStatements}
+            mode={mode}
             scoreColor={scoreColor}
             accent={accent}
           />
@@ -495,6 +648,32 @@ export function EESegmentBreakdown({
     "deptId",
     () => allUnits[0]?.id ?? ""
   );
+
+  // Score ⇄ delta. `comparisons` is empty unless the projection was built with
+  // the prior-campaign feature on, so every other breakdown page keeps exactly
+  // its old behaviour (score only, no toggle, no comparison filter).
+  const comparisons = data[0]?.comparisons ?? [];
+  const [scoreMode, setScoreMode] = usePersistedDashboardFilter<ScoreMode>(
+    filterPersistenceKey,
+    "scoreMode",
+    "score"
+  );
+  const [comparisonId, setComparisonId] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "comparisonId",
+    () => data[0]?.previousId ?? comparisons[comparisons.length - 1]?.id ?? ""
+  );
+  // Switching the current campaign can invalidate the comparison (it may now be
+  // the current one, or newer than it) — fall back to the previous survey.
+  useEffect(() => {
+    if (comparisons.length === 0) return;
+    if (!comparisons.find((item) => item.id === comparisonId)) {
+      setComparisonId(data[0]?.previousId ?? comparisons[comparisons.length - 1]?.id ?? "");
+    }
+  }, [comparisons, comparisonId, data]);
+
+  const deltaAvailable = comparisons.length > 0;
+  const mode: ScoreMode = deltaAvailable ? scoreMode : "score";
 
   const unitsForActiveDimension = useMemo(() => {
     const projection =
@@ -588,6 +767,21 @@ export function EESegmentBreakdown({
             />
           </EmbeddedFilterCard>
         ) : null}
+        {deltaAvailable ? (
+          <EmbeddedFilterCard title="Compared To">
+            <PillOptionRow
+              value={comparisonId}
+              onChange={setComparisonId}
+              options={[...comparisons].reverse().map((comparison) => ({
+                id: comparison.id,
+                label: comparison.label,
+              }))}
+            />
+            <p className="rs-hint" style={{ margin: "9px 2px 0" }}>
+              Sets the baseline for the Δ toggle under the funnel.
+            </p>
+          </EmbeddedFilterCard>
+        ) : null}
         <EmbeddedFilterCard title={unitLabel}>
           <PillOptionRow
             value={deptId}
@@ -675,6 +869,9 @@ export function EESegmentBreakdown({
           registryOn={registryOn}
           order={5}
           basinReportSurface={basinSurfaceActive}
+          mode={mode}
+          onModeChange={deltaAvailable ? setScoreMode : undefined}
+          comparisonId={deltaAvailable ? comparisonId : undefined}
         />
       </div>
     </div>

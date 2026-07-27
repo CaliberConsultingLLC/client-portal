@@ -1459,9 +1459,34 @@ export interface SegmentBreakdownIndexRef {
 }
 
 export interface SegmentBreakdownStatementRow {
+  /** Stable row key — prior-campaign rows are matched on this, not on order. */
+  key: string;
   text: string;
   scores: Record<string, number>;
   overall: number;
+}
+
+/** One statement (or, on the All Indexes rail tab, one index) in a prior campaign. */
+export interface SegmentBreakdownPriorStatement {
+  scores: Record<string, number | null>;
+  overall: number | null;
+}
+
+/**
+ * Everything the breakdown needs to render "change from a previous survey"
+ * without re-projecting: the same funnel/heatmap grain, scored on a prior
+ * campaign's respondents. `null` means that cell had too few responses in the
+ * prior campaign to show (same minimum-segment rule as the current campaign).
+ */
+export interface SegmentBreakdownPriorCampaign {
+  id: string;
+  label: string;
+  /** index id -> unit-level index score */
+  indexScores: Record<string, number | null>;
+  /** index id -> segment key -> score */
+  funnelByIndex: Record<string, Record<string, number | null>>;
+  /** index id -> statement key -> prior scores */
+  statementsByIndex: Record<string, Record<string, SegmentBreakdownPriorStatement>>;
 }
 
 export interface SegmentBreakdownUnit {
@@ -1470,6 +1495,8 @@ export interface SegmentBreakdownUnit {
   indexes: SegmentBreakdownIndexRef[];
   funnelByIndex: Record<string, Record<string, number>>;
   statementsByIndex: Record<string, SegmentBreakdownStatementRow[]>;
+  /** Only populated when the `priorCampaigns` feature is requested. */
+  priorByCampaign?: Record<string, SegmentBreakdownPriorCampaign>;
 }
 
 export interface SegmentBreakdownProjection {
@@ -1479,7 +1506,29 @@ export interface SegmentBreakdownProjection {
   segmentLabel: string;
   departments: Array<{ id: string; name: string; location?: string; responses: number }>;
   byUnit: Record<string, SegmentBreakdownUnit>;
+  /** Every campaign other than the current one, oldest first. Empty unless the
+   * `priorCampaigns` feature is requested. */
+  comparisons: Array<{ id: string; label: string; labelLong: string }>;
+  /** The campaign immediately before the current one — the natural default for
+   * a "change from the previous survey" toggle. */
+  previousId: string | null;
 }
+
+/**
+ * Opt-in extras for a breakdown page. Both are pilot features currently wired
+ * only to DWS office's Division Breakdown; every other breakdown keeps the
+ * original index-only rail and score-only visuals until they're rolled out.
+ */
+export type SegmentBreakdownFeatures = {
+  /** Prepend an "All Indexes" summary tab to the index rail. */
+  allIndexesTab?: boolean;
+  /** Score every visual against prior campaigns so a delta toggle can work. */
+  priorCampaigns?: boolean;
+};
+
+/** Rail id of the synthetic "All Indexes" tab (every real index is a slug). */
+export const ALL_INDEXES_ID = "all-indexes-summary";
+export const ALL_INDEXES_NAME = "All Indexes";
 
 // A Segment Breakdown's "unit" is the top-level picker (the thing you drill
 // into): Basin, Department, Job Category, or a single synthetic unit (AutoSEP).
@@ -1595,10 +1644,11 @@ function buildBreakdownSet(
   data: EmployeeExperienceDashboardData,
   options: ProjectionOptions | undefined,
   unit: BreakdownUnit,
-  dimensions: BreakdownDimension[] = FIELD_BREAKDOWN_DIMENSIONS
+  dimensions: BreakdownDimension[] = FIELD_BREAKDOWN_DIMENSIONS,
+  features?: SegmentBreakdownFeatures
 ): SegmentBreakdownProjection[] {
   return dimensions.map((dimension) =>
-    projectSegmentBreakdownData(data, options, dimension.field, dimension.label, unit)
+    projectSegmentBreakdownData(data, options, dimension.field, dimension.label, unit, features)
   );
 }
 
@@ -1619,7 +1669,8 @@ export function projectBreakdownSet(
   data: EmployeeExperienceDashboardData,
   options: ProjectionOptions | undefined,
   unitKey: BreakdownUnitKey,
-  dimensions?: BreakdownDimension[]
+  dimensions?: BreakdownDimension[],
+  features?: SegmentBreakdownFeatures
 ): SegmentBreakdownProjection[] {
   const unit =
     unitKey === "basin"
@@ -1635,7 +1686,7 @@ export function projectBreakdownSet(
               : unitKey === "supervisor"
                 ? BREAKDOWN_UNIT_SUPERVISOR
                 : breakdownUnitSingle("AutoSEP");
-  return buildBreakdownSet(data, options, unit, dimensions);
+  return buildBreakdownSet(data, options, unit, dimensions, features);
 }
 
 // Segment Breakdown (DWS Field redesign pilot only): for each basin, scores a
@@ -1651,7 +1702,8 @@ export function projectSegmentBreakdownData(
   options?: ProjectionOptions,
   segmentField: keyof EmployeeExperienceRespondent = "fieldCategory",
   segmentLabel = "Job Category",
-  unit: BreakdownUnit = BREAKDOWN_UNIT_BASIN
+  unit: BreakdownUnit = BREAKDOWN_UNIT_BASIN,
+  features?: SegmentBreakdownFeatures
 ): SegmentBreakdownProjection {
   const currentLabel = resolveCampaignLabel(data, options);
   const minimumSegmentSize = data.settings.minimumSegmentSize;
@@ -1659,6 +1711,15 @@ export function projectSegmentBreakdownData(
   const currentRespondents = respondentsForCampaign(data.respondents, currentLabel);
   const indexDefs = Array.from(groupQuestionsByDimension(data.questions).entries()).map(
     ([name, items]) => ({ id: slugify(name), name, items })
+  );
+  const allItemIds = indexDefs.flatMap((def) => def.items.map((question) => question.itemId));
+
+  const sorted = sortedCampaigns(data.meta.campaigns);
+  const comparisons = features?.priorCampaigns ? buildComparisons(sorted, currentLabel) : [];
+  const currentPosition = sorted.indexOf(currentLabel);
+  const previousLabel = currentPosition > 0 ? sorted[currentPosition - 1] : null;
+  const priorLabels = comparisons.map(
+    (comparison) => sorted.find((label) => campaignId(label) === comparison.id) ?? comparison.label
   );
 
   const byUnit: Record<string, SegmentBreakdownUnit> = {};
@@ -1713,6 +1774,7 @@ export function projectSegmentBreakdownData(
             scores[segment.key] = itemDisplayScore(respondentsForSegment(segment.key), question.itemId);
           });
           return {
+            key: `item-${question.itemId}`,
             text: question.statement,
             scores,
             overall: itemDisplayScore(unitRespondents, question.itemId),
@@ -1725,12 +1787,128 @@ export function projectSegmentBreakdownData(
         });
     });
 
+    // "All Indexes": one synthetic rail tab scored on every statement at once,
+    // whose heatmap rows are the indexes themselves rather than statements —
+    // the same drill-down one level up.
+    if (features?.allIndexesTab && indexDefs.length > 1) {
+      indexes.unshift({
+        id: ALL_INDEXES_ID,
+        name: ALL_INDEXES_NAME,
+        score: personAverageScore(unitRespondents, allItemIds) ?? 0,
+      });
+
+      const overallFunnel: Record<string, number> = {};
+      segments.forEach((segment) => {
+        overallFunnel[segment.key] = personAverageScore(respondentsForSegment(segment.key), allItemIds) ?? 0;
+      });
+      funnelByIndex[ALL_INDEXES_ID] = overallFunnel;
+
+      statementsByIndex[ALL_INDEXES_ID] = indexDefs
+        .map((def) => {
+          const itemIds = def.items.map((question) => question.itemId);
+          const scores: Record<string, number> = {};
+          segments.forEach((segment) => {
+            scores[segment.key] = personAverageScore(respondentsForSegment(segment.key), itemIds) ?? 0;
+          });
+          return {
+            key: def.id,
+            text: def.name,
+            scores,
+            overall: personAverageScore(unitRespondents, itemIds) ?? 0,
+          };
+        })
+        .sort((left, right) => {
+          const byOverall = right.overall - left.overall;
+          if (byOverall !== 0) return byOverall;
+          return left.text.localeCompare(right.text);
+        });
+    }
+
+    // Prior campaigns, scored at exactly the same grain so the delta toggle is
+    // a pure display switch. A cell whose prior population is below the
+    // minimum segment size stays `null` — shown as "—" rather than a delta
+    // computed off a handful of people.
+    let priorByCampaign: Record<string, SegmentBreakdownPriorCampaign> | undefined;
+    if (features?.priorCampaigns && comparisons.length > 0) {
+      priorByCampaign = {};
+      comparisons.forEach((comparison, comparisonIndex) => {
+        const priorRespondents = respondentsForCampaign(data.respondents, priorLabels[comparisonIndex]).filter(
+          (respondent) => unit.match(respondent, brand.name)
+        );
+        const priorUnitRows = priorRespondents.length >= minimumSegmentSize ? priorRespondents : null;
+        const priorSegment = (key: string) => {
+          const rows = priorRespondents.filter(
+            (respondent) => slugify(String(respondent[segmentField] ?? "")) === key
+          );
+          return rows.length >= minimumSegmentSize ? rows : null;
+        };
+        const priorScore = (rows: EmployeeExperienceRespondent[] | null, itemIds: number[]) =>
+          rows ? personAverageScore(rows, itemIds) : null;
+
+        const indexScores: Record<string, number | null> = {};
+        const priorFunnelByIndex: Record<string, Record<string, number | null>> = {};
+        const priorStatementsByIndex: Record<string, Record<string, SegmentBreakdownPriorStatement>> = {};
+
+        const scoreOneTab = (
+          tabId: string,
+          rows: Array<{ key: string; itemIds: number[] }>,
+          tabItemIds: number[]
+        ) => {
+          indexScores[tabId] = priorScore(priorUnitRows, tabItemIds);
+          const funnel: Record<string, number | null> = {};
+          segments.forEach((segment) => {
+            funnel[segment.key] = priorScore(priorSegment(segment.key), tabItemIds);
+          });
+          priorFunnelByIndex[tabId] = funnel;
+
+          const statements: Record<string, SegmentBreakdownPriorStatement> = {};
+          rows.forEach((row) => {
+            const scores: Record<string, number | null> = {};
+            segments.forEach((segment) => {
+              scores[segment.key] = priorScore(priorSegment(segment.key), row.itemIds);
+            });
+            statements[row.key] = {
+              scores,
+              overall: priorScore(priorUnitRows, row.itemIds),
+            };
+          });
+          priorStatementsByIndex[tabId] = statements;
+        };
+
+        indexDefs.forEach((def) => {
+          const itemIds = def.items.map((question) => question.itemId);
+          scoreOneTab(
+            def.id,
+            def.items.map((question) => ({ key: `item-${question.itemId}`, itemIds: [question.itemId] })),
+            itemIds
+          );
+        });
+
+        if (statementsByIndex[ALL_INDEXES_ID]) {
+          scoreOneTab(
+            ALL_INDEXES_ID,
+            indexDefs.map((def) => ({ key: def.id, itemIds: def.items.map((question) => question.itemId) })),
+            allItemIds
+          );
+        }
+
+        priorByCampaign![comparison.id] = {
+          id: comparison.id,
+          label: comparison.label,
+          indexScores,
+          funnelByIndex: priorFunnelByIndex,
+          statementsByIndex: priorStatementsByIndex,
+        };
+      });
+    }
+
     byUnit[brand.id] = {
       respondents: unitRespondents.length,
       segments,
       indexes,
       funnelByIndex,
       statementsByIndex,
+      priorByCampaign,
     };
   });
 
@@ -1745,6 +1923,8 @@ export function projectSegmentBreakdownData(
     segmentLabel,
     departments: units,
     byUnit,
+    comparisons,
+    previousId: previousLabel ? campaignId(previousLabel) : null,
   };
 }
 
