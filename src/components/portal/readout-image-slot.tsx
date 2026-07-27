@@ -56,7 +56,7 @@ export function ReadoutImageSlot({
 
   return (
     <div
-      className="relative h-full min-h-[110px] w-full overflow-hidden rounded-lg bg-black/[0.04]"
+      className={`relative h-full min-h-[110px] w-full overflow-hidden rounded-lg ${imageUrl ? "bg-white" : "bg-black/[0.04]"}`}
       onDragEnter={(e) => {
         if (!editing || !isFileDrag(e.dataTransfer)) return;
         e.preventDefault();
