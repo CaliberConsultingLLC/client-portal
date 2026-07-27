@@ -730,8 +730,12 @@ function ReadoutDeckViewerInner({
                 const column = (
                   <div
                     key={`col-${colKey}`}
-                    // overflow-hidden, never auto: a slide must not scroll.
-                    className="flex min-h-0 min-w-0 flex-col gap-3 overflow-hidden pb-0.5"
+                    // Authoring scrolls so cards pushed below the fold stay
+                    // reachable; presentation and client views are locked so a
+                    // slide never scrolls for a viewer.
+                    className={`flex min-h-0 min-w-0 flex-col gap-3 pb-0.5 ${
+                      designChrome ? "overflow-y-auto" : "overflow-hidden"
+                    }`}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={(e) => {
                       e.preventDefault();
