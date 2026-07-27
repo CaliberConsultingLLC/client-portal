@@ -19,11 +19,9 @@ import {
 } from "@/lib/readout/deck-constants";
 import type { ReadoutDashboardLinkOptions } from "@/lib/readout/dashboard-link-options";
 import {
-  READOUT_COL_KEYS,
-  activeColKeys,
   buildDefaultReadoutDeck,
   defaultWidths,
-  emptySlideCols,
+  newRowId,
   normalizeColCount,
   normalizeReadoutDeck,
   normalizeWidths,
@@ -32,13 +30,13 @@ import type {
   Readout,
   ReadoutBlock,
   ReadoutColCount,
-  ReadoutColKey,
   ReadoutCover,
   ReadoutDashboardLink,
   ReadoutDataPointBlock,
   ReadoutDeck,
+  ReadoutRow,
+  ReadoutRowItem,
   ReadoutSlide,
-  ReadoutSlideCols,
   ReadoutTextBlock,
   ReadoutVisualBlock,
 } from "@/types/readout";
@@ -53,6 +51,9 @@ interface ReadoutDeckViewerProps {
 }
 
 type DragState = { slideKey: string; blockId: string } | null;
+
+/** Grid gutter, in px. Column divider handles are sized to sit inside it. */
+const ROW_GAP = 12;
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -207,49 +208,89 @@ function ReadoutDeckViewerInner({
       const sl = d.slides[slideKey];
       const blocks = { ...sl.blocks };
       delete blocks[blockId];
-      const cols = emptySlideCols();
-      for (const key of READOUT_COL_KEYS) {
-        cols[key] = sl.cols[key].filter((id) => id !== blockId);
-      }
+      const rows = stripBlockFromRows(sl.rows ?? [], blockId);
       return {
         ...d,
         slides: {
           ...d.slides,
-          [slideKey]: { ...sl, blocks, cols },
+          [slideKey]: { ...sl, blocks, rows },
         },
       };
     });
   }
 
-  function findColForBlock(cols: ReadoutSlideCols, blockId: string): ReadoutColKey | null {
-    for (const key of READOUT_COL_KEYS) {
-      if (cols[key].includes(blockId)) return key;
+  /** Remove a block from every row, dropping any row it emptied. */
+  function stripBlockFromRows(rows: ReadoutRow[], blockId: string): ReadoutRow[] {
+    return rows
+      .map((row) => ({ ...row, items: row.items.filter((item) => item.blockId !== blockId) }))
+      .filter((row) => row.items.length > 0);
+  }
+
+  function findRowItem(rows: ReadoutRow[], blockId: string): ReadoutRowItem | null {
+    for (const row of rows) {
+      const found = row.items.find((item) => item.blockId === blockId);
+      if (found) return found;
     }
     return null;
   }
 
-  function dropOn(slideKey: string, targetId: string | null, colIdx: number | null) {
+  /**
+   * Drop a dragged block. `targetId` inserts before that block in its row;
+   * `newRowAt` inserts as a fresh row at that index.
+   */
+  function dropOn(slideKey: string, targetId: string | null, newRowAt: number | null) {
     const drag = dragRef.current;
     dragRef.current = null;
     if (!drag || drag.slideKey !== slideKey) return;
     if (targetId === drag.blockId) return;
     commitDeck((d) => {
       const sl = d.slides[slideKey];
-      const count = normalizeColCount(sl.colCount);
-      const keys = activeColKeys(count);
-      const cols = emptySlideCols();
-      for (const key of READOUT_COL_KEYS) {
-        cols[key] = sl.cols[key].filter((id) => id !== drag.blockId);
-      }
+      const source = findRowItem(sl.rows ?? [], drag.blockId);
+      const span = source?.span ?? 1;
+      const rowsBefore = sl.rows ?? [];
+      // Index the dragged block sat at, so a same-slide move lands predictably.
+      const removedIdx = rowsBefore.findIndex((row) =>
+        row.items.some((item) => item.blockId === drag.blockId)
+      );
+      const rows = stripBlockFromRows(rowsBefore, drag.blockId);
+
       if (targetId) {
-        const side = findColForBlock(cols, targetId) ?? keys[0];
-        const idx = cols[side].indexOf(targetId);
-        cols[side].splice(Math.max(0, idx), 0, drag.blockId);
-      } else if (colIdx !== null) {
-        const side = keys[Math.min(colIdx, keys.length - 1)] ?? "a";
-        cols[side].push(drag.blockId);
+        const rowIdx = rows.findIndex((row) => row.items.some((i) => i.blockId === targetId));
+        if (rowIdx === -1) return d;
+        const items = [...rows[rowIdx].items];
+        const at = items.findIndex((i) => i.blockId === targetId);
+        items.splice(Math.max(0, at), 0, { blockId: drag.blockId, span });
+        const next = [...rows];
+        next[rowIdx] = { ...rows[rowIdx], items };
+        return { ...d, slides: { ...d.slides, [slideKey]: { ...sl, rows: next } } };
       }
-      return { ...d, slides: { ...d.slides, [slideKey]: { ...sl, cols } } };
+
+      if (newRowAt !== null) {
+        // Dropping into the gap the block already occupied alone is a no-op.
+        const shift = removedIdx !== -1 && removedIdx < newRowAt ? 1 : 0;
+        const at = Math.max(0, Math.min(rows.length, newRowAt - shift));
+        const next = [...rows];
+        next.splice(at, 0, { id: newRowId(), items: [{ blockId: drag.blockId, span }] });
+        return { ...d, slides: { ...d.slides, [slideKey]: { ...sl, rows: next } } };
+      }
+
+      return d;
+    });
+  }
+
+  /** Widen/narrow a block. Overflowing neighbours reflow down in normalizeRows. */
+  function setBlockSpan(slideKey: string, blockId: string, span: number) {
+    commitDeck((d) => {
+      const sl = d.slides[slideKey];
+      const count = normalizeColCount(sl.colCount);
+      const clamped = Math.max(1, Math.min(count, span));
+      const rows = (sl.rows ?? []).map((row) => ({
+        ...row,
+        items: row.items.map((item) =>
+          item.blockId === blockId ? { ...item, span: clamped } : item
+        ),
+      }));
+      return { ...d, slides: { ...d.slides, [slideKey]: { ...sl, rows } } };
     });
   }
 
@@ -284,21 +325,20 @@ function ReadoutDeckViewerInner({
     commitDeck((d) => {
       const sl = d.slides[key];
       const count = normalizeColCount(sl.colCount);
-      const keys = activeColKeys(count);
-      let best = keys[0];
-      let bestLen = sl.cols[best].length;
-      for (const colKey of keys) {
-        if (sl.cols[colKey].length < bestLen) {
-          best = colKey;
-          bestLen = sl.cols[colKey].length;
-        }
+      const rows = [...(sl.rows ?? [])];
+      const last = rows[rows.length - 1];
+      const used = last ? last.items.reduce((sum, item) => sum + item.span, 0) : count;
+      if (last && used < count) {
+        // Fill the gap on the bottom row before starting a new one.
+        rows[rows.length - 1] = { ...last, items: [...last.items, { blockId: id, span: 1 }] };
+      } else {
+        rows.push({ id: newRowId(), items: [{ blockId: id, span: 1 }] });
       }
-      const cols = { ...sl.cols, [best]: [...sl.cols[best], id] };
       return {
         ...d,
         slides: {
           ...d.slides,
-          [key]: { ...sl, cols, blocks: { ...sl.blocks, [id]: block } },
+          [key]: { ...sl, rows, blocks: { ...sl.blocks, [id]: block } },
         },
       };
     });
@@ -312,15 +352,12 @@ function ReadoutDeckViewerInner({
       const sl = d.slides[key];
       const prevCount = normalizeColCount(sl.colCount);
       if (prevCount === nextCount) return d;
-      const cols = { ...emptySlideCols(), ...normalizeSlideCols(sl.cols) };
-      if (nextCount < prevCount) {
-        const keep = activeColKeys(nextCount);
-        const last = keep[keep.length - 1];
-        for (const dropped of READOUT_COL_KEYS.slice(nextCount)) {
-          cols[last] = [...cols[last], ...cols[dropped]];
-          cols[dropped] = [];
-        }
-      }
+      // Spans wider than the new grid clamp down; rows that no longer fit
+      // reflow in normalizeReadoutDeck rather than losing blocks.
+      const rows = (sl.rows ?? []).map((row) => ({
+        ...row,
+        items: row.items.map((item) => ({ ...item, span: Math.min(item.span, nextCount) })),
+      }));
       const widths = defaultWidths(nextCount);
       return {
         ...d,
@@ -329,7 +366,7 @@ function ReadoutDeckViewerInner({
           [key]: {
             ...sl,
             colCount: nextCount,
-            cols,
+            rows,
             widths,
             r: widths[0] ?? 0.5,
           },
@@ -354,6 +391,7 @@ function ReadoutDeckViewerInner({
       colCount: 2,
       widths: [0.68, 0.32],
       cols: { a: [vId], b: [iId], c: [], d: [] },
+      rows: [{ id: newRowId(), items: [{ blockId: vId, span: 1 }, { blockId: iId, span: 1 }] }],
       blocks: {
         [vId]: {
           type: "visual",
@@ -438,19 +476,11 @@ function ReadoutDeckViewerInner({
     if (count !== 2) return;
     const widths = normalizeWidths(2, sl.widths ?? [sl.r, 1 - sl.r]);
     patchSlide(slideKey, {
-      cols: { a: sl.cols.b, b: sl.cols.a, c: sl.cols.c, d: sl.cols.d },
+      // Mirror each row so blocks follow the widths they were paired with.
+      rows: (sl.rows ?? []).map((row) => ({ ...row, items: [...row.items].reverse() })),
       widths: [widths[1], widths[0]],
       r: widths[1],
     });
-  }
-
-  function normalizeSlideCols(cols: ReadoutSlide["cols"]): ReadoutSlideCols {
-    return {
-      a: [...(cols.a ?? [])],
-      b: [...(cols.b ?? [])],
-      c: [...(cols.c ?? [])],
-      d: [...(cols.d ?? [])],
-    };
   }
 
   function startVisualResize(slideKey: string, blockId: string, e: React.MouseEvent) {
@@ -606,9 +636,8 @@ function ReadoutDeckViewerInner({
           colCount,
           sl.widths ?? (colCount === 2 ? [sl.r, 1 - sl.r] : undefined)
         );
-        const gridTemplate = widths
-          .flatMap((w, wi) => (wi === 0 ? [`${w}fr`] : ["26px", `${w}fr`]))
-          .join(" ");
+        // Rows share one template so columns stay aligned down the slide.
+        const gridTemplate = widths.map((w) => `${w}fr`).join(" ");
         return (
           <div
             key={key}
@@ -715,123 +744,126 @@ function ReadoutDeckViewerInner({
               />
             </header>
 
-            <div className="grid min-h-0 flex-1" style={{ gridTemplateColumns: gridTemplate }}>
-              {Array.from({ length: colCount }, (_, colIdx) => colIdx).flatMap((colIdx) => {
-                const colKey = activeColKeys(colCount)[colIdx];
-                const column = (
-                  <div
-                    key={`col-${colKey}`}
-                    className="flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto pb-0.5"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      dropOn(key, null, colIdx);
-                    }}
-                  >
-                    {(() => {
-                      const ids = sl.cols[colKey];
-                      const rows: Array<
-                        | { kind: "full"; id: string }
-                        | { kind: "datapoints"; ids: string[] }
-                      > = [];
-                      let dpGroup: string[] = [];
-                      const flushDp = () => {
-                        if (dpGroup.length === 0) return;
-                        rows.push({ kind: "datapoints", ids: dpGroup });
-                        dpGroup = [];
-                      };
-                      for (const blockId of ids) {
-                        const block = sl.blocks[blockId];
-                        if (block?.type === "datapoint") {
-                          dpGroup.push(blockId);
-                        } else {
-                          flushDp();
-                          rows.push({ kind: "full", id: blockId });
-                        }
-                      }
-                      flushDp();
+            <div className="relative min-h-0 flex-1">
+              <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto pb-0.5">
+                {(() => {
+                  const rows = sl.rows ?? [];
 
-                      const renderCard = (blockId: string) => {
-                        const block = sl.blocks[blockId];
-                        if (!block) return null;
-                        return (
-                          <DeckCard
-                            key={blockId}
-                            readoutId={readout.id}
-                            slideKey={key}
-                            blockId={blockId}
-                            block={block}
-                            editing={editable}
-                            chromeVisible={designChrome}
-                            onDragStart={(e) => {
-                              dragRef.current = { slideKey: key, blockId };
-                              e.dataTransfer.effectAllowed = "move";
-                              try {
-                                e.dataTransfer.setData("text/plain", blockId);
-                                const card = (e.currentTarget as HTMLElement).closest(
-                                  "[data-card]"
-                                );
-                                if (card) e.dataTransfer.setDragImage(card as Element, 30, 14);
-                              } catch {
-                                /* ok */
-                              }
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              dropOn(key, blockId, null);
-                            }}
-                            onUpdate={(patch) => updateBlock(key, blockId, patch)}
-                            onRemove={() => removeBlock(key, blockId)}
-                            onVResize={(e) => startVisualResize(key, blockId, e)}
-                            onVReset={() => {
-                              if (editable) updateBlock(key, blockId, { h: null });
-                            }}
-                            onWResize={(e) => startCardWidthResize(key, blockId, e)}
-                            onWReset={() => {
-                              if (editable) updateBlock(key, blockId, { w: null });
-                            }}
-                          />
-                        );
-                      };
+                  const dropStrip = (at: number) => (
+                    <div
+                      key={`drop-${key}-${at}`}
+                      className="shrink-0 rounded-full"
+                      style={{
+                        height: handleVisible ? 10 : 0,
+                        background: "transparent",
+                      }}
+                      onDragOver={(e) => {
+                        if (!handleVisible) return;
+                        e.preventDefault();
+                        e.currentTarget.style.background = "rgba(201,154,60,0.35)";
+                      }}
+                      onDragLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.style.background = "transparent";
+                        dropOn(key, null, at);
+                      }}
+                    />
+                  );
 
-                      return rows.map((row, rowIdx) => {
-                        if (row.kind === "datapoints") {
+                  return rows.flatMap((row, rowIdx) => {
+                    const rowEl = (
+                      <div
+                        key={row.id}
+                        className="grid min-w-0 shrink-0 items-stretch"
+                        style={{ gridTemplateColumns: gridTemplate, gap: ROW_GAP }}
+                      >
+                        {row.items.map((item) => {
+                          const block = sl.blocks[item.blockId];
+                          if (!block) return null;
                           return (
                             <div
-                              key={`dp-row-${colKey}-${rowIdx}`}
-                              className="flex w-full flex-wrap content-start items-start gap-3"
+                              key={item.blockId}
+                              className="flex min-w-0 flex-col"
+                              style={{ gridColumn: `span ${item.span}` }}
                             >
-                              {row.ids.map((blockId) => renderCard(blockId))}
+                              <DeckCard
+                                readoutId={readout.id}
+                                slideKey={key}
+                                blockId={item.blockId}
+                                block={block}
+                                span={item.span}
+                                colCount={colCount}
+                                editing={editable}
+                                chromeVisible={designChrome}
+                                onSpanChange={(span) => setBlockSpan(key, item.blockId, span)}
+                                onDragStart={(e) => {
+                                  dragRef.current = { slideKey: key, blockId: item.blockId };
+                                  e.dataTransfer.effectAllowed = "move";
+                                  try {
+                                    e.dataTransfer.setData("text/plain", item.blockId);
+                                    const card = (e.currentTarget as HTMLElement).closest(
+                                      "[data-card]"
+                                    );
+                                    if (card) e.dataTransfer.setDragImage(card as Element, 30, 14);
+                                  } catch {
+                                    /* ok */
+                                  }
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  dropOn(key, item.blockId, null);
+                                }}
+                                onUpdate={(patch) => updateBlock(key, item.blockId, patch)}
+                                onRemove={() => removeBlock(key, item.blockId)}
+                                onVResize={(e) => startVisualResize(key, item.blockId, e)}
+                                onVReset={() => {
+                                  if (editable) updateBlock(key, item.blockId, { h: null });
+                                }}
+                                onWResize={(e) => startCardWidthResize(key, item.blockId, e)}
+                                onWReset={() => {
+                                  if (editable) updateBlock(key, item.blockId, { w: null });
+                                }}
+                              />
                             </div>
                           );
+                        })}
+                      </div>
+                    );
+                    return [dropStrip(rowIdx), rowEl] as ReactNode[];
+                  }).concat(rows.length > 0 ? [dropStrip(rows.length)] : []);
+                })()}
+              </div>
+
+              {/* Column dividers — slide-wide, drawn over the row stack. */}
+              {handleVisible
+                ? widths.slice(0, -1).map((_, i) => {
+                    const cum = widths.slice(0, i + 1).reduce((a, b) => a + b, 0);
+                    return (
+                      <div
+                        key={`handle-${i}`}
+                        title={
+                          colCount === 2
+                            ? "Drag to resize columns · double-click to swap them"
+                            : "Drag to resize columns"
                         }
-                        return renderCard(row.id);
-                      });
-                    })()}
-                  </div>
-                );
-                if (colIdx < colCount - 1) {
-                  return [
-                    column,
-                    <div
-                      key={`handle-${colIdx}`}
-                      title={
-                        colCount === 2
-                          ? "Drag to resize columns · double-click to swap them"
-                          : "Drag to resize columns"
-                      }
-                      className="flex cursor-col-resize items-center justify-center hover:bg-[rgba(201,154,60,0.08)]"
-                      style={{ visibility: handleVisible ? "visible" : "hidden" }}
-                      onMouseDown={(e) => startColResize(key, colIdx, e)}
-                      onDoubleClick={() => swapColumns(key)}
-                    >
-                      <div className="h-11 w-1 rounded-sm bg-[#C9AF6E]" />
-                    </div>,
-                  ] as ReactNode[];
-                }
-                return [column] as ReactNode[];
-              })}
+                        className="absolute bottom-0 top-0 z-20 flex cursor-col-resize items-center justify-center hover:bg-[rgba(201,154,60,0.08)]"
+                        style={{
+                          left: `calc((100% - ${(colCount - 1) * ROW_GAP}px) * ${cum} + ${i * ROW_GAP}px)`,
+                          width: ROW_GAP,
+                        }}
+                        onMouseDown={(e) => startColResize(key, i, e)}
+                        onDoubleClick={() => swapColumns(key)}
+                      >
+                        <div className="h-11 w-1 rounded-sm bg-[#C9AF6E]" />
+                      </div>
+                    );
+                  })
+                : null}
             </div>
           </div>
         );
@@ -1480,8 +1512,11 @@ function DashboardLinkEditor({
 function DeckCard({
   readoutId,
   block,
+  span,
+  colCount,
   editing,
   chromeVisible,
+  onSpanChange,
   onDragStart,
   onDrop,
   onUpdate,
@@ -1495,8 +1530,11 @@ function DeckCard({
   slideKey: string;
   blockId: string;
   block: ReadoutBlock;
+  span: number;
+  colCount: ReadoutColCount;
   editing: boolean;
   chromeVisible: boolean;
+  onSpanChange: (span: number) => void;
   onDragStart: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
   onUpdate: (patch: Partial<ReadoutBlock>) => void;
@@ -1557,8 +1595,39 @@ function DeckCard({
       onDragOver={(e) => e.preventDefault()}
       onDrop={onDrop}
     >
+      {editing && colCount > 1 ? (
+        <div
+          title="How many columns this block spans"
+          className="absolute left-2 top-2 z-20 flex items-center gap-0.5 rounded-full border border-white/10 bg-[rgba(20,28,24,0.92)] p-0.5 opacity-0 shadow-[0_6px_18px_rgba(0,0,0,0.3)] transition-opacity [[data-card]:hover_&]:opacity-100"
+        >
+          {Array.from({ length: colCount }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              type="button"
+              title={n === 1 ? "1 column" : `Span ${n} columns`}
+              onClick={() => onSpanChange(n)}
+              className={`rounded-full px-2 py-[3px] text-[10px] font-bold leading-none ${
+                span === n
+                  ? "bg-[linear-gradient(135deg,#E8CC70,#C99A3C)] text-[#242424]"
+                  : "text-white/70 hover:text-[#E8CC70]"
+              }`}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {isVisual && visualBlock ? (
         <>
+          <div className="px-3 pt-2.5">
+            <ReadoutEditableText
+              editing={editing}
+              value={visualBlock.sub}
+              onChange={(sub) => onUpdate({ sub })}
+              className="min-w-0 overflow-wrap-anywhere whitespace-pre-wrap text-[11px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]"
+              style={{ minHeight: editing ? 12 : 0 }}
+            />
+          </div>
           <div className="relative min-h-[110px] flex-1 p-2">
             <ReadoutImageSlot
               readoutId={readoutId}

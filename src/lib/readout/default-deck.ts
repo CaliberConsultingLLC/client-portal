@@ -3,6 +3,8 @@ import type {
   ReadoutColKey,
   ReadoutCover,
   ReadoutDeck,
+  ReadoutRow,
+  ReadoutRowItem,
   ReadoutSlide,
   ReadoutSlideCols,
 } from "@/types/readout";
@@ -68,6 +70,85 @@ export function activeColKeys(count: ReadoutColCount): ReadoutColKey[] {
   return READOUT_COL_KEYS.slice(0, count);
 }
 
+let rowSeq = 0;
+
+/** Stable-enough row id. Rows are addressed by id, never by index. */
+export function newRowId(): string {
+  rowSeq += 1;
+  return `r${Date.now().toString(36)}${rowSeq.toString(36)}`;
+}
+
+/**
+ * Migrate legacy column stacks to rows: row i takes the i-th block of each
+ * column, left to right. Columns of uneven length simply yield shorter rows.
+ */
+export function colsToRows(cols: ReadoutSlideCols, colCount: ReadoutColCount): ReadoutRow[] {
+  const keys = activeColKeys(colCount);
+  const depth = Math.max(0, ...keys.map((key) => cols[key]?.length ?? 0));
+  const rows: ReadoutRow[] = [];
+  for (let i = 0; i < depth; i++) {
+    const items: ReadoutRowItem[] = [];
+    for (const key of keys) {
+      const blockId = cols[key]?.[i];
+      if (blockId) items.push({ blockId, span: 1 });
+    }
+    if (items.length > 0) rows.push({ id: newRowId(), items });
+  }
+  return rows;
+}
+
+/**
+ * Drop unknown/duplicate blocks and clamp spans to 1..colCount. A row whose
+ * spans overflow the grid reflows: the overflow moves into a fresh row
+ * directly beneath, so widening one block pushes its neighbours down rather
+ * than discarding them.
+ */
+export function normalizeRows(
+  rows: ReadoutRow[] | undefined,
+  colCount: ReadoutColCount,
+  blocks: Record<string, unknown>
+): ReadoutRow[] {
+  if (!Array.isArray(rows)) return [];
+  const seen = new Set<string>();
+  const result: ReadoutRow[] = [];
+  for (const row of rows) {
+    if (!row || !Array.isArray(row.items)) continue;
+    let items: ReadoutRowItem[] = [];
+    let used = 0;
+    let rowId: string | null = row.id || newRowId();
+    const flush = () => {
+      if (items.length === 0) return;
+      result.push({ id: rowId ?? newRowId(), items });
+      items = [];
+      used = 0;
+      rowId = null;
+    };
+    for (const item of row.items) {
+      const blockId = item?.blockId;
+      // Guard against a block appearing in two rows after a bad drag.
+      if (!blockId || !blocks[blockId] || seen.has(blockId)) continue;
+      const span = Math.max(1, Math.min(colCount, Math.round(Number(item.span) || 1)));
+      if (used + span > colCount) flush();
+      items.push({ blockId, span });
+      seen.add(blockId);
+      used += span;
+    }
+    flush();
+  }
+  return result;
+}
+
+/** Blocks present on the slide but missing from rows get appended as their own rows. */
+export function appendOrphanBlocks(
+  rows: ReadoutRow[],
+  blocks: Record<string, unknown>
+): ReadoutRow[] {
+  const placed = new Set(rows.flatMap((row) => row.items.map((item) => item.blockId)));
+  const orphans = Object.keys(blocks).filter((id) => !placed.has(id));
+  if (orphans.length === 0) return rows;
+  return [...rows, ...orphans.map((blockId) => ({ id: newRowId(), items: [{ blockId, span: 1 }] }))];
+}
+
 export function normalizeReadoutDeck(deck: ReadoutDeck): ReadoutDeck {
   const slides: ReadoutDeck["slides"] = {};
   for (const [key, slide] of Object.entries(deck.slides ?? {})) {
@@ -77,10 +158,19 @@ export function normalizeReadoutDeck(deck: ReadoutDeck): ReadoutDeck {
       colCount === 2 && (!slide.widths || slide.widths.length !== 2)
         ? [slide.r ?? 0.5, 1 - (slide.r ?? 0.5)].map((w) => Math.round(w * 1000) / 1000)
         : normalizeWidths(colCount, slide.widths);
+    const blocks = slide.blocks ?? {};
+    // Rows are authoritative once present; `cols` is only read on first migration.
+    const rows = appendOrphanBlocks(
+      slide.rows
+        ? normalizeRows(slide.rows, colCount, blocks)
+        : normalizeRows(colsToRows(cols, colCount), colCount, blocks),
+      blocks
+    );
     slides[key] = {
       ...slide,
       colCount,
       cols,
+      rows,
       widths,
       r: slide.r ?? widths[0] ?? 0.5,
     };
