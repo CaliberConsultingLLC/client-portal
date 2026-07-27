@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lock, Unlock } from "lucide-react";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
 import { toDepartmentReportData } from "./ee-demo-fixture";
 import {
   ClientMark,
@@ -20,6 +21,7 @@ import {
   mean,
   round1,
   EmbeddedFilterCard,
+  FilterStack,
   PillOptionRow,
   IndexRailTabs,
   BrandComparisonChart,
@@ -119,6 +121,9 @@ export function EEDepartmentReport({
   headerPortalId,
   titleSuffixPortalId,
   basinReportSurface = false,
+  hideIndexSummary = false,
+  filterPersistenceKey,
+  allowedDepartmentIds,
 }: {
   data: any;
   unitLabel?: string;
@@ -131,6 +136,12 @@ export function EEDepartmentReport({
   benchmarkLabel?: string;
   fieldLayout?: boolean;
   compact?: boolean;
+  /**
+   * Hides the top "Index Scores" summary strip. Used by the Supervisor report
+   * (both DWS scopes), which is scoped to a single index and goes straight to
+   * the statement chart + table.
+   */
+  hideIndexSummary?: boolean;
   /**
    * Chromeless mode (DWS Field redesign pilot only): drop the fixed left/right
    * rails and the 268px center margins so the report body renders inside the
@@ -161,22 +172,45 @@ export function EEDepartmentReport({
    * rendering exactly as they do today.
    */
   basinReportSurface?: boolean;
+  /** Cookie key so unit/campaign filters restore when revisiting this report. */
+  filterPersistenceKey?: string;
+  /** Optional allow-list of unit ids visible in the unit selector. */
+  allowedDepartmentIds?: string[];
 }) {
   const exportRegistry = useVisualExportRegistry();
   const registryActive = useVisualRegistryActive();
   const registryOn = (enableVisualRegistry || registryActive) && Boolean(exportRegistry);
-  const { client, current, comparisons, scale, departments = [], indexes = [], segments } = data;
+  const { client, current, comparisons, scale, departments = [], indexes = [], segments, overall } = data;
+  const visibleDepartments = useMemo(() => {
+    if (!allowedDepartmentIds || allowedDepartmentIds.length === 0) {
+      return departments;
+    }
+    const allowed = new Set(allowedDepartmentIds);
+    return departments.filter((department) => allowed.has(department.id));
+  }, [departments, allowedDepartmentIds]);
 
   // When only a single campaign exists there is nothing to compare against, so all
   // delta / year-over-year / campaign-selection UI is suppressed.
   const hasComparison = comparisons.length > 0;
   const scoreColor = makeGradientColor(scale.min, scale.max);
   const activeDeltaStyle = dwsDeltaStyle;
-  const [deptId, setDeptId] = useState(departments[0]?.id ?? "");
-  const [focus, setFocus] = useState(() => (unitLabel === "Brand" ? indexes[0]?.id ?? ALL : ALL));
+  const [deptId, setDeptId] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "deptId",
+    () => visibleDepartments[0]?.id ?? ""
+  );
+  const [focus, setFocus] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "focus",
+    () => (unitLabel === "Brand" ? indexes[0]?.id ?? ALL : ALL)
+  );
   // Field layout: bar chart is driven by an inline index toggle (chart-only),
   // decoupled from the statement table which stays fully expanded.
-  const [chartIndexId, setChartIndexId] = useState(indexes[0]?.id ?? "");
+  const [chartIndexId, setChartIndexId] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "chartIndexId",
+    () => indexes[0]?.id ?? ""
+  );
   // Chromeless (redesign pilot) flat statement list defaults to score
   // high-to-low for the current campaign; the live layout keeps its
   // unsorted (index order) default untouched.
@@ -196,11 +230,11 @@ export function EEDepartmentReport({
       else next.add(id);
       return next;
     });
-  const [currentCampaignId, setCurrentCampaignId] = useState(() => {
+  const [currentCampaignId, setCurrentCampaignId] = usePersistedDashboardFilter(filterPersistenceKey, "currentCampaignId", () => {
     const preferredCurrent = [current, ...comparisons].find((campaign) => campaignMatches(campaign, PREFERRED_CURRENT_CAMPAIGN));
     return preferredCurrent?.id ?? current.id;
   });
-  const [priorCampaignId, setPriorCampaignId] = useState(() => {
+  const [priorCampaignId, setPriorCampaignId] = usePersistedDashboardFilter(filterPersistenceKey, "priorCampaignId", () => {
     const preferredPrior = comparisons.find((campaign) => campaignMatches(campaign, PREFERRED_PRIOR_CAMPAIGN));
     return preferredPrior?.id ?? comparisons[comparisons.length - 1]?.id ?? "";
   });
@@ -218,10 +252,10 @@ export function EEDepartmentReport({
   const timelineRecentFirst = useMemo(() => [...timeline].reverse(), [timeline]);
 
   useEffect(() => {
-    if (!departments.find((item) => item.id === deptId)) {
-      setDeptId(departments[0]?.id ?? "");
+    if (!visibleDepartments.find((item) => item.id === deptId)) {
+      setDeptId(visibleDepartments[0]?.id ?? "");
     }
-  }, [departments, deptId]);
+  }, [visibleDepartments, deptId]);
 
   useEffect(() => {
     if (indexes.length && !indexes.find((item) => item.id === chartIndexId)) {
@@ -267,7 +301,7 @@ export function EEDepartmentReport({
   const RIGHT_RAIL_STYLE = { position: "fixed" as const, top: "calc(var(--app-top-banner-height, 78px) + 66px)", right: 0, bottom: 0, width: 268, overflow: "auto", overflowAnchor: "none", background: "#E8ECE9", borderLeft: "1px solid #D4DAD6", padding: "26px 22px" };
   const CENTER_STYLE = { minHeight: "calc(100vh - var(--app-top-banner-height, 78px) - 66px)", marginLeft: 268, marginRight: 268, background: "#fff", overflowAnchor: "none", padding: "30px 30px 56px" } as const;
 
-  if (!departments.length || !indexes.length) {
+  if (!visibleDepartments.length || !indexes.length) {
     return (
       <div className="canvas" style={CANVAS_STYLE}>
         <EEReportStyles />
@@ -282,7 +316,7 @@ export function EEDepartmentReport({
     );
   }
 
-  const dept = departments.find((item) => item.id === deptId) ?? departments[0];
+  const dept = visibleDepartments.find((item) => item.id === deptId) ?? visibleDepartments[0];
   const curCamp = timeline.find((item) => item.id === currentCampaignId) ?? current;
   const previous = timeline.find((item) => item.id === priorCampaignId) ?? comparisons[comparisons.length - 1] ?? null;
   const campaigns = previous ? [previous, curCamp] : [curCamp];
@@ -359,41 +393,17 @@ export function EEDepartmentReport({
     null;
   const tableCampaigns = tablePrevious ? [tablePrevious, tableCampaign] : [tableCampaign];
 
-  const deptIndex = (index, campaign) => {
-    const values = index.statements
-      .map((statement) => valueFor(statement.byDept[deptId], campaign))
-      .filter((value): value is number => value != null);
-    return values.length > 0 ? round1(mean(values)) : null;
+  // Index / total / company scores all read the projection's person-average
+  // cells. Nothing here is rebuilt by averaging statements or unit rows.
+  const scoreCell = (cell, campaign) => {
+    const value = valueFor(cell, campaign);
+    return typeof value === "number" ? round1(value) : null;
   };
-  const deptTotal = (campaign) => {
-    const values = indexes
-      .flatMap((index) => index.statements.map((statement) => valueFor(statement.byDept[deptId], campaign)))
-      .filter((value): value is number => value != null);
-    return values.length > 0 ? round1(mean(values)) : null;
-  };
-  const companyStatement = (statement, campaign) => {
-    let num = 0;
-    let den = 0;
-    departments.forEach((item) => {
-      const value = valueFor(statement.byDept[item.id], campaign);
-      if (value == null) return;
-      num += value * item.responses;
-      den += item.responses;
-    });
-    return den > 0 ? round1(num / den) : null;
-  };
-  const companyIndex = (index, campaign) => {
-    const values = index.statements
-      .map((statement) => companyStatement(statement, campaign))
-      .filter((value): value is number => value != null);
-    return values.length > 0 ? round1(mean(values)) : null;
-  };
-  const companyOverall = (campaign) => {
-    const values = indexes
-      .flatMap((index) => index.statements.map((statement) => companyStatement(statement, campaign)))
-      .filter((value): value is number => value != null);
-    return values.length > 0 ? round1(mean(values)) : null;
-  };
+  const deptIndex = (index, campaign) => scoreCell(index.score?.byGroup?.[deptId], campaign);
+  const deptTotal = (campaign) => scoreCell(overall?.byGroup?.[deptId], campaign);
+  const companyStatement = (statement, campaign) => scoreCell(statement?.org, campaign);
+  const companyIndex = (index, campaign) => scoreCell(index.score?.org, campaign);
+  const companyOverall = (campaign) => scoreCell(overall?.org, campaign);
   const showVsOrg = unitLabel !== "Brand";
   const chartFocusEffective = fieldLayout ? chartIndexId : chartFocus;
   const activeIndex = indexes.find((index) => index.id === chartFocusEffective) ?? indexes[0] ?? null;
@@ -487,20 +497,20 @@ export function EEDepartmentReport({
   // Rail selectors, shared between the fixed left rail (default) and the
   // redesign shell's "Filters" tab portal (chromeless).
   const railControls = (
-    <>
+    <FilterStack>
       {chromeless ? (
         <EmbeddedFilterCard title={unitLabel}>
           <PillOptionRow
             value={deptId}
             onChange={setDeptId}
-            options={departments.map((item) => ({ id: item.id, label: item.name }))}
+            options={visibleDepartments.map((item) => ({ id: item.id, label: item.name }))}
           />
           <p className="rs-hint" style={{ margin: "9px 2px 0" }}>{dept.location ? `${dept.location} · ` : ""}{dept.responses} responses</p>
         </EmbeddedFilterCard>
       ) : (
         <RailSection title={unitLabel} defaultOpen>
           <select className="rail-select" value={deptId} onChange={(event) => setDeptId(event.target.value)}>
-            {departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {visibleDepartments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
           <p className="rs-hint">{dept.location ? `${dept.location} · ` : ""}{dept.responses} responses</p>
         </RailSection>
@@ -557,7 +567,7 @@ export function EEDepartmentReport({
         </div>
       </RailSection>
       ) : null}
-    </>
+    </FilterStack>
   );
 
   return (
@@ -623,7 +633,9 @@ export function EEDepartmentReport({
                     }}
                   >
                     <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96" }}>{item.label}</div>
-                    <div style={{ fontSize: 25, fontWeight: 800, lineHeight: 1, marginTop: 6, color: item.color ?? "#152238" }}>{item.value}</div>
+                    {/* DESIGN RULE: top-header KPI card values always use the dark
+                        ink color, never the score-scale tint. See HeaderKpiPortal. */}
+                    <div style={{ fontSize: 25, fontWeight: 800, lineHeight: 1, marginTop: 6, color: "#152238" }}>{item.value}</div>
                   </div>
                 ))}
               </div>,
@@ -643,7 +655,7 @@ export function EEDepartmentReport({
             </div>
           )}
 
-          {chromeless ? (
+          {chromeless && !hideIndexSummary ? (
             // EXPERIMENT: vertical section label in a narrow rail to the left
             // of the section instead of a horizontal line above it — same
             // .slabel look, just rotated and vertically centered against the
@@ -677,6 +689,7 @@ export function EEDepartmentReport({
                   indexes={indexSummaryIndexes}
                   scoreColor={scoreColor}
                   surfaceTreatment={basinReportSurface ? "1b" : undefined}
+                  compact={compact}
                 />
               </RegisteredVisualExportFrame>
             </SectionWithVerticalLabel>
@@ -687,7 +700,13 @@ export function EEDepartmentReport({
               (() => {
                 const comparisonRow = (
                   <div style={{ display: "flex", gap: 0, alignItems: "stretch" }}>
-                    <IndexRailTabs indexes={indexes} activeId={chartIndexId} onSelect={setChartIndexId} compact={compact} surfaceTreatment={basinReportSurface ? "1b" : undefined} />
+                    {/* A single-index report (e.g. the DWS Supervisor report,
+                        scoped to just the Supervisor index) has nothing to
+                        switch between — drop the rail entirely and let the
+                        chart take the full width. */}
+                    {indexes.length > 1 ? (
+                      <IndexRailTabs indexes={indexes} activeId={chartIndexId} onSelect={setChartIndexId} compact={compact} surfaceTreatment={basinReportSurface ? "1b" : undefined} />
+                    ) : null}
                     <RegisteredVisualExportFrame
                       enabled={registryOn}
                       order={10}
@@ -704,7 +723,7 @@ export function EEDepartmentReport({
                           <h3 className="card-title">{activeIndex ? `${activeIndex.name} Statements` : "Statement Results"}</h3>
                         </div>
                         <div className="card-body">
-                          <BrandComparisonChart rows={brandChartRows} axis={brandChartAxis} scoreColor={scoreColor} uniform compact={compact} />
+                          <BrandComparisonChart rows={brandChartRows} axis={brandChartAxis} scoreColor={scoreColor} uniform compact={compact} benchmarkLabel={benchmarkLabel} />
                         </div>
                       </div>
                     </RegisteredVisualExportFrame>
@@ -734,7 +753,7 @@ export function EEDepartmentReport({
                   <h3 className="card-title">{activeIndex ? `${activeIndex.name} Statements` : "Statement Results"}</h3>
                 </div>
                 <div className="card-body">
-                  <BrandComparisonChart rows={brandChartRows} axis={brandChartAxis} scoreColor={scoreColor} />
+                  <BrandComparisonChart rows={brandChartRows} axis={brandChartAxis} scoreColor={scoreColor} benchmarkLabel={benchmarkLabel} />
                 </div>
                 {buildLockButton("brand-chart", "brand chart")}
               </div>
@@ -800,12 +819,8 @@ export function EEDepartmentReport({
                   });
                 })() : (() => {
                   if (!fieldLayout || !stmtSort.col) return indexes;
-                  const indexScore = (index) => {
-                    const values = index.statements
-                      .map((statement) => valueFor(statement.byDept[tableDeptId], tableCampaign))
-                      .filter((value): value is number => value != null);
-                    return values.length > 0 ? mean(values) : null;
-                  };
+                  const indexScore = (index) =>
+                    scoreCell(index.score?.byGroup?.[tableDeptId], tableCampaign);
                   const metric = (index) => {
                     const cur = indexScore(index);
                     if (stmtSort.col === "score") return cur;
@@ -822,12 +837,8 @@ export function EEDepartmentReport({
                   });
                 })().map((index) => {
                   const open = fieldLayout ? !collapsedIndexes.has(index.id) : tableFocus === index.id;
-                  const deptIndexForTable = (targetIndex, campaign) => {
-                    const values = targetIndex.statements
-                      .map((statement) => valueFor(statement.byDept[tableDeptId], campaign))
-                      .filter((value): value is number => value != null);
-                    return values.length > 0 ? round1(mean(values)) : null;
-                  };
+                  const deptIndexForTable = (targetIndex, campaign) =>
+                    scoreCell(targetIndex.score?.byGroup?.[tableDeptId], campaign);
                   const cur = deptIndexForTable(index, tableCampaign);
                   const prevValue = tablePrevious ? deptIndexForTable(index, tablePrevious) : null;
                   const orgValue = companyIndex(index, tableCampaign);
@@ -973,10 +984,10 @@ export function EEDepartmentReport({
                     </thead>
                     <tbody>
                       {supervisorHeatmapForDept.statements.map((statement) => {
-                        const values = supervisorHeatmapForDept.supervisors
-                          .map((supervisor) => statement.scoresBySupervisor?.[supervisor.id])
-                          .filter((value) => typeof value === "number" && value > 0);
-                        const rowAverage = values.length > 0 ? round1(mean(values)) : 0;
+                        // Unit average for the row is the projection's person
+                        // average for this statement, not a mean of supervisor cells.
+                        const rowAverage =
+                          typeof statement.brandOverall === "number" ? round1(statement.brandOverall) : 0;
                         const rowAverageColor = scoreColor(rowAverage);
                         return (
                           <tr key={statement.id}>

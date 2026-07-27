@@ -440,19 +440,26 @@ export function RelationshipMap({
           }));
       }
 
-      // Only include departments that have valid (> 0) scores on BOTH sides.
-      // A missing score on either side means not enough data — the whole
-      // relationship node is suppressed rather than showing a phantom zero.
+      // Qualification is per direction, driven by the active mode. A department
+      // is shown in the Incoming view whenever it has a valid (> 0, rule-of-two)
+      // incoming score — even if it has no valid outgoing score — and vice
+      // versa. Only the Gap view requires both sides, because a gap can't be
+      // computed from a single direction. This prevents a missing outgoing side
+      // (e.g. a one-person department) from hiding a well-populated incoming side.
       const incomingMap = new Map(incomingByDept.filter((row) => row.score > 0).map((row) => [row.department, row.score]));
       const outgoingMap = new Map(outgoingByDept.filter((row) => row.score > 0).map((row) => [row.department, row.score]));
 
       return Array.from(new Set([...incomingMap.keys(), ...outgoingMap.keys()]))
         .filter((label) => label !== selectedDepartment)
-        .filter((label) => incomingMap.has(label) && outgoingMap.has(label))
+        .filter((label) => {
+          if (effectiveMode === "incoming") return incomingMap.has(label);
+          if (effectiveMode === "outgoing") return outgoingMap.has(label);
+          return incomingMap.has(label) && outgoingMap.has(label);
+        })
         .sort()
         .map((label) => {
-          const incoming = incomingMap.get(label) as number;
-          const outgoing = outgoingMap.get(label) as number;
+          const incoming = incomingMap.get(label) ?? 0;
+          const outgoing = outgoingMap.get(label) ?? 0;
           return {
             id: `department-${label}`,
             label,
@@ -484,6 +491,7 @@ export function RelationshipMap({
   }, [
     isCiVariant,
     lens,
+    effectiveMode,
     incomingByDept,
     outgoingByDept,
     ciByDept,

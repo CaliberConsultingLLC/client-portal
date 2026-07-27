@@ -114,8 +114,10 @@ export function AppTopBanner({
       >
         <div
           className={cn(
-            "overflow-hidden transition-opacity duration-150 ease-out",
-            collapsed ? "opacity-0" : "opacity-100"
+            // Only clip while collapsing. When expanded, overflow must stay
+            // visible so header menus (e.g. View as) can render below the bar.
+            "transition-opacity duration-150 ease-out",
+            collapsed ? "overflow-hidden opacity-0" : "overflow-visible opacity-100"
           )}
         >
           <div

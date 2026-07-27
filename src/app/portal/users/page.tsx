@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { AdminUserManagement } from "@/components/admin/admin-user-management";
+import { getFirebaseDashboardAssignments } from "@/lib/firebase/dashboard-store";
 import { getFirebasePortalClients } from "@/lib/firebase/portal-store";
 import { isInternalFirebaseRole, requireFirebasePortalUser } from "@/lib/firebase/auth";
 import { listAllFirebaseUsers } from "@/lib/firebase/user-store";
@@ -11,15 +12,17 @@ export default async function PortalUsersPage() {
     notFound();
   }
 
-  const [users, clients] = await Promise.all([
+  const [users, clients, dashboardAssignments] = await Promise.all([
     listAllFirebaseUsers(),
     getFirebasePortalClients(),
+    getFirebaseDashboardAssignments(),
   ]);
 
   return (
     <AdminUserManagement
       initialUsers={users}
       clients={clients}
+      dashboardAssignments={dashboardAssignments}
       eyebrow="Caliber Consulting LLC"
       title="Users"
       description="Manage portal users, their access level, and their assigned client workspaces without leaving the current portal experience."

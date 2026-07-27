@@ -1,8 +1,36 @@
 // @ts-nocheck
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { scoreScaleColor } from "@/components/collaboration/score-color-scale";
+
+/** Portal design rule: first filter card expanded, every additional card collapsed. */
+const FilterStackContext = createContext<{ claimIndex: () => number } | null>(null);
+
+/**
+ * Wrap Filters-tab content so EmbeddedFilterCard children auto-expand only the
+ * first card (unless they pass an explicit `defaultOpen`).
+ */
+export function FilterStack({ children }: { children: ReactNode }) {
+  const counter = useRef(0);
+  counter.current = 0;
+  const value = useMemo(
+    () => ({
+      claimIndex: () => counter.current++,
+    }),
+    []
+  );
+  return <FilterStackContext.Provider value={value}>{children}</FilterStackContext.Provider>;
+}
 
 const EE_REPORT_CSS = `
 .canvas{display:block;min-height:calc(100vh - var(--app-top-banner-height,78px) - 66px);background:linear-gradient(90deg,#E8ECE9 0 268px,#fff 268px calc(100% - 268px),#E8ECE9 calc(100% - 268px) 100%);overflow-anchor:none;--surface-2:#F1F4F7;--surface-3:#E2E8EF;--border-subtle:#D3DDE7;--border-strong:#8798AA;--text-primary:#152238;--text-secondary:#3B4B63;--text-muted:#6E7E96;--rail:#E8ECE9;--rail-line:#D4DAD6;--ink:#2B2B2B;--nsp-green-500:#6E9B7B}
@@ -263,7 +291,15 @@ const LABEL_FONT = "500 12.5px Montserrat, Inter, sans-serif";
 // report that needs this chart — Basin Report, Basin Comparison, Department
 // Comparison — shares one implementation instead of near-duplicate copies
 // that can drift apart visually.
-export function BrandComparisonChart({ rows, axis, scoreColor, uniform = false, compact = false, showOrgLine = true }) {
+export function BrandComparisonChart({
+  rows,
+  axis,
+  scoreColor,
+  uniform = false,
+  compact = false,
+  showOrgLine = true,
+  benchmarkLabel = "CSG",
+}) {
   const pct = (value) => ((Math.max(axis.min, Math.min(axis.max, value)) - axis.min) / (axis.max - axis.min)) * 100;
 
   // Dynamic label-column width, sized from the actual row labels: short
@@ -315,10 +351,10 @@ export function BrandComparisonChart({ rows, axis, scoreColor, uniform = false, 
         .br-plot-compact .br-gap-pill{padding:2px 10px;font-size:12px;min-width:84px}
       `}</style>
       {/* Same 3-column grid as every data row below (label / bars / gap) so
-          "Diff - DWS" always sits centered directly over the delta pills,
+          "Diff" always sits centered directly over the delta pills,
           by construction, instead of a hand-placed header label that can
           drift out of alignment as the label column resizes. */}
-      <div className="br-head-row"><div /><div /><div className="br-gap-head">Diff - DWS</div></div>
+      <div className="br-head-row"><div /><div /><div className="br-gap-head">Diff - {benchmarkLabel}</div></div>
       <div className={`plot${uniform ? " br-plot-uniform" : ""}${compact ? " br-plot-compact" : ""}`}>
         <div className="grid-overlay" style={{ right: "var(--gap-col)" }}>
           {axis.ticks.map((tick) => <div key={tick} className="gridline" style={{ left: `${pct(tick)}%` }} />)}
@@ -489,13 +525,26 @@ export function pillButtonStyle(active: boolean): React.CSSProperties {
 export function EmbeddedFilterCard({
   title,
   children,
-  defaultOpen = true,
+  defaultOpen,
 }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const stack = useContext(FilterStackContext);
+  const initialOpen = useRef<boolean | null>(null);
+  if (initialOpen.current === null) {
+    if (defaultOpen !== undefined) {
+      initialOpen.current = defaultOpen;
+    } else if (stack) {
+      // Inside Filters tab: expand the first card only.
+      initialOpen.current = stack.claimIndex() === 0;
+    } else {
+      // Outside a filter stack (Context tab, etc.): keep cards open.
+      initialOpen.current = true;
+    }
+  }
+  const [open, setOpen] = useState(() => initialOpen.current!);
   return (
     <div style={{ borderRadius: 13, border: "1px solid #C8D2CF", background: "#fff", padding: "14px 13px" }}>
       <button
@@ -640,7 +689,11 @@ export function HeaderKpiPortal({
           <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#6E7E96" }}>
             {item.label}
           </div>
-          <div style={{ fontSize: 25, fontWeight: 800, lineHeight: 1, marginTop: 6, color: item.color ?? "#152238" }}>
+          {/* DESIGN RULE: top-header KPI cards always use the dark ink color for
+              their value text — never the score-scale tint (yellow/blue) or any
+              other accent. `item.color` is intentionally ignored so this reads
+              consistently across every perspective. */}
+          <div style={{ fontSize: 25, fontWeight: 800, lineHeight: 1, marginTop: 6, color: "#152238" }}>
             {item.value}
           </div>
         </div>

@@ -1,7 +1,10 @@
 import type { PortalDashboardAssignment } from "@/types/portal";
+import type { Readout } from "@/types/readout";
 import { getFirebaseDashboardAssignments } from "./dashboard-store";
 import { getFirebaseDataWorkspaces, getFirebasePortalClients } from "./portal-store";
+import { canClientUserAccessReadout, getFirebaseReadouts } from "./readout-store";
 import { isInternalFirebaseRole, type FirebaseAppUser } from "./auth";
+import { isDashboardAssetAllowed } from "./user-access";
 
 export async function getAccessiblePortalClients(user: FirebaseAppUser) {
   const clients = await getFirebasePortalClients();
@@ -21,13 +24,14 @@ export async function getAccessibleDashboardAssignments(
   const isDashboardRestricted =
     user.employeeExperienceAccess.dashboardAccessMode === "restricted" ||
     user.employeeExperienceAccess.allowedDashboardAssetIds.length > 0;
-  const allowedDashboardAssetIds = new Set(
-    user.employeeExperienceAccess.allowedDashboardAssetIds
-  );
+  const allowedDashboardAssetIds =
+    user.employeeExperienceAccess.allowedDashboardAssetIds;
 
   if (isInternalFirebaseRole(user.role)) {
     return isDashboardRestricted
-      ? assignments.filter((assignment) => allowedDashboardAssetIds.has(assignment.assetId))
+      ? assignments.filter((assignment) =>
+          isDashboardAssetAllowed(assignment.assetId, allowedDashboardAssetIds)
+        )
       : assignments;
   }
 
@@ -36,7 +40,9 @@ export async function getAccessibleDashboardAssignments(
     (assignment) => assignment.published && allowedClientIds.has(assignment.clientId)
   );
   return isDashboardRestricted
-    ? clientAssignments.filter((assignment) => allowedDashboardAssetIds.has(assignment.assetId))
+    ? clientAssignments.filter((assignment) =>
+        isDashboardAssetAllowed(assignment.assetId, allowedDashboardAssetIds)
+      )
     : clientAssignments;
 }
 
@@ -49,6 +55,26 @@ export async function getAccessibleDataWorkspaces(user: FirebaseAppUser) {
 
   const allowedClientIds = new Set(user.clientIds);
   return workspaces.filter((workspace) => allowedClientIds.has(workspace.clientId));
+}
+
+/** Published insight decks the signed-in client can open from Insights. */
+export async function getAccessiblePublishedReadouts(user: FirebaseAppUser): Promise<Readout[]> {
+  const [clients, readouts] = await Promise.all([
+    getAccessiblePortalClients(user),
+    getFirebaseReadouts(),
+  ]);
+  const allowedClientIds = new Set(clients.map((client) => client.id));
+
+  return readouts
+    .filter(
+      (readout) =>
+        allowedClientIds.has(readout.clientId) && canClientUserAccessReadout(user, readout)
+    )
+    .sort((left, right) => {
+      const leftStamp = left.publishedAt ?? left.updatedAt;
+      const rightStamp = right.publishedAt ?? right.updatedAt;
+      return rightStamp.localeCompare(leftStamp);
+    });
 }
 
 export async function getAccessibleClientWorkspace(

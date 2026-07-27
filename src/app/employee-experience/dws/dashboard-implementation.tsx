@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronRight, Minus } from "lucide-react";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
+import { buildDashboardFilterStoreKey } from "@/lib/portal/dashboard-filter-cookie";
 import { EECampaignResults } from "./ee-campaign-results";
 import { EEDepartmentComparison } from "./ee-department-comparison";
 import { EELocationComparison } from "./ee-location-comparison";
@@ -25,7 +27,7 @@ const FR_HEADER_EXTRA_SLOT = "fr-header-extra-slot";
 // DWS Field redesign pilot: id of the portal target appended right after the
 // title, e.g. "Basin Report — East Texas" for reports with a unit picker.
 const FR_TITLE_SUFFIX_SLOT = "fr-title-suffix-slot";
-import { buildEmployeeExperienceReportBundle, projectEnpsReportData, projectSupervisorReportData } from "./ee-live-projections";
+import { buildEmployeeExperienceReportBundle, CSG_BREAKDOWN_DIMENSIONS, OFFICE_BREAKDOWN_DIMENSIONS, projectBreakdownSet, projectEnpsReportData, projectSupervisorReportData } from "./ee-live-projections";
 import { ClientMark, defaultComparisonId, EmbeddedFilterCard, HeaderKpiPortal, PillOptionRow } from "./ee-report-kit";
 import { EEContextRail } from "./ee-context-rail";
 import { GuidancePinRail } from "@/components/dashboard/guidance-pin-rail";
@@ -34,6 +36,11 @@ import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { scoreScaleTextColor } from "@/components/collaboration/score-color-scale";
 import { dwsScoreColor, dwsRawScoreColor, makeGradientColor } from "./ee-report-kit";
 import { mergeHiddenDimensionIds } from "@/lib/employee-experience/excluded-dimensions";
+import {
+  CSG_EMPLOYEE_EXPERIENCE_GROUPS,
+  DWS_EMPLOYEE_EXPERIENCE_GROUPS,
+  DWS_FIELD_EMPLOYEE_EXPERIENCE_GROUPS,
+} from "@/lib/employee-experience/perspective-access";
 import { isKnownBrandSegment } from "@/lib/employee-experience/brand-segment";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
 import { VisualExportButton } from "@/components/dashboard/visual-export-button";
@@ -46,7 +53,10 @@ import {
 } from "@/lib/dashboard/export-visual";
 import { cn } from "@/lib/utils";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
-import type { EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
+import {
+  resolveAllowedValuesForPerspective,
+  type EmployeeExperienceUserAccess,
+} from "@/lib/firebase/user-access";
 import type {
   EmployeeExperienceDashboardData,
   EmployeeExperienceQuestionDefinition,
@@ -65,6 +75,7 @@ const FIELD_RAW_SCALE = { min: 5, mid: 6.25, max: 7.5, minLabel: "50", maxLabel:
 
 const EE_PANEL =
   "overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[7px_9px_20px_rgba(15,23,42,0.09),2px_3px_6px_rgba(15,23,42,0.05)]";
+const BRAND_FIELD_ALIASES = ["company", "brand", "location", "site"] as const;
 
 function EEPanel({
   children,
@@ -117,6 +128,7 @@ function orderedDimensionNames(questions: EmployeeExperienceQuestionDefinition[]
 
 type GroupId =
   | "executive"
+  | "individual-reports"
   | "department"
   | "division"
   | "basin"
@@ -140,6 +152,11 @@ type PerspectiveId =
   | "ee-brand-report"
   | "ee-brand-open-text"
   | "ee-segment-breakdown"
+  | "ee-division-breakdown"
+  | "ee-department-breakdown"
+  | "ee-role-breakdown"
+  | "ee-supervisor-breakdown"
+  | "ee-autosep-breakdown"
   | "ee-department-report"
   | "ee-division-report"
   | "ee-unit-department-report"
@@ -189,35 +206,7 @@ const CSG_SCOPE: EmployeeExperienceClientScope = {
   showJobCategoryHeatmap: true,
   showTenureHeatmap: true,
   enableVisualLocks: false,
-  groups: [
-    {
-      id: "executive",
-      label: "Executive & HR",
-      perspectives: [
-        { id: "exec-overview", label: "Campaign Overview" },
-        { id: "ee-campaign-results", label: "Detailed Results" },
-        { id: "ee-historical-report", label: "Detailed History" },
-        { id: "exec-location", label: "Heat Maps" },
-        { id: "ee-location-comparison", label: "Brand Comparison" },
-        { id: "ee-department-comparison", label: "Job / Department Comparison" },
-        { id: "ee-supervisor-comparison", label: "Supervisor Comparison" },
-        { id: "ee-enps", label: "ENPS" },
-        { id: "hr-open-text", label: "Open Text" },
-      ],
-    },
-    {
-      id: "department",
-      label: "Brand",
-      perspectives: [
-        { id: "ee-brand-report", label: "Brand Report" },
-        { id: "hr-supervisor", label: "Supervisor Reports" },
-        { id: "ee-department-report", label: "Job Category Report" },
-        { id: "ee-unit-department-report", label: "Department Report" },
-        { id: "ee-enps", label: "ENPS" },
-        { id: "ee-brand-open-text", label: "Open Text" },
-      ],
-    },
-  ],
+  groups: CSG_EMPLOYEE_EXPERIENCE_GROUPS as GroupDef[],
   executivePerspectives: new Set<PerspectiveId>([
     "exec-overview",
     "exec-location",
@@ -254,12 +243,17 @@ const CSG_SCOPE: EmployeeExperienceClientScope = {
     "ee-supervisor-comparison": "Supervisor Comparison",
     "ee-historical-report": "Detailed History",
     "hr-index-dive": "Index Deep Dive",
-    "hr-supervisor": "Supervisor Reports",
+    "hr-supervisor": "Supervisor Report",
     "hr-open-text": "Open Text",
     "dept-scorecard": "Department Scorecard",
     "ee-brand-report": "Brand Report",
     "ee-brand-open-text": "Open Text",
-    "ee-segment-breakdown": "Basin Breakdown",
+    "ee-segment-breakdown": "Brand Breakdown",
+    "ee-division-breakdown": "Division Breakdown",
+    "ee-department-breakdown": "Department Breakdown",
+    "ee-role-breakdown": "Job Category Breakdown",
+    "ee-supervisor-breakdown": "Supervisor Breakdown",
+    "ee-autosep-breakdown": "AutoSEP Breakdown",
     "ee-department-report": "Job Category Report",
     "ee-unit-department-report": "Department Report",
     "ee-autosep-report": "AutoSEP Report",
@@ -277,59 +271,7 @@ const DWS_SCOPE: EmployeeExperienceClientScope = {
   showJobCategoryHeatmap: false,
   showTenureHeatmap: false,
   enableVisualLocks: true,
-  groups: [
-    {
-      id: "executive",
-      label: "Executive & HR",
-      perspectives: [
-        { id: "exec-overview", label: "Campaign Overview" },
-        { id: "ee-campaign-results", label: "Detailed Results" },
-        { id: "ee-historical-report", label: "Detailed History" },
-        { id: "exec-location", label: "Heat Maps" },
-        { id: "hr-open-text", label: "Open Text" },
-      ],
-    },
-    {
-      id: "division",
-      label: "Division",
-      perspectives: [
-        { id: "ee-division-report", label: "Division Report" },
-        { id: "ee-division-comparison", label: "Division Comparison" },
-      ],
-    },
-    {
-      id: "basin",
-      label: "Basin",
-      perspectives: [
-        { id: "ee-brand-report", label: "Basin Report" },
-        { id: "ee-location-comparison", label: "Basin Comparison" },
-      ],
-    },
-    {
-      id: "dept-group",
-      label: "Department",
-      perspectives: [
-        { id: "ee-unit-department-report", label: "Department Report" },
-        { id: "ee-department-comparison", label: "Department Comparison" },
-      ],
-    },
-    {
-      id: "role-group",
-      label: "Role",
-      perspectives: [
-        { id: "ee-department-report", label: "Role Report" },
-        { id: "ee-role-comparison", label: "Role Comparison" },
-      ],
-    },
-    {
-      id: "supervisor-group",
-      label: "Supervisor",
-      perspectives: [
-        { id: "hr-supervisor", label: "Supervisor Reports" },
-        { id: "ee-supervisor-comparison", label: "Supervisor Comparison" },
-      ],
-    },
-  ],
+  groups: DWS_EMPLOYEE_EXPERIENCE_GROUPS as GroupDef[],
   executivePerspectives: new Set<PerspectiveId>([
     "exec-overview",
     "exec-location",
@@ -346,6 +288,12 @@ const DWS_SCOPE: EmployeeExperienceClientScope = {
     "ee-campaign-results",
     "exec-location",
     "ee-supervisor-comparison",
+    // Comparison pages move the index selector inline beside the bar chart
+    // (index-rail shell), so the shared executive rail hides its Index section.
+    "ee-location-comparison",
+    "ee-department-comparison",
+    "ee-role-comparison",
+    "ee-division-comparison",
   ]),
   executiveWithoutBrandFilter: new Set<PerspectiveId>([
     "exec-overview",
@@ -367,12 +315,17 @@ const DWS_SCOPE: EmployeeExperienceClientScope = {
     "ee-supervisor-comparison": "Supervisor Comparison",
     "ee-historical-report": "Detailed History",
     "hr-index-dive": "Index Deep Dive",
-    "hr-supervisor": "Supervisor Reports",
+    "hr-supervisor": "Supervisor Report",
     "hr-open-text": "Open Text",
     "dept-scorecard": "Department Scorecard",
     "ee-brand-report": "Basin Report",
     "ee-brand-open-text": "Open Text",
     "ee-segment-breakdown": "Basin Breakdown",
+    "ee-division-breakdown": "Division Breakdown",
+    "ee-department-breakdown": "Department Breakdown",
+    "ee-role-breakdown": "Role Breakdown",
+    "ee-supervisor-breakdown": "Supervisor Breakdown",
+    "ee-autosep-breakdown": "AutoSEP Breakdown",
     "ee-department-report": "Role Report",
     "ee-unit-department-report": "Department Report",
     "ee-autosep-report": "AutoSEP Report",
@@ -390,58 +343,7 @@ const DWS_FIELD_SCOPE: EmployeeExperienceClientScope = {
   showJobCategoryHeatmap: true,
   showTenureHeatmap: false,
   enableVisualLocks: true,
-  groups: [
-    {
-      id: "executive",
-      label: "Executive & HR",
-      perspectives: [
-        { id: "exec-overview", label: "Campaign Overview" },
-        { id: "ee-campaign-results", label: "Detailed Results" },
-        { id: "ee-historical-report", label: "Detailed History" },
-        { id: "exec-location", label: "Heat Maps" },
-        { id: "hr-open-text", label: "Open Text" },
-      ],
-    },
-    {
-      id: "basin",
-      label: "Basin",
-      perspectives: [
-        { id: "ee-brand-report", label: "Basin Report" },
-        { id: "ee-location-comparison", label: "Basin Comparison" },
-      ],
-    },
-    {
-      id: "dept-group",
-      label: "Department",
-      perspectives: [
-        { id: "ee-unit-department-report", label: "Department Report" },
-        { id: "ee-department-comparison", label: "Department Comparison" },
-      ],
-    },
-    {
-      id: "role-group",
-      label: "Role",
-      perspectives: [
-        { id: "ee-department-report", label: "Job Category Report" },
-        { id: "ee-role-comparison", label: "Role Comparison" },
-      ],
-    },
-    {
-      id: "supervisor-group",
-      label: "Supervisor",
-      perspectives: [
-        { id: "hr-supervisor", label: "Supervisor Reports" },
-        { id: "ee-supervisor-comparison", label: "Supervisor Comparison" },
-      ],
-    },
-    {
-      id: "autosep-group",
-      label: "AutoSEP",
-      perspectives: [
-        { id: "ee-autosep-report", label: "AutoSEP Report" },
-      ],
-    },
-  ],
+  groups: DWS_FIELD_EMPLOYEE_EXPERIENCE_GROUPS as GroupDef[],
   executivePerspectives: new Set<PerspectiveId>([
     "exec-overview",
     "exec-location",
@@ -481,12 +383,17 @@ const DWS_FIELD_SCOPE: EmployeeExperienceClientScope = {
     "ee-supervisor-comparison": "Supervisor Comparison",
     "ee-historical-report": "Detailed History",
     "hr-index-dive": "Index Deep Dive",
-    "hr-supervisor": "Supervisor Reports",
+    "hr-supervisor": "Supervisor Report",
     "hr-open-text": "Open Text",
     "dept-scorecard": "Department Scorecard",
     "ee-brand-report": "Basin Report",
     "ee-brand-open-text": "Open Text",
     "ee-segment-breakdown": "Basin Breakdown",
+    "ee-division-breakdown": "Division Breakdown",
+    "ee-department-breakdown": "Department Breakdown",
+    "ee-role-breakdown": "Job Category Breakdown",
+    "ee-supervisor-breakdown": "Supervisor Breakdown",
+    "ee-autosep-breakdown": "AutoSEP Breakdown",
     "ee-department-report": "Job Category Report",
     "ee-unit-department-report": "Department Report",
     "ee-autosep-report": "AutoSEP Report",
@@ -2144,14 +2051,34 @@ export function DwsEmployeeExperienceDashboardClient({
     [data.meta.organizationName]
   );
   const searchParams = useSearchParams();
-  // Effective redesign flag: explicit prop OR ?layout=redesign on the URL. The
-  // gate below also requires clientScope.key === "dws-field", so no other
-  // dashboard is affected regardless of the flag.
-  const redesignActive = redesignLayout || searchParams?.get("layout") === "redesign";
+  // Effective redesign flag: explicit prop OR ?layout=redesign on the URL, and
+  // always-on for the production employee-experience scopes (CSG + both DWS
+  // scopes), which now use the redesigned index-rail shell.
+  const redesignActive =
+    redesignLayout ||
+    searchParams?.get("layout") === "redesign" ||
+    clientScope.key === "csg" ||
+    clientScope.key === "dws" ||
+    clientScope.key === "dws-field";
+  // The redesign surface treatment (off-white canvas, no gradient hero box,
+  // softened borders + doubled shadow, vertical section labels) is part of the
+  // redesign itself — not a per-client theme — so it's on wherever the redesign
+  // shell is active.
+  const useRedesignSurfaceTint = redesignActive;
+  const filterStoreBase = buildDashboardFilterStoreKey([
+    "ee",
+    clientScope.key,
+    dashboardInstanceId,
+  ]);
+  const perspectiveFilterKey = (perspectiveId: string) =>
+    buildDashboardFilterStoreKey([filterStoreBase, perspectiveId]);
+  const shellFilterKey = buildDashboardFilterStoreKey([filterStoreBase, "__shell"]);
   const [activeGroup, setActiveGroup] = useState<GroupId>("executive");
   const [activePersp, setActivePersp] = useState<PerspectiveId>("exec-overview");
-  const [current, setCurrent] = useState(() => resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN));
-  const [prior, setPrior] = useState(() => {
+  const [current, setCurrent] = usePersistedDashboardFilter(shellFilterKey, "current", () =>
+    resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN)
+  );
+  const [prior, setPrior] = usePersistedDashboardFilter(shellFilterKey, "prior", () => {
     const preferredPrior = data.meta.campaigns.find((campaign) => campaign.toLowerCase() === PREFERRED_PRIOR_CAMPAIGN.toLowerCase());
     if (preferredPrior) return preferredPrior;
     return [...data.meta.campaigns].reverse().find((campaign) => campaign !== resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN)) ?? "";
@@ -2163,6 +2090,11 @@ export function DwsEmployeeExperienceDashboardClient({
   const [idxFilters, setIdxFilters] = useState<Record<string, string>>({ location: "", fieldCategory: "" });
   const [supFilters, setSupFilters] = useState<Record<string, string>>({ location: "", department: "" });
   const [selectedSup, setSelectedSup] = useState("");
+  const [departmentReportBrand, setDepartmentReportBrand] = usePersistedDashboardFilter(
+    perspectiveFilterKey("ee-unit-department-report"),
+    "brand",
+    () => ""
+  );
   const [openTextBrand, setOpenTextBrand] = useState("");
   const [openTextField, setOpenTextField] = useState<OpenTextField>("strengths");
   const [selectedDept, setSelectedDept] = useState("");
@@ -2175,6 +2107,7 @@ export function DwsEmployeeExperienceDashboardClient({
   const [execTenure, setExecTenure] = useState("");
   const [execDepartment, setExecDepartment] = useState("");
   const [execJobCategory, setExecJobCategory] = useState("");
+  const [execDivision, setExecDivision] = useState("");
   const [execSupervisorDepartment, setExecSupervisorDepartment] = useState("");
   const [execSupervisorJobCategory, setExecSupervisorJobCategory] = useState("");
   const [execComparisonJobCategory, setExecComparisonJobCategory] = useState("");
@@ -2202,21 +2135,69 @@ export function DwsEmployeeExperienceDashboardClient({
     // Nav order within the group: Report, Breakdown — a thin divider — then
     // Comparison, since Comparison is a fundamentally different lens (across
     // units) than the Report/Breakdown pair (deep dive into one unit).
-    if (redesignActive && clientScope.key === "dws-field") {
+    if (redesignActive && (clientScope.key === "dws-field" || clientScope.key === "dws")) {
+      // Each unit group gets a Breakdown spliced in right after its Report, with
+      // a thin divider before the Comparison (the different-lens item). Division
+      // exists only on DWS office; AutoSEP only on DWS field (and has no
+      // comparison, so no divider). Supervisor gets Report → Breakdown → Comparison
+      // like the other unit groups.
+      const breakdownByGroup: Record<
+        string,
+        { id: PerspectiveId; label: string; afterReportId: PerspectiveId; comparisonId?: PerspectiveId }
+      > = {
+        division: {
+          id: "ee-division-breakdown",
+          label: "Division Breakdown",
+          afterReportId: "ee-division-report",
+          comparisonId: "ee-division-comparison",
+        },
+        basin: {
+          id: "ee-segment-breakdown",
+          label: `${clientScope.brandLabel} Breakdown`,
+          afterReportId: "ee-brand-report",
+          comparisonId: "ee-location-comparison",
+        },
+        "dept-group": {
+          id: "ee-department-breakdown",
+          label: "Department Breakdown",
+          afterReportId: "ee-unit-department-report",
+          comparisonId: "ee-department-comparison",
+        },
+        "role-group": {
+          id: "ee-role-breakdown",
+          label: `${clientScope.jobCategoryLabel} Breakdown`,
+          afterReportId: "ee-department-report",
+          comparisonId: "ee-role-comparison",
+        },
+        "supervisor-group": {
+          id: "ee-supervisor-breakdown",
+          label: "Supervisor Breakdown",
+          afterReportId: "hr-supervisor",
+          comparisonId: "ee-supervisor-comparison",
+        },
+        "autosep-group": {
+          id: "ee-autosep-breakdown",
+          label: "AutoSEP Breakdown",
+          afterReportId: "ee-autosep-report",
+        },
+      };
       return base.map((group) => {
-        if (group.id !== "basin") return group;
-        const perspectives = group.perspectives.map((perspective) =>
-          perspective.id === "ee-location-comparison"
-            ? { ...perspective, dividerBefore: true }
-            : perspective
-        );
-        const reportIndex = perspectives.findIndex((perspective) => perspective.id === "ee-brand-report");
+        const config = breakdownByGroup[group.id];
+        if (!config) return group;
+        const perspectives = config.comparisonId
+          ? group.perspectives.map((perspective) =>
+              perspective.id === config.comparisonId
+                ? { ...perspective, dividerBefore: true }
+                : perspective
+            )
+          : group.perspectives;
+        const reportIndex = perspectives.findIndex((perspective) => perspective.id === config.afterReportId);
         const insertAt = reportIndex >= 0 ? reportIndex + 1 : perspectives.length;
         return {
           ...group,
           perspectives: [
             ...perspectives.slice(0, insertAt),
-            { id: "ee-segment-breakdown" as PerspectiveId, label: "Basin Breakdown" },
+            { id: config.id, label: config.label },
             ...perspectives.slice(insertAt),
           ],
         };
@@ -2252,10 +2233,16 @@ export function DwsEmployeeExperienceDashboardClient({
   const tenureOpts = useMemo(() => uniq(curR, "tenure", min), [curR, min]);
   const deptOpts = useMemo(() => uniq(curR, "department", min), [curR, min]);
   const jobCategoryOpts = useMemo(() => uniq(curR, "fieldCategory", min), [curR, min]);
+  const divisionOpts = useMemo(
+    () =>
+      uniq(curR, "division", min).filter(
+        (value) => value.trim() && !value.toLowerCase().includes("unknown")
+      ),
+    [curR, min]
+  );
   const isFieldScope = clientScope.key === "dws-field";
-  // Index-rail report/comparison layout: enabled for both DWS instances (field +
-  // office). CSG intentionally keeps the classic layout.
-  const useIndexRailLayout = clientScope.key === "dws-field" || clientScope.key === "dws";
+  // Index-rail report/comparison layout: enabled whenever redesign shell is on.
+  const useIndexRailLayout = redesignActive;
   // Field-only score scale (50–75). Other dashboards keep the default 60–85 scale.
   const reportScaleOption = isFieldScope ? FIELD_REPORT_SCALE : undefined;
   const eeScale = isFieldScope ? FIELD_RAW_SCALE : EE;
@@ -2295,8 +2282,15 @@ export function DwsEmployeeExperienceDashboardClient({
     [campaignResultsData, logoUrl, current, reportScaleOption]
   );
   const reportBundle = useMemo(
-    () => buildEmployeeExperienceReportBundle(data, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
-    [data, logoUrl, current, reportScaleOption]
+    () =>
+      buildEmployeeExperienceReportBundle(data, {
+        logoUrl,
+        campaignLabel: current,
+        scale: reportScaleOption,
+        // DWS office Supervisor report shows only the Supervisor index.
+        supervisorSingleIndex: clientScope.key === "dws",
+      }),
+    [data, logoUrl, current, reportScaleOption, clientScope.key]
   );
   // AutoSEP partner respondents are excluded from `data` org-wide; this bundle is built
   // solely from the carried partner set for the dedicated AutoSEP report. Minimum segment
@@ -2313,6 +2307,43 @@ export function DwsEmployeeExperienceDashboardClient({
       ),
     [data, logoUrl, current, reportScaleOption]
   );
+  // Segment Breakdown data is heavy and only one is visible at a time, so it is
+  // computed on demand for the active breakdown perspective only (never baked
+  // into the shared bundles). Returns null for every non-breakdown perspective.
+  const activeBreakdown = useMemo(() => {
+    const options = { logoUrl, campaignLabel: current, scale: reportScaleOption };
+    // Scope-specific segment dimensions for breakdown pages.
+    const dims =
+      clientScope.key === "dws"
+        ? OFFICE_BREAKDOWN_DIMENSIONS
+        : clientScope.key === "csg"
+          ? CSG_BREAKDOWN_DIMENSIONS
+          : undefined;
+    switch (activePersp) {
+      case "ee-segment-breakdown":
+        return projectBreakdownSet(data, options, "basin", dims);
+      case "ee-division-breakdown":
+        return projectBreakdownSet(data, options, "division", dims);
+      case "ee-department-breakdown":
+        return projectBreakdownSet(data, options, "department", dims);
+      case "ee-role-breakdown":
+        return projectBreakdownSet(data, options, clientScope.key === "dws" ? "leadership" : "jobCategory", dims);
+      case "ee-supervisor-breakdown":
+        return projectBreakdownSet(data, options, "supervisor", dims);
+      case "ee-autosep-breakdown":
+        return projectBreakdownSet(
+          {
+            ...data,
+            respondents: data.partnerRespondents ?? [],
+            settings: { ...data.settings, minimumSegmentSize: 1 },
+          },
+          options,
+          "autosep"
+        );
+      default:
+        return null;
+    }
+  }, [activePersp, data, logoUrl, current, reportScaleOption, clientScope.key]);
   const execBrandFilteredData = useMemo(
     () => ({
       ...data,
@@ -2332,12 +2363,14 @@ export function DwsEmployeeExperienceDashboardClient({
         {
           ...data,
           respondents: data.respondents.filter(
-            (respondent) => !execLocation || respondent.location === execLocation
+            (respondent) =>
+              (!execLocation || respondent.location === execLocation) &&
+              (!execDivision || respondent.division === execDivision)
           ),
         },
         { logoUrl, campaignLabel: current, scale: reportScaleOption }
       ),
-    [data, logoUrl, current, execLocation, reportScaleOption]
+    [data, logoUrl, current, execLocation, execDivision, reportScaleOption]
   );
   const supervisorComparisonData = useMemo(
     () => ({
@@ -2391,7 +2424,42 @@ export function DwsEmployeeExperienceDashboardClient({
   const derivedExecCompId = executiveComparisons.find((comparison) => comparison.label === prior)?.id;
   const activeExecCompId = execCompId || derivedExecCompId || defaultComparisonId(executiveComparisons);
   const activeExecIndexId = execIndexId;
-  const brandLocations = locationOpts;
+  const filterOptionsByAllowedValues = (
+    options: string[],
+    perspectiveIds: string[],
+    fieldAliases: readonly string[]
+  ) => {
+    const allowedValues = resolveAllowedValuesForPerspective(
+      portalAccess,
+      perspectiveIds,
+      [...fieldAliases]
+    );
+    if (allowedValues.length === 0) {
+      return options;
+    }
+    const allowedByExact = new Set(allowedValues);
+    const allowedByLower = new Set(allowedValues.map((value) => value.toLowerCase()));
+    return options.filter(
+      (option) => allowedByExact.has(option) || allowedByLower.has(option.toLowerCase())
+    );
+  };
+  const brandLocations = useMemo(
+    () => filterOptionsByAllowedValues(locationOpts, [activePersp], BRAND_FIELD_ALIASES),
+    [locationOpts, activePersp, portalAccess]
+  );
+  const departmentReportBrandOptions = useMemo(
+    () =>
+      filterOptionsByAllowedValues(
+        locationOpts,
+        ["ee-unit-department-report"],
+        BRAND_FIELD_ALIASES
+      ),
+    [locationOpts, portalAccess]
+  );
+  const brandReportUnitOptions = useMemo(
+    () => filterOptionsByAllowedValues(locationOpts, ["ee-brand-report"], BRAND_FIELD_ALIASES),
+    [locationOpts, portalAccess]
+  );
   const activeDepartmentIndex = activeExecIndexId
     ? reportBundle.departmentComparison.indexes.find((index) => index.id === activeExecIndexId)
     : undefined;
@@ -2426,6 +2494,82 @@ export function DwsEmployeeExperienceDashboardClient({
     }
   }, [availableGroups, activeGroup, activePersp]);
 
+  const deepLinkAppliedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || !searchParams || availableGroups.length === 0) return;
+
+    const perspectiveParam = searchParams.get("perspective");
+    const campaignParam = searchParams.get("campaign");
+    const priorParam = searchParams.get("prior");
+    const locationParam = searchParams.get("location");
+    const departmentParam = searchParams.get("department");
+    const indexParam = searchParams.get("index");
+    const brandParam = searchParams.get("brand");
+    const supervisorParam = searchParams.get("supervisor");
+
+    const hasDeepLink = Boolean(
+      perspectiveParam ||
+        campaignParam ||
+        priorParam ||
+        locationParam ||
+        departmentParam ||
+        indexParam ||
+        brandParam ||
+        supervisorParam
+    );
+    if (!hasDeepLink) {
+      deepLinkAppliedRef.current = true;
+      return;
+    }
+
+    if (perspectiveParam) {
+      for (const group of availableGroups) {
+        if (group.perspectives.some((perspective) => perspective.id === perspectiveParam)) {
+          setActiveGroup(group.id as GroupId);
+          setActivePersp(perspectiveParam as PerspectiveId);
+          break;
+        }
+      }
+    }
+
+    if (campaignParam) {
+      const match = data.meta.campaigns.find(
+        (campaign) => campaign.toLowerCase() === campaignParam.toLowerCase()
+      );
+      if (match) setCurrent(match);
+    }
+    if (priorParam) {
+      const match = data.meta.campaigns.find(
+        (campaign) => campaign.toLowerCase() === priorParam.toLowerCase()
+      );
+      if (match) setPrior(match);
+    }
+    if (locationParam) {
+      setExecLocation(locationParam);
+      setIdxFilters((prev) => ({ ...prev, location: locationParam }));
+      setHrRankFilters((prev) => ({ ...prev, location: locationParam }));
+      setDepartmentReportBrand(locationParam);
+    }
+    if (departmentParam) {
+      setExecDepartment(departmentParam);
+      setSelectedDept(departmentParam);
+      setSupFilters((prev) => ({ ...prev, department: departmentParam }));
+      setExecComparisonDepartment(departmentParam);
+    }
+    if (indexParam) {
+      setSelectedDim(indexParam);
+      setExecIndexId(indexParam);
+    }
+    if (brandParam) {
+      setOpenTextBrand(brandParam);
+    }
+    if (supervisorParam) {
+      setSelectedSup(supervisorParam);
+    }
+
+    deepLinkAppliedRef.current = true;
+  }, [availableGroups, data.meta.campaigns, searchParams]);
+
   useEffect(() => {
     const preferredCurrent = resolvePreferredCampaign(data.meta.campaigns, PREFERRED_CURRENT_CAMPAIGN);
     if (!current || !data.meta.campaigns.includes(current)) {
@@ -2451,9 +2595,40 @@ export function DwsEmployeeExperienceDashboardClient({
 
   useEffect(() => {
     if (activePersp !== "ee-enps" || activeGroup !== clientScope.brandGroupId) return;
-    if (execLocation || locationOpts.length === 0) return;
-    setExecLocation(locationOpts[0]);
-  }, [activePersp, activeGroup, clientScope.brandGroupId, execLocation, locationOpts]);
+    if (execLocation || brandLocations.length === 0) return;
+    setExecLocation(brandLocations[0]);
+  }, [activePersp, activeGroup, clientScope.brandGroupId, execLocation, brandLocations]);
+
+  useEffect(() => {
+    const hasOption = (options: string[], value: string) =>
+      options.some((option) => option === value || option.toLowerCase() === value.toLowerCase());
+    if (
+      departmentReportBrand &&
+      !hasOption(departmentReportBrandOptions, departmentReportBrand)
+    ) {
+      setDepartmentReportBrand(departmentReportBrandOptions[0] ?? "");
+    }
+    if (execLocation && !hasOption(brandLocations, execLocation)) {
+      setExecLocation(brandLocations[0] ?? "");
+    }
+    if (idxFilters.location && !hasOption(brandLocations, idxFilters.location)) {
+      setIdxFilters((prev) => ({ ...prev, location: brandLocations[0] ?? "" }));
+    }
+    if (supFilters.location && !hasOption(brandLocations, supFilters.location)) {
+      setSupFilters((prev) => ({ ...prev, location: brandLocations[0] ?? "" }));
+    }
+    if (openTextBrand && !hasOption(brandLocations, openTextBrand)) {
+      setOpenTextBrand(brandLocations[0] ?? "");
+    }
+  }, [
+    departmentReportBrand,
+    departmentReportBrandOptions,
+    execLocation,
+    brandLocations,
+    idxFilters.location,
+    supFilters.location,
+    openTextBrand,
+  ]);
 
   // Filter control that renders as a select (fixed rail) or a fully visible
   // pill-button row (redesign pilot's embedded Filters tab) — see FilterField.
@@ -2585,6 +2760,15 @@ export function DwsEmployeeExperienceDashboardClient({
           ))}
         </select>
       </RailSection>
+    ) : activePersp === "ee-historical-report" && divisionOpts.length > 0 ? (
+      <FilterField
+        embedded={embedded}
+        title="Division"
+        value={execDivision}
+        onChange={setExecDivision}
+        options={divisionOpts}
+        allLabel="All divisions"
+      />
     ) : activePersp === "ee-supervisor-comparison" ? (
       <>
         <FilterField embedded={embedded} title="Department" value={execSupervisorDepartment} onChange={setExecSupervisorDepartment} options={deptOpts} allLabel="All departments" />
@@ -2649,10 +2833,10 @@ export function DwsEmployeeExperienceDashboardClient({
       : `Each row is a ${clientScope.brandLabel.toLowerCase()} for the selected index or statement. Delta compares against the selected comparison campaign.`,
     "ee-division-comparison": "Each row is a division for the selected index or statement. Delta compares against the selected comparison campaign.",
     "ee-division-report": "This report compares each division to organization averages by statement and index across selected campaigns.",
-    "ee-supervisor-comparison": "Leadership-only supervisor view. Top chart ranks supervisor current scores, and the heat map shows statement-level current scores by supervisor.",
+    "ee-supervisor-comparison": "Supervisor index only. Top chart ranks supervisor current scores, and the heat map shows statement-level current scores by supervisor.",
     "ee-historical-report": singleCampaign
       ? "Statement-level favorability for the current survey."
-      : "Trend and table views show campaign movement over time. Delta Last compares the latest campaign to the prior campaign.",
+      : "Trend and table views show campaign movement over time. Delta Last compares the selected Current campaign to the Compared To campaign.",
     "ee-enps":
       "ENPS is shown as promoter minus detractor percentage points. For score interpretation in this dashboard, 9-10 is Goal, 7-8 is Acceptable, and 0-6 is Unacceptable.",
     "hr-index-dive": `Select an index to inspect statement-level scores and ${clientScope.brandLabel.toLowerCase()} distribution. Use filters to isolate ${clientScope.brandLabel.toLowerCase()} and work-type patterns.`,
@@ -2662,6 +2846,11 @@ export function DwsEmployeeExperienceDashboardClient({
     "ee-brand-report": `This report compares each ${clientScope.brandLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
     "ee-brand-open-text": `Open text responses are grouped by question type and can be filtered by ${clientScope.brandLabel.toLowerCase()} to isolate themes and language patterns.`,
     "ee-segment-breakdown": `Select an index on the rail to re-score the funnel and heatmap below for every ${clientScope.jobCategoryLabel.toLowerCase()} in the selected ${clientScope.brandLabel.toLowerCase()}.`,
+    "ee-division-breakdown": "Pick a division, then select an index to re-score the sub-segment funnel and statement heatmap within it.",
+    "ee-department-breakdown": "Pick a department, then select an index to re-score the sub-segment funnel and statement heatmap within it.",
+    "ee-role-breakdown": `Pick a ${clientScope.jobCategoryLabel.toLowerCase()}, then select an index to re-score the sub-segment funnel and statement heatmap within it.`,
+    "ee-supervisor-breakdown": "Pick a supervisor, then select an index to re-score the sub-segment funnel and statement heatmap within their team.",
+    "ee-autosep-breakdown": "Select an index to re-score the sub-segment funnel and statement heatmap for the AutoSEP population.",
     "ee-department-report": `This report compares each ${clientScope.jobCategoryLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
     "ee-unit-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
     "ee-autosep-report": "This report covers the AutoSEP partner designation only. AutoSEP is excluded from all other reports and organization-wide scores.",
@@ -2673,16 +2862,6 @@ export function DwsEmployeeExperienceDashboardClient({
     "linear-gradient(90deg,#C8B9B6 0%,#C8B9B6 70%,#DCE8F8 70%,#DCE8F8 90%,#8EA9CC 90%,#8EA9CC 100%)";
   const dashboardScoreLegendGradient =
     "linear-gradient(90deg, #D7B35A 0%, #FFFFFF 50%, #3F5F86 100%)";
-  const enpsScoreLegendTicks = (
-    <div className="relative h-6 text-[10px] font-semibold text-[#6E7E96]">
-      <span className="absolute left-0 top-0 -translate-x-1/2">0</span>
-      <span className="absolute top-0 -translate-x-1/2" style={{ left: "70%" }}>6</span>
-      <span className="absolute top-0 -translate-x-1/2" style={{ left: "90%" }}>8</span>
-      <span className="absolute right-0 top-0 translate-x-1/2">10</span>
-      <span className="absolute top-3 h-2 w-px bg-[#8798AA]" style={{ left: "70%" }} />
-      <span className="absolute top-3 h-2 w-px bg-[#8798AA]" style={{ left: "90%" }} />
-    </div>
-  );
   const enpsScoreLegendBands = (
     <div className="space-y-1 text-[10.5px] font-semibold text-[#6E7E96]">
       <p>0-6 Unacceptable</p>
@@ -2701,7 +2880,6 @@ export function DwsEmployeeExperienceDashboardClient({
           scoreLegendGradient={isEnpsPerspective ? enpsScoreLegendGradient : dashboardScoreLegendGradient}
           scoreLegendMinLabel={isEnpsPerspective ? "0" : undefined}
           scoreLegendMaxLabel={isEnpsPerspective ? "10" : undefined}
-          scoreLegendTicks={isEnpsPerspective ? enpsScoreLegendTicks : undefined}
           scoreLegendBands={isEnpsPerspective ? enpsScoreLegendBands : undefined}
         />
         {dashboardInstanceId ? (
@@ -2733,7 +2911,6 @@ export function DwsEmployeeExperienceDashboardClient({
         scoreLegendGradient={isEnpsPerspective ? enpsScoreLegendGradient : dashboardScoreLegendGradient}
         scoreLegendMinLabel={isEnpsPerspective ? "0" : undefined}
         scoreLegendMaxLabel={isEnpsPerspective ? "10" : undefined}
-        scoreLegendTicks={isEnpsPerspective ? enpsScoreLegendTicks : undefined}
         scoreLegendBands={isEnpsPerspective ? enpsScoreLegendBands : undefined}
       />
       {dashboardInstanceId ? (
@@ -2784,7 +2961,7 @@ export function DwsEmployeeExperienceDashboardClient({
       {(activePersp === "hr-index-dive") && (
         <FilterRail
           filters={[
-            { id: "location", label: clientScope.brandLabel, value: idxFilters.location, options: locationOpts },
+            { id: "location", label: clientScope.brandLabel, value: idxFilters.location, options: brandLocations },
             { id: "fieldCategory", label: clientScope.jobCategoryLabel, value: idxFilters.fieldCategory, options: workTypeOpts },
           ]}
           onChange={(id, v) => setIdxFilters((f) => ({ ...f, [id]: v }))}
@@ -2794,7 +2971,7 @@ export function DwsEmployeeExperienceDashboardClient({
       {(activePersp === "hr-supervisor") && (
         <FilterRail
           filters={[
-            { id: "location", label: clientScope.brandLabel, value: supFilters.location, options: locationOpts },
+            { id: "location", label: clientScope.brandLabel, value: supFilters.location, options: brandLocations },
             { id: "department", label: "Department", value: supFilters.department, options: deptOpts },
           ]}
           onChange={(id, v) => setSupFilters((f) => ({ ...f, [id]: v }))}
@@ -2865,7 +3042,7 @@ export function DwsEmployeeExperienceDashboardClient({
               <span className="text-xs font-medium text-text-secondary">Brand / Location</span>
               <select value={openTextBrand} onChange={(e) => setOpenTextBrand(e.target.value)} className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-sm text-text-primary focus:border-nsp-blue-300 focus:outline-none">
                 <option value="">All Brands</option>
-                {locationOpts.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
+                {brandLocations.map((brand) => <option key={brand} value={brand}>{brand}</option>)}
               </select>
             </div>
           </div>
@@ -2923,7 +3100,7 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin surface treatment "1b" is now applied dashboard-wide
             // across every DWS Field perspective, not just the former
             // "Basin group" trio — see the shared note on ee-brand-report.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-department-comparison":
@@ -2948,6 +3125,7 @@ export function DwsEmployeeExperienceDashboardClient({
             showStatementHeatmap={false}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         ) : (
           <EEDepartmentComparison
@@ -2973,7 +3151,7 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin surface treatment "1b" is now applied dashboard-wide
             // across every DWS Field perspective; this branch is also
             // reused by CSG, so the scope check keeps CSG unaffected.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-role-comparison":
@@ -2998,7 +3176,7 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin surface treatment "1b" is now applied dashboard-wide
             // across every DWS Field perspective; this case is also reused
             // by CSG/DWS, so the scope check keeps them unaffected.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-location-comparison":
@@ -3023,7 +3201,7 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin group surface treatment "1b" — this is Basin Comparison
             // specifically; Division Comparison below reuses this exact
             // component but stays unaffected.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-division-comparison":
@@ -3045,10 +3223,11 @@ export function DwsEmployeeExperienceDashboardClient({
             fieldLayout={useIndexRailLayout}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-supervisor-comparison":
-        return isFieldScope ? (
+        return isFieldScope || clientScope.key === "dws" ? (
           <EEDepartmentComparison
             data={reportBundle.supervisorComparison}
             benchmarkLabel={clientScope.benchmarkLabel}
@@ -3066,10 +3245,8 @@ export function DwsEmployeeExperienceDashboardClient({
             fieldLayout
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
-            // This branch only ever renders when isFieldScope is true, so
-            // redesignActive alone is enough to scope this — see the
-            // matching note on ee-segment-breakdown below.
-            basinReportSurface={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
+            verticalHeatmapHeaders
           />
         ) : (
           <EESupervisorComparison
@@ -3078,6 +3255,8 @@ export function DwsEmployeeExperienceDashboardClient({
             dashboardInstanceId={dashboardInstanceId}
             canEditGuidance={canEditGuidance}
             executiveRail={executiveRail}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "exec-overview":
@@ -3094,17 +3273,19 @@ export function DwsEmployeeExperienceDashboardClient({
                 tinted canvas. */}
             <div
               className="fr-persp-main"
-              style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0, background: redesignActive && clientScope.key === "dws-field" ? "#F4F4EF" : "#fff" }}
+              style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0, background: useRedesignSurfaceTint ? "#F4F4EF" : "#fff" }}
             >
               <EEHistoricalReport
+                filterPersistenceKey={perspectiveFilterKey(activePersp)}
                 data={reportBundle.historicalReport}
                 embedded
                 variant="overview"
                 currentCampaignLabel={current}
+                comparisonCampaignLabel={prior || undefined}
                 selectedIndexId={activeExecIndexId || undefined}
                 chromeless={redesignActive}
                 headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
-                basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+                basinReportSurface={useRedesignSurfaceTint}
               />
               
             </div>
@@ -3118,7 +3299,7 @@ export function DwsEmployeeExperienceDashboardClient({
             {/* <main> isn't covered by the shell's div-only "force white/tint"
                 selectors, so its background is made conditional here too —
                 see the matching note on the "fr-persp-main" wrapper above. */}
-            <main style={{ ...EE_PERSPECTIVE_MAIN_STYLE, background: redesignActive && clientScope.key === "dws-field" ? "#F4F4EF" : "#fff" }}>
+            <main style={{ ...EE_PERSPECTIVE_MAIN_STYLE, background: useRedesignSurfaceTint ? "#F4F4EF" : "#fff" }}>
               <ExecLocation
                 data={data}
                 current={current}
@@ -3144,16 +3325,18 @@ export function DwsEmployeeExperienceDashboardClient({
             {executiveRail}
             <div
               className="fr-persp-main"
-              style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0, background: redesignActive && clientScope.key === "dws-field" ? "#F4F4EF" : "#fff" }}
+              style={{ ...EE_PERSPECTIVE_MAIN_STYLE, padding: 0, background: useRedesignSurfaceTint ? "#F4F4EF" : "#fff" }}
             >
               <EEHistoricalReport
+                filterPersistenceKey={perspectiveFilterKey(activePersp)}
                 data={historyFilteredBundle.historicalReport}
                 embedded
                 currentCampaignLabel={current}
+                comparisonCampaignLabel={prior || undefined}
                 selectedIndexId={activeExecIndexId || undefined}
                 chromeless={redesignActive}
                 headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
-                basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+                basinReportSurface={useRedesignSurfaceTint}
               />
             </div>
             {fixedInfoRail}
@@ -3179,8 +3362,12 @@ export function DwsEmployeeExperienceDashboardClient({
       case "hr-index-dive":
         return <HrIndexDive data={data} current={current} prior={prior} selectedDim={selectedDim} filters={idxFilters} />;
       case "hr-supervisor":
-        return isFieldScope ? (
+        // Both DWS scopes render Supervisor as a normal styled segment report
+        // (all indexes, all statements, index-rail shell) — just without a
+        // breakdown. CSG keeps the classic supervisor report.
+        return isFieldScope || clientScope.key === "dws" ? (
           <EEDepartmentReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="supervisor-segment-report"
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
@@ -3190,14 +3377,21 @@ export function DwsEmployeeExperienceDashboardClient({
             benchmarkLabel={clientScope.benchmarkLabel}
             unitLabel="Supervisor"
             reportHeading="SUPERVISOR REPORT"
-            enableVisualLocks={false}
+            enableVisualLocks={clientScope.key === "dws" ? clientScope.enableVisualLocks : false}
             fieldLayout
-            // This branch only ever renders when isFieldScope is true, so
-            // redesignActive alone is enough to scope this.
-            basinReportSurface={redesignActive}
+            compact={clientScope.key === "dws"}
+            hideIndexSummary
+            basinReportSurface={useRedesignSurfaceTint}
           />
         ) : (
-          <EESupervisorReport data={hrSupervisorReport} benchmarkLabel={clientScope.benchmarkLabel} />
+          <EESupervisorReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
+            data={hrSupervisorReport}
+            benchmarkLabel={clientScope.benchmarkLabel}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+          />
         );
       case "hr-open-text":
         return (
@@ -3207,7 +3401,7 @@ export function DwsEmployeeExperienceDashboardClient({
             brandFilter={openTextBrand}
             fieldType={openTextField}
             fields={openTextFields}
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-brand-open-text":
@@ -3217,6 +3411,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-brand-report":
         return (
           <EEDepartmentReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key={`${clientScope.key}-brand-report`}
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
@@ -3227,7 +3422,7 @@ export function DwsEmployeeExperienceDashboardClient({
             // Field pilot's "Basin Report" ONLY when clientScope is
             // "dws-field"; other client scopes reuse this same case for
             // their own (unaffected) Brand Report.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
             data={reportBundle.brandReport}
             benchmarkLabel={clientScope.benchmarkLabel}
             unitLabel={clientScope.brandLabel}
@@ -3237,27 +3432,116 @@ export function DwsEmployeeExperienceDashboardClient({
             exportClientLabel={data.meta.organizationName}
             fieldLayout={useIndexRailLayout}
             compact={clientScope.key === "dws"}
+            allowedDepartmentIds={
+              brandReportUnitOptions.length > 0
+                ? reportBundle.brandReport.departments
+                    .filter((department) =>
+                      brandReportUnitOptions.some(
+                        (brand) =>
+                          brand === department.name ||
+                          brand.toLowerCase() === department.name.toLowerCase()
+                      )
+                    )
+                    .map((department) => department.id)
+                : undefined
+            }
           />
         );
       case "ee-segment-breakdown":
-        return clientScope.key === "dws-field" ? (
+        return clientScope.key === "dws-field" || clientScope.key === "dws" || clientScope.key === "csg" ? (
           <EESegmentBreakdown
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="segment-breakdown"
-            data={reportBundle.segmentBreakdowns}
+            data={activeBreakdown ?? []}
             unitLabel={clientScope.brandLabel}
+            campaignValue={clientScope.key === "csg" ? current : undefined}
+            campaignOptions={clientScope.key === "csg" ? data.meta.campaigns : undefined}
+            onCampaignChange={clientScope.key === "csg" ? setCurrent : undefined}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             chromeless={redesignActive}
-            // Basin group surface treatment "1b" — see the matching note on
-            // ee-brand-report below; Basin Breakdown is dws-field-only so
-            // redesignActive alone is enough to scope this.
-            basinReportSurface={redesignActive}
+            // Basin surface tint is a DWS-field aesthetic only; DWS office keeps
+            // the plain white surface like its other reports.
+            basinReportSurface={useRedesignSurfaceTint}
+          />
+        ) : null;
+      case "ee-division-breakdown":
+        return clientScope.key === "dws" ? (
+          <EESegmentBreakdown
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
+            key="division-breakdown"
+            data={activeBreakdown ?? []}
+            unitLabel="Division"
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
+          />
+        ) : null;
+      case "ee-department-breakdown":
+        return clientScope.key === "dws-field" || clientScope.key === "dws" ? (
+          <EESegmentBreakdown
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
+            key="department-breakdown"
+            data={activeBreakdown ?? []}
+            unitLabel="Department"
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
+          />
+        ) : null;
+      case "ee-role-breakdown":
+        return clientScope.key === "dws-field" || clientScope.key === "dws" ? (
+          <EESegmentBreakdown
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
+            key="role-breakdown"
+            // Unit is leadership for DWS office, job category for field — resolved
+            // in the `activeBreakdown` memo.
+            data={activeBreakdown ?? []}
+            unitLabel={clientScope.jobCategoryLabel}
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
+          />
+        ) : null;
+      case "ee-supervisor-breakdown":
+        return clientScope.key === "dws-field" || clientScope.key === "dws" ? (
+          <EESegmentBreakdown
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
+            key="supervisor-breakdown"
+            data={activeBreakdown ?? []}
+            unitLabel="Supervisor"
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
+          />
+        ) : null;
+      case "ee-autosep-breakdown":
+        return clientScope.key === "dws-field" ? (
+          <EESegmentBreakdown
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
+            key="autosep-breakdown"
+            data={activeBreakdown ?? []}
+            unitLabel="AutoSEP"
+            filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
+            titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
+            headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
+            chromeless={redesignActive}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         ) : null;
       case "ee-department-report":
         return (
           <EEDepartmentReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key={`${clientScope.key}-job-category-report`}
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
@@ -3273,12 +3557,13 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin surface treatment "1b" is now applied dashboard-wide
             // across every DWS Field perspective; this case is also reused
             // by DWS/CSG, so the scope check keeps them unaffected.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-division-report":
         return (
           <EEDepartmentReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="division-report"
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
@@ -3294,18 +3579,26 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin surface treatment "1b" is now applied dashboard-wide
             // across every DWS Field perspective; this case is also reused
             // by DWS/CSG, so the scope check keeps them unaffected.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-unit-department-report":
         return (
           <EEDepartmentReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="department-report"
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             data={reportBundle.departmentReport}
+            allowedDepartmentIds={
+              clientScope.key === "csg" && departmentReportBrand
+                ? reportBundle.departmentReport.departments
+                    .filter((department) => department.location === departmentReportBrand)
+                    .map((department) => department.id)
+                : undefined
+            }
             benchmarkLabel={clientScope.benchmarkLabel}
             unitLabel="Department"
             reportHeading="DEPARTMENT REPORT"
@@ -3315,12 +3608,13 @@ export function DwsEmployeeExperienceDashboardClient({
             // Basin surface treatment "1b" is now applied dashboard-wide
             // across every DWS Field perspective; this case is also reused
             // by DWS/CSG, so the scope check keeps them unaffected.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       case "ee-autosep-report":
         return (
           <EEDepartmentReport
+            filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="autosep-report"
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
@@ -3334,12 +3628,12 @@ export function DwsEmployeeExperienceDashboardClient({
             fieldLayout={clientScope.key === "dws-field"}
             // Autosep is dws-field-only (fieldLayout is only ever true for
             // that scope), so redesignActive alone is enough to scope this.
-            basinReportSurface={redesignActive && clientScope.key === "dws-field"}
+            basinReportSurface={useRedesignSurfaceTint}
           />
         );
       default: return null;
     }
-  }, [activePersp, activeGroup, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, openTextFields, selectedDept, deptOpts, jobCategoryOpts, reportBundle, autosepBundle, execBrandFilteredBundle, campaignResultsBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDeptStatementId, execBrandStatementId, execComparisonJobCategory, execComparisonDepartment, supervisorComparisonReport, hrSupervisorReport, brandEnpsReport, availableGroups.length, clientScope, enpsDescriptorText, redesignActive]);
+  }, [activePersp, activeGroup, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, openTextFields, selectedDept, deptOpts, jobCategoryOpts, reportBundle, autosepBundle, activeBreakdown, execBrandFilteredBundle, campaignResultsBundle, historyFilteredBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDivision, execDeptStatementId, execBrandStatementId, execComparisonJobCategory, execComparisonDepartment, supervisorComparisonReport, hrSupervisorReport, brandEnpsReport, availableGroups.length, clientScope, enpsDescriptorText, redesignActive, departmentReportBrand, brandReportUnitOptions, departmentReportBrandOptions, brandLocations]);
 
   const exportFilename = buildDashboardExportFilename({
     client: clientScope.key,
@@ -3349,9 +3643,10 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const useCompositeExport = true;
 
-  // ── DWS Field layout-redesign pilot ────────────────────────────────────────
-  // Rendered only when clientScope.key === "dws-field" AND ?layout=redesign.
-  if (redesignActive && clientScope.key === "dws-field") {
+  // ── Layout redesign (index-rail shell) ─────────────────────────────────────
+  // CSG + both DWS employee-experience scopes render in this shell.
+  // DWS-field keeps its Basin surface tint; CSG + DWS office use plain white.
+  if (redesignActive && (clientScope.key === "csg" || clientScope.key === "dws-field" || clientScope.key === "dws")) {
     const isOpenText = activePersp === "hr-open-text" || activePersp === "ee-brand-open-text";
     const isExecutivePersp = clientScope.executivePerspectives.has(activePersp);
 
@@ -3365,7 +3660,6 @@ export function DwsEmployeeExperienceDashboardClient({
             <div className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]" style={{ background: isEnpsPerspective ? enpsScoreLegendGradient : dashboardScoreLegendGradient }} />
             <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{isEnpsPerspective ? "10" : String(reportScaleOption?.max ?? 85)}</span>
           </div>
-          {isEnpsPerspective ? <div className="mt-1.5">{enpsScoreLegendTicks}</div> : null}
           {isEnpsPerspective ? <div className="mt-2">{enpsScoreLegendBands}</div> : null}
           <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #EEF1EE" }}>
             <p style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "#8798AA", marginBottom: 8 }}>Delta</p>
@@ -3401,14 +3695,30 @@ export function DwsEmployeeExperienceDashboardClient({
             onChange={setOpenTextBrand}
             options={[
               { id: "", label: `All ${clientScope.brandLabel.toLowerCase()}s` },
-              ...locationOpts.map((brand) => ({ id: brand, label: brand })),
+              ...brandLocations.map((brand) => ({ id: brand, label: brand })),
             ]}
           />
         </EmbeddedFilterCard>
       </div>
     ) : (
       // Report-style perspectives (EEDepartmentReport) portal their own selectors here.
-      <div id={FR_FILTERS_SLOT} />
+      activePersp === "ee-unit-department-report" && clientScope.key === "csg" ? (
+        <div className="flex flex-col gap-4">
+          <EmbeddedFilterCard title={clientScope.brandLabel}>
+            <PillOptionRow
+              value={departmentReportBrand}
+              onChange={setDepartmentReportBrand}
+              options={[
+                { id: "", label: `All ${clientScope.brandLabel.toLowerCase()}s` },
+                ...departmentReportBrandOptions.map((brand) => ({ id: brand, label: brand })),
+              ]}
+            />
+          </EmbeddedFilterCard>
+          <div id={FR_FILTERS_SLOT} style={{ display: "flex", flexDirection: "column", gap: 12 }} />
+        </div>
+      ) : (
+        <div id={FR_FILTERS_SLOT} style={{ display: "flex", flexDirection: "column", gap: 12 }} />
+      )
     );
 
     return (
@@ -3416,7 +3726,7 @@ export function DwsEmployeeExperienceDashboardClient({
         <FieldRedesignShell
           clientName={data.meta.organizationName}
           logoUrl={logoUrl}
-          clientSubline="Field Employee Experience"
+          clientSubline={clientScope.key === "dws-field" ? "Field Employee Experience" : "Employee Experience"}
           campaignLabel={current}
           eyebrow={`${groupDef?.label ?? ""} · ${current}`}
           reportTitle={clientScope.executiveTitles[activePersp] ?? activePersp}
@@ -3436,12 +3746,8 @@ export function DwsEmployeeExperienceDashboardClient({
           headerExtraSlotId={FR_HEADER_EXTRA_SLOT}
           thickerHeaderDivider
           titleSuffixSlotId={FR_TITLE_SUFFIX_SLOT}
-          // Basin surface treatment "1b" now applies dashboard-wide across
-          // every DWS Field perspective (not just the former "Basin group"
-          // trio), since the underlying kit is shared. This whole block only
-          // ever renders when clientScope.key === "dws-field" (see the
-          // enclosing `if` above), so no extra scope check is needed here.
-          basinReportSurface={clientScope.key === "dws-field"}
+          // Redesign surface treatment now applies to CSG + DWS Field shells.
+          basinReportSurface={useRedesignSurfaceTint}
         >
           <div id={DASHBOARD_VISUAL_EXPORT_TARGET_ID}>{content}</div>
         </FieldRedesignShell>

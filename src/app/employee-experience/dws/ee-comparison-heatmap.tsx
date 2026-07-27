@@ -76,16 +76,32 @@ export function ComparisonHeatmap({
   statements,
   columns,
   getValue,
+  getColumnAverage,
+  getRowAverage,
+  grandAverage: grandAverageProp,
   scoreColor,
   columnHeader = "Statement",
   splitColumnNames = false,
+  verticalHeaders,
 }: {
   statements: { id: string; text: string }[];
   columns: { id: string; name: string }[];
   getValue: (statementId: string, columnId: string) => number | null;
+  /**
+   * Person average for a whole column (that group across every statement in
+   * scope). Averages are supplied by the caller from precomputed person scores —
+   * the heatmap must never average its own cells to produce a total.
+   */
+  getColumnAverage: (columnId: string) => number | null;
+  /** Person average for a statement row across everyone in scope. */
+  getRowAverage: (statementId: string) => number | null;
+  /** Person average for the whole scope (the bottom-right total). */
+  grandAverage: number | null;
   scoreColor: (value: number) => string;
   columnHeader?: string;
   splitColumnNames?: boolean;
+  /** Force vertical column headers. Defaults to on when there are many columns. */
+  verticalHeaders?: boolean;
 }) {
   if (statements.length === 0 || columns.length === 0) {
     return <p style={{ fontSize: 12, color: "#6E7E96", margin: 0 }}>No statement data is available for this selection.</p>;
@@ -99,20 +115,18 @@ export function ComparisonHeatmap({
   const DIVIDER = "3px solid #8798AA";
 
   // Heatmaps read best as small, uniform, Excel-style cells — the opposite
-  // of the bar chart, which wants to fill available width. Entity columns
-  // (basins, departments, etc.) — and the Avg column, sized the same way —
-  // get one consistent, capped width sized to fit their header text
-  // (wrapping up to ~2 lines), never stretched to fill leftover space. The
-  // statement column takes whatever room is left and is never squeezed for
-  // their sake. This is a plain px number (not a CSS calc()/min() string) on
-  // purpose: <col> elements don't reliably honor calc()/min() expressions
-  // across browsers, which is exactly why these were stretching wide instead
-  // of staying capped — same fixed-width approach as the Segment Breakdown
-  // heatmap's column sizing.
+  // of the bar chart, which wants to fill available width. With many columns
+  // (e.g. every supervisor), headers rotate vertical so columns stay narrow
+  // and the table fits without a huge horizontal scroll.
   const longestLabel = columns.reduce((max, column) => Math.max(max, column.name.length), 3);
-  const dataColPx = Math.min(92, Math.max(64, longestLabel * 6.5 + 20));
-  const cellPad = "8px 6px";
-  const valueFontSize = 12.5;
+  const manyColumns = verticalHeaders ?? columns.length > 6;
+  const dataColPx = manyColumns
+    ? 48
+    : Math.min(92, Math.max(64, longestLabel * 6.5 + 20));
+  const statementColPx = manyColumns ? 220 : undefined;
+  const verticalHeaderHeight = Math.min(150, Math.max(88, Math.ceil(longestLabel / 2) * 6.2 + 34));
+  const cellPad = manyColumns ? "6px 4px" : "8px 6px";
+  const valueFontSize = manyColumns ? 12 : 12.5;
   const headerHeight = 44;
 
   const headBand: React.CSSProperties = {
@@ -132,6 +146,31 @@ export function ComparisonHeatmap({
     WebkitHyphens: "auto",
   };
 
+  const VerticalLabel = ({ text, ink = "#3B4B63" }: { text: string; ink?: string }) => (
+    <div style={{ height: verticalHeaderHeight - 20, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <span
+        style={{
+          writingMode: "vertical-rl",
+          transform: "rotate(180deg)",
+          whiteSpace: "normal",
+          overflowWrap: "break-word",
+          wordBreak: "break-word",
+          height: "100%",
+          maxWidth: dataColPx - 6,
+          textAlign: "center",
+          fontWeight: 700,
+          fontSize: 10,
+          letterSpacing: "0.01em",
+          color: ink,
+          lineHeight: 1.12,
+          textTransform: "none",
+        }}
+      >
+        {text}
+      </span>
+    </div>
+  );
+
   // Same "rounded chip on a white cell" treatment as the Segment Breakdown
   // heatmap: the cell itself stays a plain white grid square, and only a
   // chip sized to a share of the column width carries the score color —
@@ -144,7 +183,7 @@ export function ComparisonHeatmap({
           style={{
             width: "86%",
             margin: "0 auto",
-            padding: "7px 0",
+            padding: manyColumns ? "6px 0" : "7px 0",
             borderRadius: 9,
             background: color,
             color: readableText(color),
@@ -159,19 +198,16 @@ export function ComparisonHeatmap({
   };
 
   const columnAverages = columns.map((column) => {
-    const values = statements
-      .map((statement) => getValue(statement.id, column.id))
-      .filter((value): value is number => typeof value === "number" && value > 0);
-    return values.length > 0 ? round1(values.reduce((sum, value) => sum + value, 0) / values.length) : 0;
+    const value = getColumnAverage(column.id);
+    return typeof value === "number" ? round1(value) : 0;
   });
-  const grandValues = columnAverages.filter((value) => value > 0);
-  const grandAverage = grandValues.length > 0 ? round1(grandValues.reduce((sum, value) => sum + value, 0) / grandValues.length) : 0;
+  const grandAverage = typeof grandAverageProp === "number" ? round1(grandAverageProp) : 0;
 
   return (
     <div>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: valueFontSize, tableLayout: "fixed" }}>
         <colgroup>
-          <col />
+          <col style={statementColPx ? { width: statementColPx } : undefined} />
           {columns.map((column) => (
             <col key={`col-${column.id}`} style={{ width: dataColPx }} />
           ))}
@@ -179,46 +215,95 @@ export function ComparisonHeatmap({
         </colgroup>
         <thead>
           <tr>
-            <th style={{ ...headBand, textAlign: "left", padding: "11px 12px" }}>{columnHeader}</th>
-            {columns.map((column) => (
-              <th
-                key={column.id}
-                style={{
-                  ...headBand,
-                  height: headerHeight,
-                  verticalAlign: "middle",
-                  whiteSpace: "normal",
-                  wordBreak: "break-word",
-                  lineHeight: 1.15,
-                }}
-              >
-                {splitColumnNames ? (
-                  (() => {
-                    const parts = splitName(column.name);
-                    return (
-                      <span className="block">
-                        <span className="block">{parts.top}</span>
-                        <span className="block">{parts.bottom}</span>
-                      </span>
-                    );
-                  })()
-                ) : (
-                  column.name
-                )}
-              </th>
-            ))}
+            <th
+              style={{
+                ...headBand,
+                textAlign: "left",
+                padding: "11px 12px",
+                verticalAlign: manyColumns ? "bottom" : "middle",
+              }}
+            >
+              {columnHeader}
+            </th>
+            {columns.map((column) =>
+              manyColumns ? (
+                <th
+                  key={column.id}
+                  style={{
+                    ...headBand,
+                    height: verticalHeaderHeight,
+                    padding: "10px 0 12px",
+                    verticalAlign: "bottom",
+                    textTransform: "none",
+                    letterSpacing: "normal",
+                  }}
+                >
+                  <VerticalLabel
+                    text={
+                      splitColumnNames
+                        ? (() => {
+                            const parts = splitName(column.name);
+                            return [parts.top, parts.bottom].filter(Boolean).join(" ");
+                          })()
+                        : column.name
+                    }
+                  />
+                </th>
+              ) : (
+                <th
+                  key={column.id}
+                  style={{
+                    ...headBand,
+                    height: headerHeight,
+                    verticalAlign: "middle",
+                    whiteSpace: "normal",
+                    wordBreak: "break-word",
+                    lineHeight: 1.15,
+                  }}
+                >
+                  {splitColumnNames ? (
+                    (() => {
+                      const parts = splitName(column.name);
+                      return (
+                        <span className="block">
+                          <span className="block">{parts.top}</span>
+                          <span className="block">{parts.bottom}</span>
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    column.name
+                  )}
+                </th>
+              )
+            )}
             {/* Darker, non-muted text on the summary column — same accent the
                 Segment Breakdown heatmap gives its "Overall" column header to
                 set the roll-up apart from the individual entity columns. */}
-            <th style={{ ...headBand, borderLeft: DIVIDER, whiteSpace: "nowrap", color: "#152238" }}>Avg</th>
+            {manyColumns ? (
+              <th
+                style={{
+                  ...headBand,
+                  borderLeft: DIVIDER,
+                  height: verticalHeaderHeight,
+                  padding: "10px 0 12px",
+                  verticalAlign: "bottom",
+                  textTransform: "none",
+                  letterSpacing: "normal",
+                  color: "#152238",
+                }}
+              >
+                <VerticalLabel text="Avg" ink="#152238" />
+              </th>
+            ) : (
+              <th style={{ ...headBand, borderLeft: DIVIDER, whiteSpace: "nowrap", color: "#152238" }}>Avg</th>
+            )}
           </tr>
         </thead>
         <tbody>
           {statements.map((statement) => {
-            const rowValues = columns
-              .map((column) => getValue(statement.id, column.id))
-              .filter((value): value is number => typeof value === "number" && value > 0);
-            const rowAverage = rowValues.length > 0 ? round1(rowValues.reduce((sum, value) => sum + value, 0) / rowValues.length) : 0;
+            const rowAverageValue = getRowAverage(statement.id);
+            const rowAverage = typeof rowAverageValue === "number" ? round1(rowAverageValue) : 0;
             return (
               <tr key={statement.id}>
                 <td style={{ border: GRID, padding: "9px 12px", color: "#152238", lineHeight: 1.2, fontWeight: 500, textAlign: "center" }}>

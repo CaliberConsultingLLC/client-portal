@@ -8,7 +8,8 @@ alwaysApply: true
 - Design every client-facing page to inform, intrigue, and inspire: clarify the data, surface an interesting signal, and imply a useful next step.
 - Use the three-zone portal structure by default: left column for controls, center canvas for primary content, right column for insights, explanations, and recommendations.
 - Keep navigation and side columns visually stable. Top nav, secondary nav, left column, and right column should not shift or scroll unexpectedly on dashboard pages.
-- Collapse filters, dropdowns, selectors, and setup controls by default. Let users open controls when they need them.
+- Right-rail tabs are Filters first (left / default), then Context. Inside Filters, expand only the first filter card; keep every additional filter collapsed until the user opens it.
+- Persist each report's filter selections (unit, campaign, segment, etc.) in a browser cookie/local store keyed by dashboard + report so returning to a previously visited report restores the last choices instead of resetting to defaults.
 - Keep the center canvas clean, white, and primary. Do not let side content squeeze the main data view or create uneven page backgrounds.
 - Put insight callouts in the right column, not the main data canvas. Use expandable Insight Cards for items like Biggest Gain, Highest Department, Watch Area, and Momentum Signal.
 - The upper-left client card should consistently show the client logo and the current report or perspective context.

@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
+import { buildDashboardFilterStoreKey } from "@/lib/portal/dashboard-filter-cookie";
 import { CollaborationDashboardClient } from "@/app/collaboration/[slug]/dashboard-client";
+import { EmbeddedFilterCard, PillOptionRow } from "@/components/dashboard/design-shell";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
 import {
   ActionPrioritiesTab,
   CiHotspotsTab,
@@ -16,14 +20,7 @@ import {
   ReportSummaryHeader,
   SegmentSignalsTab,
 } from "@/components/collaboration/demo-report-tabs";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   filterDemoRespondents,
   type DemoFilters,
@@ -48,7 +45,6 @@ import {
   type CollaborationDataset,
 } from "@/lib/collaboration/collaboration-dataset";
 import { succinctCiStatementLabel } from "@/lib/collaboration/display-format";
-import { cn } from "@/lib/utils";
 
 interface LiveFilters {
   department: string;
@@ -83,185 +79,6 @@ interface LiveCollaborationDashboardProps {
   organizationName: string;
   campaignName: string;
   logoUrl?: string;
-}
-
-// ── Left-rail kit (matches the Employee Experience demo left nav) ──────────────
-
-function RailClientCard({
-  logoUrl,
-  organizationName,
-  reportName,
-}: {
-  logoUrl: string;
-  organizationName: string;
-  reportName: string;
-}) {
-  return (
-    <div className="rounded-[18px] border border-[#8798AA] bg-white px-4 pb-4 pt-[18px] text-center shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
-      <div className="mx-auto w-[180px] rounded-[14px] bg-white">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={logoUrl}
-          alt={`${organizationName} logo`}
-          className="block h-auto w-full object-contain"
-        />
-      </div>
-      <p className="mt-3 text-[11.5px] font-bold uppercase leading-[1.35] tracking-[0.1em] text-text-primary">
-        {reportName}
-      </p>
-    </div>
-  );
-}
-
-function RailReportNav({
-  sections,
-  activeMode,
-  activeTab,
-  onModeChange,
-  onTabChange,
-  labelFor,
-}: {
-  sections: DashboardModeSection[];
-  activeMode: string;
-  activeTab: string;
-  onModeChange: (id: string) => void;
-  onTabChange: (id: string) => void;
-  labelFor: (id: string) => string;
-}) {
-  const active = sections.find((section) => section.id === activeMode) ?? sections[0];
-  if (!active) return null;
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
-      <div className="border-b border-border-subtle px-4 py-3">
-        <span className="text-[11.5px] font-bold uppercase tracking-[0.18em] text-text-muted">
-          Reports
-        </span>
-      </div>
-      <div className="space-y-3 px-4 py-3">
-        <div className="flex gap-2">
-          {sections.map((section) => (
-            <button
-              key={section.id}
-              type="button"
-              onClick={() => onModeChange(section.id)}
-              className={cn(
-                "flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                section.id === active.id
-                  ? "bg-[#D7B35A] text-[#242424]"
-                  : "border border-[#D4DAD6] bg-[#F5F7F5] text-[#3B4B63] hover:border-[#386B45] hover:bg-[#386B45] hover:text-white"
-              )}
-            >
-              {section.label}
-            </button>
-          ))}
-        </div>
-        <div className="space-y-1">
-          {active.tabIds.map((id) => {
-            const isActive = id === activeTab;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => onTabChange(id)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors",
-                  isActive
-                    ? "border border-[#8798AA] bg-white text-text-primary shadow-[0_1px_3px_rgba(15,23,42,0.08)]"
-                    : "border border-transparent text-text-secondary hover:bg-[#EEF2EE]"
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 shrink-0 rounded-full",
-                    isActive ? "bg-[#C99A3C]" : "bg-[#C8D2CF]"
-                  )}
-                />
-                {labelFor(id)}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RailSection({
-  title,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  defaultOpen?: boolean;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="overflow-hidden rounded-2xl border border-[#8798AA] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.08)]">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
-      >
-        <span className="text-[11.5px] font-bold uppercase tracking-[0.18em] text-text-muted">
-          {title}
-        </span>
-        <ChevronRight
-          className={`h-4 w-4 text-text-muted transition-transform duration-200 ${
-            open ? "rotate-90" : ""
-          }`}
-        />
-      </button>
-      {open ? (
-        <div className="border-t border-border-subtle px-4 pb-4 pt-3">{children}</div>
-      ) : null}
-    </div>
-  );
-}
-
-function RailSelect({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <span className="text-xs font-medium text-text-secondary">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1.5 w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-sm font-semibold text-text-primary focus:border-nsp-blue-300 focus:outline-none"
-      >
-        {children}
-      </select>
-    </div>
-  );
-}
-
-function RightRailGuidance({
-  title,
-  paragraphs,
-}: {
-  title: string;
-  paragraphs: string[];
-}) {
-  return (
-    <RailSection title={title} defaultOpen>
-      <div className="space-y-3">
-        {paragraphs.map((paragraph) => (
-          <p key={paragraph} className="text-sm leading-relaxed text-text-secondary">
-            {paragraph}
-          </p>
-        ))}
-      </div>
-    </RailSection>
-  );
 }
 
 const PERSPECTIVE_GUIDANCE: Record<string, { title: string; paragraphs: string[] }> = {
@@ -378,45 +195,47 @@ function CommentsTab({
           </CardContent>
         </Card>
       ) : (
-        prompts.map((prompt) => {
-          const entries = deptComments.filter((comment) => comment.prompt === prompt);
-          return (
-            <Card key={prompt} className="border-border-strong">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-bold text-text-primary">
-                  {prompt}
-                </CardTitle>
-                <CardDescription>{entries.length} responses</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {entries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="rounded-2xl border border-border-strong bg-surface-2 p-4"
-                  >
-                    <p className="text-sm leading-relaxed text-text-primary">
-                      “{entry.text}”
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Badge variant="outline" className="border-border-strong">
-                        {entry.fromDepartment}
-                      </Badge>
-                      {entry.role ? (
-                        <Badge variant="secondary">{entry.role}</Badge>
-                      ) : null}
-                      {entry.generation ? (
-                        <Badge variant="secondary">{entry.generation}</Badge>
-                      ) : null}
-                      {entry.tenure ? (
-                        <Badge variant="secondary">{entry.tenure}</Badge>
-                      ) : null}
+        <div className="space-y-3">
+          {prompts.map((prompt, promptIndex) => {
+            const entries = deptComments.filter((comment) => comment.prompt === prompt);
+            return (
+              <RegisteredVisualExportFrame
+                key={prompt}
+                order={10 + promptIndex}
+                label="Download comments"
+                filename={`collaboration-comments-${promptIndex + 1}.png`}
+              >
+              <div
+                className="overflow-hidden rounded-2xl border border-[rgba(135,152,170,0.7)] bg-white shadow-[0_2px_12px_rgba(15,23,42,0.24),0_1px_3px_rgba(15,23,42,0.20)]"
+              >
+                <div className="border-b border-[#D3DDE7] bg-[#F1F4F7] px-5 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6E7E96]">
+                    Question
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-[#152238]">{prompt}</p>
+                  <p className="mt-1 text-xs text-[#6E7E96]">
+                    {entries.length} response{entries.length !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="space-y-2 px-5 py-4">
+                  {entries.map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-xl border border-[#D3DDE7] bg-[#FAFCFD] px-3 py-2.5"
+                    >
+                      <p className="text-sm leading-relaxed text-[#152238]">{entry.text}</p>
+                      <p className="mt-1 text-xs text-[#6E7E96]">
+                        #{index + 1}
+                        {entry.fromDepartment ? ` · ${entry.fromDepartment}` : ""}
+                      </p>
                     </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          );
-        })
+                  ))}
+                </div>
+              </div>
+              </RegisteredVisualExportFrame>
+            );
+          })}
+        </div>
       )}
 
       <p className="text-xs text-text-muted">
@@ -430,20 +249,6 @@ function CommentsTab({
   );
 }
 
-const PERSPECTIVE_LABELS: Record<string, string> = {
-  overview: "Overview",
-  "executive-summary": "Executive Summary",
-  "cdrs-heatmap": "Heatmap",
-  cdrs: "CDRS",
-  ci: "CI",
-  "segment-signals": "Segment Signals",
-  "department-360": "Dept 360",
-  dept: "CDRS Report",
-  "department-ci-report": "CI Report",
-  "department-segments": "Dept Segments",
-  comments: "Comments",
-};
-
 export function LiveCollaborationDashboard({
   dataset,
   organizationName,
@@ -453,11 +258,50 @@ export function LiveCollaborationDashboard({
   const { departments, respondents, comments, data, ciQuestions, roles, generations, tenures } =
     dataset;
 
-  const [selectedDepartment, setSelectedDepartment] = useState(departments[0] ?? "");
-  const [reportFilters, setReportFilters] = useState<LiveFilters>(ALL_FILTERS);
+  const filterStoreKey = buildDashboardFilterStoreKey(["collab", organizationName, campaignName]);
+  const [selectedDepartment, setSelectedDepartment] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "selectedDepartment",
+    () => departments[0] ?? ""
+  );
+  const [reportFilters, setReportFilters] = usePersistedDashboardFilter<LiveFilters>(
+    filterStoreKey,
+    "reportFilters",
+    ALL_FILTERS
+  );
   const [activeMode, setActiveMode] = useState("executive");
   const [activeTab, setActiveTab] = useState("overview");
-  const [selectedCiStatement, setSelectedCiStatement] = useState<number | "all">("all");
+  const [selectedCiStatement, setSelectedCiStatement] = usePersistedDashboardFilter<number | "all">(
+    filterStoreKey,
+    "selectedCiStatement",
+    "all"
+  );
+  const searchParams = useSearchParams();
+  const deepLinkAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || !searchParams) return;
+    const perspectiveParam = searchParams.get("perspective");
+    const departmentParam = searchParams.get("department");
+    if (!perspectiveParam && !departmentParam) {
+      deepLinkAppliedRef.current = true;
+      return;
+    }
+
+    if (perspectiveParam) {
+      const mode = MODE_SECTIONS.find((section) =>
+        section.tabIds.includes(perspectiveParam)
+      );
+      if (mode) {
+        setActiveMode(mode.id);
+        setActiveTab(perspectiveParam);
+      }
+    }
+    if (departmentParam && departments.includes(departmentParam)) {
+      setSelectedDepartment(departmentParam);
+    }
+    deepLinkAppliedRef.current = true;
+  }, [departments, searchParams]);
 
   const effectiveSelectedDepartment = departments.includes(selectedDepartment)
     ? selectedDepartment
@@ -594,12 +438,22 @@ export function LiveCollaborationDashboard({
       : 0;
   }, [data.departmentMetrics]);
 
-  const reportName = PERSPECTIVE_LABELS[activeTab] ?? "Collaboration";
   const guidance =
     PERSPECTIVE_GUIDANCE[activeTab] ?? {
       title: "About this report",
       paragraphs: ["Use the Reports panel to change perspective or filter the active segment."],
     };
+  // Department-scoped reports show " — {department}" after the title so it's
+  // clear up top which team the report is built around.
+  const DEPARTMENT_SCOPED_TABS = new Set([
+    "department-360",
+    "dept",
+    "department-ci-report",
+    "comments",
+  ]);
+  const reportTitleSuffix = DEPARTMENT_SCOPED_TABS.has(activeTab)
+    ? effectiveSelectedDepartment
+    : undefined;
   const showDepartmentSection = activeMode === "department";
   const showCiStatementSection = activeTab === "department-ci-report";
   const showSegmentSection = activeTab === "cdrs" || activeTab === "ci";
@@ -610,40 +464,29 @@ export function LiveCollaborationDashboard({
     reportFilters.generation !== "all" ||
     reportFilters.tenure !== "all";
 
-  // Left rail: client identity only. Filters + report navigation live on the right.
-  const leftRail = (
-    <div className="space-y-3 xl:sticky xl:top-6 xl:self-start">
-      <RailClientCard
-        logoUrl={logoUrl}
-        organizationName={organizationName}
-        reportName={reportName}
-      />
-    </div>
-  );
-
+  // Left rail (client identity) + report navigation are provided by the shared
+  // design shell in CollaborationDashboardClient; we only feed filters/context.
   const filterSections = hasFilters ? (
-    <RailSection title="Filters">
-      <div className="space-y-4">
-        {showDepartmentSection ? (
-          <RailSelect
-            label="Selected department"
+    <div className="flex flex-col gap-3">
+      {showDepartmentSection ? (
+        <EmbeddedFilterCard title="Selected Department">
+          <PillOptionRow
             value={effectiveSelectedDepartment}
             onChange={setSelectedDepartment}
-          >
-            {departments.map((department) => (
-              <option key={department} value={department}>
-                {department}
-              </option>
-            ))}
-          </RailSelect>
-        ) : null}
-        {showCiStatementSection ? (
-          <RailSelect
-            label="Flow chart focus"
+            options={departments.map((department) => ({ id: department, label: department }))}
+          />
+        </EmbeddedFilterCard>
+      ) : null}
+      {showCiStatementSection ? (
+        <EmbeddedFilterCard title="Flow Chart Focus">
+          <select
             value={selectedCiStatement === "all" ? "all" : String(selectedCiStatement)}
-            onChange={(value) =>
-              setSelectedCiStatement(value === "all" ? "all" : Number(value))
+            onChange={(event) =>
+              setSelectedCiStatement(
+                event.target.value === "all" ? "all" : Number(event.target.value)
+              )
             }
+            className="w-full rounded-xl border border-[#C8D2CF] bg-white px-3 py-2 text-sm font-semibold text-[#152238] focus:border-nsp-blue-300 focus:outline-none"
           >
             <option value="all">All statements (aggregate)</option>
             {selectedDeptCiStatements.map((statement, index) => (
@@ -651,59 +494,55 @@ export function LiveCollaborationDashboard({
                 {succinctCiStatementLabel(statement.question)}
               </option>
             ))}
-          </RailSelect>
-        ) : null}
-        {showSegmentSection ? (
-          <>
-            <RailSelect
-              label="Department"
+          </select>
+        </EmbeddedFilterCard>
+      ) : null}
+      {showSegmentSection ? (
+        <>
+          <EmbeddedFilterCard title="Department">
+            <PillOptionRow
               value={reportFilters.department}
               onChange={(value) => setReportFilters((prev) => ({ ...prev, department: value }))}
-            >
-              <option value="all">All departments</option>
-              {departments.map((department) => (
-                <option key={department} value={department}>
-                  {department}
-                </option>
-              ))}
-            </RailSelect>
-            <RailSelect
-              label="Role"
+              options={[
+                { id: "all", label: "All" },
+                ...departments.map((department) => ({ id: department, label: department })),
+              ]}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard title="Role">
+            <PillOptionRow
               value={reportFilters.role}
               onChange={(value) => setReportFilters((prev) => ({ ...prev, role: value }))}
-            >
-              <option value="all">All roles</option>
-              {roles.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </RailSelect>
-            <RailSelect
-              label="Generation"
+              options={[
+                { id: "all", label: "All" },
+                ...roles.map((role) => ({ id: role, label: role })),
+              ]}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard title="Generation">
+            <PillOptionRow
               value={reportFilters.generation}
-              onChange={(value) => setReportFilters((prev) => ({ ...prev, generation: value }))}
-            >
-              <option value="all">All generations</option>
-              {generations.map((generation) => (
-                <option key={generation} value={generation}>
-                  {generation}
-                </option>
-              ))}
-            </RailSelect>
-            <RailSelect
-              label="Tenure"
+              onChange={(value) =>
+                setReportFilters((prev) => ({ ...prev, generation: value }))
+              }
+              options={[
+                { id: "all", label: "All" },
+                ...generations.map((generation) => ({ id: generation, label: generation })),
+              ]}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard title="Tenure">
+            <PillOptionRow
               value={reportFilters.tenure}
               onChange={(value) => setReportFilters((prev) => ({ ...prev, tenure: value }))}
-            >
-              <option value="all">All tenures</option>
-              {tenures.map((tenure) => (
-                <option key={tenure} value={tenure}>
-                  {tenure}
-                </option>
-              ))}
-            </RailSelect>
-            <p className="text-xs text-text-muted">
+              options={[
+                { id: "all", label: "All" },
+                ...tenures.map((tenure) => ({ id: tenure, label: tenure })),
+              ]}
+            />
+          </EmbeddedFilterCard>
+          <div className="flex flex-col gap-2 px-0.5">
+            <p style={{ fontSize: 11, color: "#8798AA" }}>
               {reportFilteredRespondents.length} matching respondent
               {reportFilteredRespondents.length === 1 ? "" : "s"}
             </p>
@@ -711,48 +550,37 @@ export function LiveCollaborationDashboard({
               <button
                 type="button"
                 onClick={() => setReportFilters(ALL_FILTERS)}
-                className="w-full rounded-xl border border-border-strong bg-white px-3 py-2 text-center text-xs font-semibold text-text-secondary transition hover:bg-surface-2"
+                className="w-full rounded-xl border border-[#C8D2CF] bg-white px-3 py-2 text-center text-xs font-semibold text-[#3B4B63] transition hover:bg-[#F5F7F8]"
               >
                 Reset
               </button>
             ) : null}
-          </>
-        ) : null}
-      </div>
-    </RailSection>
+          </div>
+        </>
+      ) : null}
+    </div>
   ) : null;
 
-  // Right rail: report groupings (navigation) + active filters + guidance.
-  const rightRail = (
-    <div className="space-y-3 xl:sticky xl:top-6 xl:self-start">
-      <RailReportNav
-        sections={MODE_SECTIONS}
-        activeMode={activeMode}
-        activeTab={activeTab}
-        onModeChange={(id) => {
-          const nextSection = MODE_SECTIONS.find((section) => section.id === id);
-          if (!nextSection) return;
-          setActiveMode(nextSection.id);
-          setActiveTab(nextSection.tabIds[0] ?? "");
-        }}
-        onTabChange={setActiveTab}
-        labelFor={(id) => PERSPECTIVE_LABELS[id] ?? id}
-      />
-      {filterSections}
-      <RightRailGuidance title={guidance.title} paragraphs={guidance.paragraphs} />
-    </div>
-  );
-
+  // Report navigation is rendered by the shared design shell in
+  // CollaborationDashboardClient; we only feed it filters + guidance slots.
   return (
     <CollaborationDashboardClient
       data={data}
       campaignName={campaignName}
       organizationName={organizationName}
-      leftRailOverride={leftRail}
-      rightRailOverride={rightRail}
+      logoUrl={logoUrl}
+      reportTitleSuffix={reportTitleSuffix}
+      rightRailFilters={filterSections}
+      rightRailGuidance={
+        <div className="flex flex-col gap-2">
+          {guidance.paragraphs.map((paragraph) => (
+            <p key={paragraph} style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
+              {paragraph}
+            </p>
+          ))}
+        </div>
+      }
       hideTitleRow
-      hideRibbonNav
-      centerBackgroundClassName="bg-[#F4F4EF]"
       activeModeId={activeMode}
       onActiveModeChange={setActiveMode}
       activeTabId={activeTab}

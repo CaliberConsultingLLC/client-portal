@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { ArrowDownUp } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
+import { buildDashboardFilterStoreKey } from "@/lib/portal/dashboard-filter-cookie";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { ScoreTable } from "@/components/collaboration/score-table";
@@ -278,12 +280,14 @@ function FilterRailSection({
   title,
   description,
   children,
+  defaultOpen = true,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <Card className="border-border-strong">
@@ -1238,17 +1242,43 @@ export function IntegrationEffectivenessDashboardClient({
   perspectiveInstances,
   portalAccess,
 }: DashboardProps) {
-  const [longitudinalBrand, setLongitudinalBrand] = useState("all");
-  const [longitudinalQuestionId, setLongitudinalQuestionId] = useState("all");
-  const [longitudinalDepartment, setLongitudinalDepartment] = useState("all");
-  const [brandReportSelectedBrand, setBrandReportSelectedBrand] = useState(
-    data.brandReports[0]?.selectedBrand ?? ""
+  const filterStoreKey = buildDashboardFilterStoreKey([
+    "integration",
+    data.meta.organizationName,
+  ]);
+  const [longitudinalBrand, setLongitudinalBrand] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "longitudinalBrand",
+    "all"
   );
-  const [voiceSelectedBrand, setVoiceSelectedBrand] = useState("all");
-  const [voiceSelectedCampaign, setVoiceSelectedCampaign] = useState("all");
-  const [voiceSelectedSentiment, setVoiceSelectedSentiment] = useState<
+  const [longitudinalQuestionId, setLongitudinalQuestionId] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "longitudinalQuestionId",
+    "all"
+  );
+  const [longitudinalDepartment, setLongitudinalDepartment] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "longitudinalDepartment",
+    "all"
+  );
+  const [brandReportSelectedBrand, setBrandReportSelectedBrand] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "brandReportSelectedBrand",
+    () => data.brandReports[0]?.selectedBrand ?? ""
+  );
+  const [voiceSelectedBrand, setVoiceSelectedBrand] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "voiceSelectedBrand",
+    "all"
+  );
+  const [voiceSelectedCampaign, setVoiceSelectedCampaign] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "voiceSelectedCampaign",
+    "all"
+  );
+  const [voiceSelectedSentiment, setVoiceSelectedSentiment] = usePersistedDashboardFilter<
     "all" | "positive" | "neutral" | "negative"
-  >("all");
+  >(filterStoreKey, "voiceSelectedSentiment", "all");
   const allowedBrandValues = useMemo(
     () =>
       resolveAllowedValuesForPerspective(
@@ -1483,6 +1513,7 @@ export function IntegrationEffectivenessDashboardClient({
     perspective: resolvedActiveTabId,
     campaign: data.meta.campaigns[data.meta.campaigns.length - 1],
   });
+  const isCsgIntegration = data.meta.organizationName === "Canopy Services Group";
 
   return (
     <VisualExportProvider active client={data.meta.organizationName}>
@@ -1516,7 +1547,8 @@ export function IntegrationEffectivenessDashboardClient({
             maxLabel={INTEGRATION_SCORE_SCALE.maxLabel}
           />
         }
-        toolbar={<CompositeVisualExportButton filename={exportFilename} />}
+        sticky={!isCsgIntegration}
+        toolbar={!isCsgIntegration ? <CompositeVisualExportButton filename={exportFilename} /> : undefined}
       />
       <div>
       <DashboardCanvas

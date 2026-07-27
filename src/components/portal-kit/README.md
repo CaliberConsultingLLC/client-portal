@@ -30,7 +30,7 @@ and points at the pilot file that currently implements it.
 | --- | --- | --- |
 | `FieldTopNavBar` | Dark-tone top nav (`AppTopBanner` `tone="dark"`) with a two-part divider (white gap + dark bar) instead of one hairline. | `components/shared/app-top-banner.tsx` |
 | `ReportNavigatorRail` | Left-rail Views → Reports accordion; collapsible via an explicit chevron/icon click (no hover auto-expand); `dividerBefore` groups sibling reports within a View. | `field-redesign-shell.tsx` |
-| `ContextFiltersRail` | Right-rail Context / Filters tab switcher; Context holds export + legend + How to Read, Filters holds the report's own scoping controls. | `field-redesign-shell.tsx` |
+| `ContextFiltersRail` | Right-rail Filters / Context tab switcher (Filters first); Filters holds scoping controls (first expanded, rest collapsed), Context holds export + legend + How to Read. | `field-redesign-shell.tsx` |
 | `ReportTitleHeader` | Single title bar: title, optional header-extra slot (KPIs or a view switcher), optional title suffix, optional thicker divider. | `field-redesign-shell.tsx` |
 
 **Main Content**

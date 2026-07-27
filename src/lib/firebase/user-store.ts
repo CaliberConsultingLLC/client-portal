@@ -16,6 +16,8 @@ export interface FirebaseUserDoc {
   clientIds: string[];
   employeeExperienceAccess: EmployeeExperienceUserAccess;
   isActive: boolean;
+  /** When true, the user must set a new password before using the portal. */
+  mustChangePassword: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -28,6 +30,7 @@ interface CreateFirebasePortalUserInput {
   clientIds?: string[];
   employeeExperienceAccess?: EmployeeExperienceUserAccess;
   isActive?: boolean;
+  mustChangePassword?: boolean;
 }
 
 interface UpdateFirebasePortalUserInput {
@@ -39,6 +42,7 @@ interface UpdateFirebasePortalUserInput {
   employeeExperienceAccess?: EmployeeExperienceUserAccess;
   isActive: boolean;
   password?: string;
+  mustChangePassword?: boolean;
 }
 
 function nowIso() {
@@ -48,6 +52,7 @@ function nowIso() {
 function normalizeFirebaseUserDoc(doc: FirebaseUserDoc) {
   return {
     ...doc,
+    mustChangePassword: Boolean(doc.mustChangePassword),
     employeeExperienceAccess: sanitizeEmployeeExperienceUserAccess(
       doc.employeeExperienceAccess
     ),
@@ -106,6 +111,7 @@ export async function upsertFirebaseUserDoc(
       input.employeeExperienceAccess
     ),
     isActive: input.isActive,
+    mustChangePassword: Boolean(input.mustChangePassword),
     createdAt: createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -116,6 +122,27 @@ export async function upsertFirebaseUserDoc(
     .set(payload, { merge: true });
 
   return payload;
+}
+
+export async function clearFirebaseUserMustChangePassword(uid: string) {
+  const existingDoc = await getFirebaseUserDoc(uid);
+  if (!existingDoc) {
+    throw new Error("User not found.");
+  }
+
+  return upsertFirebaseUserDoc(
+    uid,
+    {
+      email: existingDoc.email,
+      fullName: existingDoc.fullName,
+      role: existingDoc.role,
+      clientIds: existingDoc.clientIds,
+      employeeExperienceAccess: existingDoc.employeeExperienceAccess,
+      isActive: existingDoc.isActive,
+      mustChangePassword: false,
+    },
+    existingDoc.createdAt
+  );
 }
 
 export async function createFirebasePortalUser(input: CreateFirebasePortalUserInput) {
@@ -154,6 +181,8 @@ export async function createFirebasePortalUser(input: CreateFirebasePortalUserIn
         input.employeeExperienceAccess
       ),
       isActive,
+      // Password changes are voluntary via the portal key control — never force on login.
+      mustChangePassword: input.mustChangePassword ?? false,
     },
     existingDoc?.createdAt
   );
@@ -191,6 +220,8 @@ export async function updateFirebasePortalUser(input: UpdateFirebasePortalUserIn
         input.employeeExperienceAccess
       ),
       isActive: input.isActive,
+      // Keep any explicit override; otherwise never re-arm a forced password gate.
+      mustChangePassword: input.mustChangePassword ?? false,
     },
     existingDoc.createdAt
   );

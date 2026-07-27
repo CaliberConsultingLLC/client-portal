@@ -262,7 +262,7 @@ function FieldNavRailDemo() {
 
 function ContextFiltersRailDemo() {
   const [expanded, setExpanded] = useState(true);
-  const [tab, setTab] = useState<"context" | "filters">("context");
+  const [tab, setTab] = useState<"context" | "filters">("filters");
   const [basinId, setBasinId] = useState(BASINS[0]);
   const width = expanded ? 240 : 44;
 
@@ -272,7 +272,7 @@ function ContextFiltersRailDemo() {
         {expanded ? (
           <>
             <div style={{ display: "flex", flexShrink: 0, background: "#DDE3DE", borderBottom: "1px solid #D4DAD6" }}>
-              {(["context", "filters"] as const).map((t) => (
+              {(["filters", "context"] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -339,12 +339,12 @@ function ContextFiltersRailDemo() {
           </>
         ) : (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 0", gap: 8 }}>
-            <button type="button" onClick={() => { setTab("context"); setExpanded(true); }} style={{ width: 26, height: 26, borderRadius: 8, background: "#fff", border: "1px solid #C8D2CF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#3B4B63" }}>
-              <BarChart3 style={{ width: 13, height: 13 }} />
-            </button>
-            <div style={{ width: 18, height: 1, background: "#C8D2CF" }} />
             <button type="button" onClick={() => { setTab("filters"); setExpanded(true); }} style={{ width: 26, height: 26, borderRadius: 8, background: "#fff", border: "1px solid #C8D2CF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#3B4B63" }}>
               <SlidersHorizontal style={{ width: 13, height: 13 }} />
+            </button>
+            <div style={{ width: 18, height: 1, background: "#C8D2CF" }} />
+            <button type="button" onClick={() => { setTab("context"); setExpanded(true); }} style={{ width: 26, height: 26, borderRadius: 8, background: "#fff", border: "1px solid #C8D2CF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#3B4B63" }}>
+              <BarChart3 style={{ width: 13, height: 13 }} />
             </button>
           </div>
         )}
@@ -768,7 +768,7 @@ export default function PortalKitPage() {
 
         <Artifact
           name="ContextFiltersRail"
-          summary="The right-rail Context / Filters tab switcher. Context holds the page-level export card, the Score Scale + Delta legend, and a How to Read note; Filters holds the report's own scoping controls (e.g. the Basin picker). Same click-only collapse-to-44px behavior as the left rail — the edge chevron or an icon-rail button toggles it, with no auto-expand on hover. Both tabs stay mounted at all times so state (e.g. a report's own portaled filter selectors) survives switching tabs."
+          summary="The right-rail Filters / Context tab switcher (Filters first and default). Filters holds the report's own scoping controls (e.g. the Basin picker) with the first filter expanded and the rest collapsed; Context holds the page-level export card, the Score Scale + Delta legend, and a How to Read note. Same click-only collapse-to-44px behavior as the left rail — the edge chevron or an icon-rail button toggles it, with no auto-expand on hover. Both tabs stay mounted at all times so state (e.g. a report's own portaled filter selectors) survives switching tabs."
           importLine={`// lives in field-redesign-shell.tsx — not yet promoted to shared portal-kit`}
         >
           <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>

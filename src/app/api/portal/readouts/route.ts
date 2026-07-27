@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOptionalFirebaseUser, isInternalFirebaseRole } from "@/lib/firebase/auth";
 import {
+  canClientUserAccessReadout,
   createFirebaseReadout,
   getFirebaseReadouts,
   getFirebaseReadoutsByClientId,
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       const readouts = await getFirebaseReadoutsByClientId(clientId);
       const visibleReadouts = isInternalFirebaseRole(actor.role)
         ? readouts
-        : readouts.filter((readout) => readout.status === "published");
+        : readouts.filter((readout) => canClientUserAccessReadout(actor, readout));
 
       return NextResponse.json({ readouts: visibleReadouts });
     }
@@ -40,9 +41,7 @@ export async function GET(request: NextRequest) {
     const readouts = await getFirebaseReadouts();
     const visibleReadouts = isInternalFirebaseRole(actor.role)
       ? readouts
-      : readouts.filter(
-          (readout) => actor.clientIds.includes(readout.clientId) && readout.status === "published"
-        );
+      : readouts.filter((readout) => canClientUserAccessReadout(actor, readout));
 
     return NextResponse.json({ readouts: visibleReadouts });
   } catch (error) {

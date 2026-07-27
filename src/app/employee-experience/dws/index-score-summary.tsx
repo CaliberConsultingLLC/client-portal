@@ -47,6 +47,12 @@ export interface IndexScoreSummaryProps {
    * current look.
    */
   surfaceTreatment?: "1b";
+  /**
+   * Compact mode: thinner tiles, smaller type, tighter gaps, and no wrapping —
+   * so a 6-index set (7 tiles incl. Overall) fits on a single row on the DWS
+   * office dashboard instead of spilling to a second line.
+   */
+  compact?: boolean;
 }
 
 function toRgb(hex: string): [number, number, number] {
@@ -77,6 +83,7 @@ function Tile({
   onToggle,
   color,
   surfaceTreatment,
+  compact = false,
 }: {
   datum: IndexDatum;
   isOverall: boolean;
@@ -84,6 +91,7 @@ function Tile({
   onToggle: () => void;
   color: string;
   surfaceTreatment?: "1b";
+  compact?: boolean;
 }) {
   // Same slight-blue #8798AA border family as every other card on the page
   // and the active Index Rail tab — no color change on expand/collapse, so
@@ -104,7 +112,7 @@ function Tile({
   // softens the border/shadow — the fill stays white either way so the data
   // pops against the tinted page background around it.
   const TILE_BG = "#fff";
-  const width = isOverall ? 182 : 146;
+  const width = isOverall ? (compact ? 166 : 182) : (compact ? 126 : 146);
 
   const Cell = ({
     value,
@@ -162,23 +170,29 @@ function Tile({
     >
       <div
         style={{
-          padding: isOverall ? "17px 14px 16px" : "14px 12px 13px",
+          padding: isOverall
+            ? compact
+              ? "15px 12px 14px"
+              : "17px 14px 16px"
+            : compact
+              ? "13px 10px 12px"
+              : "14px 12px 13px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: isOverall ? 10 : 8,
+          gap: isOverall ? (compact ? 9 : 10) : compact ? 7 : 8,
         }}
       >
         {/* Unbolded, same muted ink as the rail's inactive tab text — keeps card
             titles cohesive with the rest of the chrome instead of a bespoke style. */}
         <div
           style={{
-            fontSize: isOverall ? 13 : 12,
+            fontSize: isOverall ? (compact ? 12 : 13) : compact ? 11 : 12,
             fontWeight: 700,
-            letterSpacing: "0.05em",
+            letterSpacing: compact ? "0.04em" : "0.05em",
             textTransform: "uppercase",
             color: "#6E7E96",
-            minHeight: isOverall ? 29 : 26,
+            minHeight: isOverall ? (compact ? 28 : 29) : compact ? 25 : 26,
             display: "flex",
             alignItems: "center",
             textAlign: "center",
@@ -192,13 +206,19 @@ function Tile({
             background: color,
             color: textOn(color),
             borderRadius: 10,
-            padding: isOverall ? "6px 19px" : "5px 16px",
+            padding: isOverall
+              ? compact
+                ? "6px 17px"
+                : "6px 19px"
+              : compact
+                ? "5px 14px"
+                : "5px 16px",
             // Same bold weight as the Overall tile — the "unbolded" experiment
             // read as a different, thinner typeface at this size, so bold
             // stays the fixed rule for every score number. Sized down instead
             // (21 vs Overall's 31) so the smaller tiles carry visual weight
             // through hierarchy (size), not through being lighter.
-            fontSize: isOverall ? 31 : 21,
+            fontSize: isOverall ? (compact ? 28 : 31) : compact ? 19 : 21,
             fontWeight: 800,
             lineHeight: 1.2,
           }}
@@ -246,6 +266,7 @@ export function IndexScoreSummary({
   scoreColor = dwsScoreColor,
   defaultExpanded,
   surfaceTreatment,
+  compact = false,
 }: IndexScoreSummaryProps) {
   const [open, setOpen] = useState<Record<string, boolean>>(() => {
     const seed = defaultExpanded ?? [overall.id];
@@ -276,7 +297,7 @@ export function IndexScoreSummary({
   // to the far edge — so it reads intentional whether there are 3 indexes or
   // 7, and reflows (via wrap) instead of overflowing on narrower dashboards.
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: compact ? 12 : 16 }}>
       <Tile
         datum={overall}
         isOverall
@@ -284,6 +305,7 @@ export function IndexScoreSummary({
         onToggle={() => toggle(overall.id)}
         color={tileColors[overall.id]}
         surfaceTreatment={surfaceTreatment}
+        compact={compact}
       />
       <button
         type="button"
@@ -291,8 +313,8 @@ export function IndexScoreSummary({
         title={allOpen ? "Collapse all" : "Expand all"}
         aria-label={allOpen ? "Collapse all" : "Expand all"}
         style={{
-          width: 30,
-          height: 30,
+          width: compact ? 26 : 30,
+          height: compact ? 26 : 30,
           borderRadius: 99,
           background: "#fff",
           border: "1px solid #8798AA",
@@ -308,7 +330,17 @@ export function IndexScoreSummary({
         {allOpen ? <ChevronUp style={{ width: 16, height: 16 }} /> : <ChevronDown style={{ width: 16, height: 16 }} />}
       </button>
       <div style={{ flex: 1, minWidth: 24, display: "flex", justifyContent: "center" }}>
-        <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: compact ? 12 : 18,
+            alignItems: "center",
+            // Compact keeps everything on one row (no second-line spill on DWS
+            // office); the default layout still wraps on narrower dashboards.
+            flexWrap: compact ? "nowrap" : "wrap",
+            justifyContent: "center",
+          }}
+        >
           {indexes.map((idx) => (
             <Tile
               key={idx.id}
@@ -318,6 +350,7 @@ export function IndexScoreSummary({
               onToggle={() => toggle(idx.id)}
               color={tileColors[idx.id]}
               surfaceTreatment={surfaceTreatment}
+              compact={compact}
             />
           ))}
         </div>

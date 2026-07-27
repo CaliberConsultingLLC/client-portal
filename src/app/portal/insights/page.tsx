@@ -1,125 +1,133 @@
 import Link from "next/link";
-import { ReadoutViewer } from "@/components/portal/readout-viewer";
-import { isInternalFirebaseRole, requireFirebasePortalUser } from "@/lib/firebase/auth";
-import { getAccessiblePortalClients } from "@/lib/firebase/portal-access";
-import { getPublishedFirebaseReadoutForClient } from "@/lib/firebase/readout-store";
+import { redirect } from "next/navigation";
+import { ArrowRight, BookText } from "lucide-react";
+import { AdminDirectoryShell } from "@/components/portal/admin-directory-shell";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isInternalFirebaseRole, requireFirebasePortalUser } from "@/lib/firebase/auth";
+import {
+  getAccessiblePortalClients,
+  getAccessiblePublishedReadouts,
+} from "@/lib/firebase/portal-access";
 
-export default async function PortalInsightsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ clientId?: string }>;
-}) {
+function formatDateLabel(value?: string | null) {
+  if (!value) {
+    return "Not published yet";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+export default async function PortalInsightsPage() {
   const user = await requireFirebasePortalUser();
   const isInternalUser = isInternalFirebaseRole(user.role);
-  const clients = await getAccessiblePortalClients(user);
-  const { clientId } = await searchParams;
-  const activeClient = clients.find((client) => client.id === clientId) ?? clients[0] ?? null;
 
-  if (!activeClient) {
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        <div className="rounded-3xl border border-dashed border-[#C9D2D8] bg-white px-8 py-12 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#60727D]">Insights</p>
-          <h1 className="mt-3 text-3xl font-semibold text-[#2B2B2B]">No client is assigned.</h1>
-          <p className="mt-3 text-sm text-[#60727D]">
-            Your account does not currently have an active client workspace to load readouts from.
-          </p>
-        </div>
-      </div>
-    );
+  // Internal users manage decks from Readouts → Modify, not this client presentation route.
+  if (isInternalUser) {
+    redirect("/portal/readouts");
   }
 
-  const readout = await getPublishedFirebaseReadoutForClient(activeClient.id);
-  const hasMultipleClients = clients.length > 1;
-
-  if (!readout) {
-    return (
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        {hasMultipleClients ? (
-          <div className="mb-6 flex flex-wrap gap-2">
-            {clients.map((client) => {
-              const isActive = client.id === activeClient.id;
-              return (
-                <Button
-                  key={client.id}
-                  asChild
-                  variant={isActive ? "default" : "outline"}
-                  className={
-                    isActive
-                      ? "rounded-full bg-[#2B2B2B] text-white hover:bg-[#102533]"
-                      : "rounded-full border-[#C9D2D8] bg-white text-[#355365] hover:bg-[#F5F8FA]"
-                  }
-                >
-                  <Link href={`/portal/insights?clientId=${encodeURIComponent(client.id)}`}>
-                    {client.name}
-                  </Link>
-                </Button>
-              );
-            })}
-          </div>
-        ) : null}
-        <div className="rounded-3xl border border-dashed border-[#C9D2D8] bg-white px-8 py-12 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#60727D]">Insights</p>
-          <h1 className="mt-3 text-3xl font-semibold text-[#2B2B2B]">
-            No published insight readout.
-          </h1>
-          <p className="mt-3 text-sm text-[#60727D]">
-            {isInternalUser
-              ? `No readout is currently published for ${activeClient.name}. Publish one in Readout Manager, then refresh this page.`
-              : `There is no published insight readout for ${activeClient.name} right now.`}
-          </p>
-          {isInternalUser ? (
-            <div className="mt-6 flex flex-wrap justify-center gap-3">
-              <Button
-                asChild
-                variant="outline"
-                className="rounded-full border-[#C9D2D8] bg-white text-[#355365] hover:bg-[#F5F8FA]"
-              >
-                <Link href="/portal/readouts">Open Readout Manager</Link>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="rounded-full border-[#C9D2D8] bg-white text-[#355365] hover:bg-[#F5F8FA]"
-              >
-                <Link href={`/portal/insights?clientId=${encodeURIComponent(activeClient.id)}`}>
-                  Refresh Insights
-                </Link>
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
+  const [clients, readouts] = await Promise.all([
+    getAccessiblePortalClients(user),
+    getAccessiblePublishedReadouts(user),
+  ]);
+  const clientNameById = new Map(clients.map((client) => [client.id, client.name]));
 
   return (
-    <div className="space-y-3">
-      {hasMultipleClients ? (
-        <div className="mx-6 mt-4 flex flex-wrap gap-2">
-          {clients.map((client) => {
-            const isActive = client.id === activeClient.id;
+    <AdminDirectoryShell
+      filters={
+        <Card className="rounded-[28px] border-[#D6DEE3] bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold uppercase tracking-[0.2em] text-[#2B2B2B]">
+              Readout Access
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm leading-relaxed text-[#60727D]">
+            <p>This view lists insight readouts currently assigned to your account.</p>
+            <p>Only Available readouts you are permitted to open appear here.</p>
+          </CardContent>
+        </Card>
+      }
+      sidePanel={
+        <Card className="rounded-[28px] border-[#D6DEE3] bg-white shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold uppercase tracking-[0.2em] text-[#2B2B2B]">
+              Readout Notes
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm leading-relaxed text-[#60727D]">
+            <p>Open any assigned readout directly from the action button.</p>
+            <p>Each readout is a presentation deck tied to a survey wave or assessment.</p>
+          </CardContent>
+        </Card>
+      }
+    >
+      <div className="space-y-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#60727D]">Insights</p>
+          <h1 className="mt-3 text-xl font-semibold uppercase tracking-[0.24em] text-[#2B2B2B] sm:text-2xl">
+            Assigned Readouts
+          </h1>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#60727D]">
+            Open insight presentations currently available to your client workspace.
+          </p>
+        </div>
+
+        <div className="grid gap-4">
+          {readouts.length === 0 ? (
+            <Card className="rounded-[28px] border-dashed border-[#D6DEE3] bg-white shadow-sm">
+              <CardContent className="px-6 py-12 text-sm text-[#60727D]">
+                No readouts are assigned to your account yet.
+              </CardContent>
+            </Card>
+          ) : null}
+          {readouts.map((readout) => {
+            const waveLabel =
+              readout.deck?.waveLabel?.trim() ||
+              readout.surveyWaveLabel?.trim() ||
+              null;
+            const clientName = clientNameById.get(readout.clientId) ?? readout.clientId;
+            const descriptionParts = [
+              clientName,
+              waveLabel,
+              `Updated ${formatDateLabel(readout.publishedAt ?? readout.updatedAt)}`,
+            ].filter(Boolean);
+
             return (
-              <Button
-                key={client.id}
-                asChild
-                variant={isActive ? "default" : "outline"}
-                className={
-                  isActive
-                    ? "rounded-full bg-[#2B2B2B] text-white hover:bg-[#102533]"
-                    : "rounded-full border-[#C9D2D8] bg-white text-[#355365] hover:bg-[#F5F8FA]"
-                }
-              >
-                <Link href={`/portal/insights?clientId=${encodeURIComponent(client.id)}`}>
-                  {client.name}
-                </Link>
-              </Button>
+              <Card key={readout.id} className="rounded-[28px] border-[#D6DEE3] bg-white shadow-sm">
+                <CardContent className="p-5">
+                  <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h2 className="text-lg font-semibold text-[#2B2B2B]">{readout.name}</h2>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-[#F4F7F9] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#60727D]">
+                          <BookText className="h-3.5 w-3.5" />
+                          Ready to open
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm leading-relaxed text-[#60727D]">
+                        {descriptionParts.join(" · ")}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 sm:justify-self-end">
+                      <Button asChild className="rounded-full bg-[#2B2B2B] text-white hover:bg-[#386B45]">
+                        <Link href={`/portal/insights/${encodeURIComponent(readout.id)}`}>
+                          Open Readout
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
-      ) : null}
-      <ReadoutViewer readout={readout} clientName={activeClient.name} isInternalUser={isInternalUser} />
-    </div>
+      </div>
+    </AdminDirectoryShell>
   );
 }

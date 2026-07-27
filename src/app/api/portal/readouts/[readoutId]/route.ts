@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOptionalFirebaseUser, isInternalFirebaseRole } from "@/lib/firebase/auth";
 import {
+  canClientUserAccessReadout,
   deleteFirebaseReadout,
   getFirebaseReadoutById,
   updateFirebaseReadout,
 } from "@/lib/firebase/readout-store";
-import type { ReadoutFinding, ReadoutIntro, ReadoutOutro, ReadoutStatus } from "@/types/readout";
+import type {
+  ReadoutAccessMode,
+  ReadoutDeck,
+  ReadoutFinding,
+  ReadoutIntro,
+  ReadoutOutro,
+  ReadoutStatus,
+} from "@/types/readout";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,7 +53,10 @@ export async function GET(
     return access.error;
   }
 
-  if (!isInternalFirebaseRole(access.actor.role) && access.readout.status !== "published") {
+  if (
+    !isInternalFirebaseRole(access.actor.role) &&
+    !canClientUserAccessReadout(access.actor, access.readout)
+  ) {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
@@ -73,9 +84,12 @@ export async function PATCH(
       surveyWaveLabel?: string | null;
       name?: string;
       status?: ReadoutStatus;
+      accessMode?: ReadoutAccessMode;
+      allowedUserIds?: string[];
       intro?: Partial<ReadoutIntro>;
       findings?: ReadoutFinding[];
       outro?: Partial<ReadoutOutro>;
+      deck?: ReadoutDeck | null;
     };
 
     const readout = await updateFirebaseReadout({
@@ -84,9 +98,12 @@ export async function PATCH(
       ...(body.surveyWaveLabel !== undefined ? { surveyWaveLabel: body.surveyWaveLabel } : {}),
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.status !== undefined ? { status: body.status } : {}),
+      ...(body.accessMode !== undefined ? { accessMode: body.accessMode } : {}),
+      ...(body.allowedUserIds !== undefined ? { allowedUserIds: body.allowedUserIds } : {}),
       ...(body.intro !== undefined ? { intro: body.intro } : {}),
       ...(body.findings !== undefined ? { findings: body.findings } : {}),
       ...(body.outro !== undefined ? { outro: body.outro } : {}),
+      ...(body.deck !== undefined ? { deck: body.deck } : {}),
     });
 
     return NextResponse.json({ readout });

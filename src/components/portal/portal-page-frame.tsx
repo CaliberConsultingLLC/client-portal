@@ -23,14 +23,14 @@ export function PortalPageFrame({
   return (
     <div
       className={cn(
-        "grid min-h-[calc(100vh-var(--app-top-banner-height))] grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)_260px] xl:items-stretch",
+        "grid min-h-[calc(100vh-var(--app-top-banner-height))] grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_260px] lg:items-stretch",
         className
       )}
     >
       <aside
         className={cn(
-          leftRail ? "block" : "hidden xl:block",
-          "min-w-0 bg-[#E8ECE9] px-6 py-8 xl:self-stretch xl:border-r xl:border-[#D4DAD6]"
+          leftRail ? "block" : "hidden lg:block",
+          "min-w-0 bg-[#E8ECE9] px-6 py-8 lg:self-stretch lg:border-r lg:border-[#D4DAD6]"
         )}
       >
         <div className="h-full min-h-full">
@@ -44,8 +44,8 @@ export function PortalPageFrame({
 
       <aside
         className={cn(
-          rightRail ? "block" : "hidden xl:block",
-          "min-w-0 bg-[#E8ECE9] px-6 py-8 xl:self-stretch xl:border-l xl:border-[#D4DAD6]"
+          rightRail ? "block" : "hidden lg:block",
+          "min-w-0 bg-[#E8ECE9] px-6 py-8 lg:self-stretch lg:border-l lg:border-[#D4DAD6]"
         )}
       >
         <div className="h-full min-h-full">

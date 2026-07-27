@@ -11,7 +11,7 @@
  *  - the white "dashboard ribbon" is gone
  *  - left rail = Views → Reports accordion navigator (collapsible to 44px)
  *  - center = in-content title header + the report content (rendered chromeless)
- *  - right rail = Context / Filters tabs (collapsible to 44px)
+ *  - right rail = Filters / Context tabs (Filters first; collapsible to 44px)
  *
  * Colors, fonts, and the actual visualizations are unchanged — this is layout
  * and navigation only.
@@ -27,6 +27,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { SilentVisualExportFrame, VisualExportButtonStyleProvider } from "@/components/dashboard/registered-visual-export-frame";
+import { FilterStack } from "./ee-report-kit";
 
 export interface FieldRedesignReport {
   id: string;
@@ -167,7 +168,7 @@ export function FieldRedesignShell({
 }: FieldRedesignShellProps) {
   const [leftExpanded, setLeftExpanded] = useState(true);
   const [rightExpanded, setRightExpanded] = useState(true);
-  const [rightTab, setRightTab] = useState<"context" | "filters">("context");
+  const [rightTab, setRightTab] = useState<"context" | "filters">("filters");
   const [openViewId, setOpenViewId] = useState<string | null>(activeViewId);
 
   // Keep the active view's group open when the report changes from elsewhere.
@@ -683,7 +684,7 @@ export function FieldRedesignShell({
         </div>
       </div>
 
-      {/* ───────── RIGHT RAIL — Context / Filters ─────────
+      {/* ───────── RIGHT RAIL — Filters / Context ─────────
           Same un-clipped outer wrapper pattern as the left rail, so the edge
           toggle isn't sliced by the inner rail's overflow:hidden. */}
       <div
@@ -720,7 +721,7 @@ export function FieldRedesignShell({
             panel permanently mounted removes that race entirely. */}
         <div style={{ width: 260, display: rightExpanded ? "flex" : "none", flexDirection: "column", height: "100%", overflow: "hidden" }}>
           <div style={{ display: "flex", flexShrink: 0, background: "#DDE3DE", borderBottom: "1px solid #D4DAD6" }}>
-            {(["context", "filters"] as const).map((tab) => {
+            {(["filters", "context"] as const).map((tab) => {
               const active = rightTab === tab;
               return (
                 <button
@@ -749,8 +750,10 @@ export function FieldRedesignShell({
           </div>
           <div className="fr-view-scroll" style={{ flex: 1, overflowY: "auto", padding: "14px 12px 60px" }}>
             {/* Both mount always; toggle visibility so portal targets stay alive. */}
+            <div style={{ display: rightTab === "filters" ? "block" : "none" }}>
+              <FilterStack>{filtersSlot}</FilterStack>
+            </div>
             <div style={{ display: rightTab === "context" ? "block" : "none" }}>{contextSlot}</div>
-            <div style={{ display: rightTab === "filters" ? "block" : "none" }}>{filtersSlot}</div>
           </div>
         </div>
         <div
@@ -758,20 +761,20 @@ export function FieldRedesignShell({
         >
           <button
             type="button"
-            title="Context"
-            onClick={() => { setRightTab("context"); setRightExpanded(true); }}
-            style={{ width: 30, height: 30, borderRadius: 9, background: "#fff", border: "1px solid #C8D2CF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#3B4B63" }}
-          >
-            <BarChart3 style={{ width: 15, height: 15 }} />
-          </button>
-          <div style={{ width: 20, height: 1, background: "#C8D2CF" }} />
-          <button
-            type="button"
             title="Filters"
             onClick={() => { setRightTab("filters"); setRightExpanded(true); }}
             style={{ width: 30, height: 30, borderRadius: 9, background: "#fff", border: "1px solid #C8D2CF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#3B4B63" }}
           >
             <SlidersHorizontal style={{ width: 15, height: 15 }} />
+          </button>
+          <div style={{ width: 20, height: 1, background: "#C8D2CF" }} />
+          <button
+            type="button"
+            title="Context"
+            onClick={() => { setRightTab("context"); setRightExpanded(true); }}
+            style={{ width: 30, height: 30, borderRadius: 9, background: "#fff", border: "1px solid #C8D2CF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#3B4B63" }}
+          >
+            <BarChart3 style={{ width: 15, height: 15 }} />
           </button>
         </div>
       </div>

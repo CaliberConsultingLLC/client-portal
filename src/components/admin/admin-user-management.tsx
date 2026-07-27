@@ -1,21 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { KeyRound, ShieldCheck, UserCog, Users } from "lucide-react";
-import { AdminDirectoryShell } from "@/components/portal/admin-directory-shell";
-import {
-  AdminDirectoryOverview,
-  AdminDirectorySection,
-} from "@/components/portal/admin-directory-table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,11 +21,15 @@ import {
 import type { FirebaseUserDoc } from "@/lib/firebase/user-store";
 import {
   DASHBOARD_ACCESS_OPTIONS,
-  EE_PERSPECTIVE_ACCESS_OPTIONS,
+  FILTER_RULE_FIELD_OPTIONS,
+  isDashboardAssetAllowed,
+  listPerspectiveAccessOptionsForDashboardAsset,
+  normalizeDashboardAssetId,
   type EmployeeExperienceUserAccess,
-  type PerspectiveFilterRule,
+  type SharedFilterRule,
   sanitizeEmployeeExperienceUserAccess,
 } from "@/lib/firebase/user-access";
+import type { PortalDashboardAssignment } from "@/types/portal";
 
 interface AdminPortalClient {
   id: string;
@@ -51,6 +41,7 @@ interface AdminPortalClient {
 interface AdminUserManagementProps {
   initialUsers: FirebaseUserDoc[];
   clients: AdminPortalClient[];
+  dashboardAssignments?: PortalDashboardAssignment[];
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -75,29 +66,53 @@ interface AdminUserRow extends FirebaseUserDoc {
 const ROLE_OPTIONS = FIREBASE_PORTAL_ROLES;
 const CLIENT_SCOPED_ROLES = CLIENT_SCOPED_FIREBASE_ROLES;
 const DASHBOARD_ACCESS_IDS = DASHBOARD_ACCESS_OPTIONS.map((option) => option.id);
-const INTEGRATION_DASHBOARD_IDS = new Set(["integration-dashboard", "csg-integration-dashboard"]);
-const EMPLOYEE_EXPERIENCE_DASHBOARD_IDS = new Set([
+const INTEGRATION_DASHBOARD_BASE_IDS = new Set([
+  "integration-dashboard",
+  "csg-integration-dashboard",
+]);
+const EMPLOYEE_EXPERIENCE_DASHBOARD_BASE_IDS = new Set([
   "dws-employee-experience",
   "employee-experience",
 ]);
-const INTEGRATION_PERSPECTIVE_OPTIONS = EE_PERSPECTIVE_ACCESS_OPTIONS.filter((option) =>
-  option.id.startsWith("integration.")
-);
-const EMPLOYEE_EXPERIENCE_PERSPECTIVE_OPTIONS = EE_PERSPECTIVE_ACCESS_OPTIONS.filter(
-  (option) => !option.id.startsWith("integration.")
-);
+function isIntegrationDashboardId(assetId: string) {
+  return INTEGRATION_DASHBOARD_BASE_IDS.has(normalizeDashboardAssetId(assetId));
+}
+
+function isEmployeeExperienceDashboardId(assetId: string) {
+  const base = normalizeDashboardAssetId(assetId);
+  return (
+    EMPLOYEE_EXPERIENCE_DASHBOARD_BASE_IDS.has(base) ||
+    base === "dws-employee-experience" ||
+    assetId.startsWith("employee-experience")
+  );
+}
 
 function resolvePerspectiveOptionsForDashboards(selectedDashboardIds: string[]) {
   const selected = new Set(selectedDashboardIds);
-  const includeIntegration = selectedDashboardIds.some((id) => INTEGRATION_DASHBOARD_IDS.has(id));
-  const includeEmployeeExperience = selectedDashboardIds.some((id) =>
-    EMPLOYEE_EXPERIENCE_DASHBOARD_IDS.has(id)
-  );
+  const integrationById = new Map<string, { id: string; label: string }>();
+  const employeeExperienceById = new Map<string, { id: string; label: string }>();
 
-  const integrationOptions = includeIntegration ? INTEGRATION_PERSPECTIVE_OPTIONS : [];
-  const employeeExperienceOptions = includeEmployeeExperience
-    ? EMPLOYEE_EXPERIENCE_PERSPECTIVE_OPTIONS
-    : [];
+  selectedDashboardIds.forEach((dashboardId) => {
+    const options = listPerspectiveAccessOptionsForDashboardAsset(dashboardId);
+    if (isIntegrationDashboardId(dashboardId)) {
+      options.forEach((option) => {
+        if (!integrationById.has(option.id)) {
+          integrationById.set(option.id, option);
+        }
+      });
+      return;
+    }
+    if (isEmployeeExperienceDashboardId(dashboardId)) {
+      options.forEach((option) => {
+        if (!employeeExperienceById.has(option.id)) {
+          employeeExperienceById.set(option.id, option);
+        }
+      });
+    }
+  });
+
+  const integrationOptions = Array.from(integrationById.values());
+  const employeeExperienceOptions = Array.from(employeeExperienceById.values());
   const allOptions = [...integrationOptions, ...employeeExperienceOptions];
   const allIds = new Set<string>(allOptions.map((option) => option.id));
 
@@ -110,8 +125,103 @@ function resolvePerspectiveOptionsForDashboards(selectedDashboardIds: string[]) 
   };
 }
 
+function buildDashboardOptionsForClients(
+  clientIds: string[],
+  assignments: PortalDashboardAssignment[],
+  isClientScopedRole: boolean
+) {
+  if (!isClientScopedRole) {
+    return DASHBOARD_ACCESS_OPTIONS.map((option) => ({
+      id: option.id,
+      label: option.label,
+    }));
+  }
+
+  if (clientIds.length === 0) {
+    return [];
+  }
+
+  const clientIdSet = new Set(clientIds);
+  const byAssetId = new Map<string, { id: string; label: string }>();
+
+  assignments
+    .filter((assignment) => clientIdSet.has(assignment.clientId) && assignment.published)
+    .forEach((assignment) => {
+      if (!byAssetId.has(assignment.assetId)) {
+        byAssetId.set(assignment.assetId, {
+          id: assignment.assetId,
+          label: assignment.title,
+        });
+      }
+    });
+
+  if (byAssetId.size === 0) {
+    return [];
+  }
+
+  return Array.from(byAssetId.values()).sort((left, right) =>
+    left.label.localeCompare(right.label)
+  );
+}
+
+function pruneAccessForDashboards(
+  access: EmployeeExperienceUserAccess,
+  dashboardIds: string[]
+): EmployeeExperienceUserAccess {
+  const perspectiveGroups = resolvePerspectiveOptionsForDashboards(dashboardIds);
+  const allowedDashboardAssetIds = access.allowedDashboardAssetIds.filter((id) =>
+    dashboardIds.some(
+      (dashboardId) =>
+        dashboardId === id || isDashboardAssetAllowed(dashboardId, [id]) || isDashboardAssetAllowed(id, [dashboardId])
+    )
+  );
+
+  return {
+    ...access,
+    allowedDashboardAssetIds,
+    allowedPerspectiveIds: access.allowedPerspectiveIds.filter((value) =>
+      perspectiveGroups.allIds.has(value)
+    ),
+    perspectiveFilterRules: access.perspectiveFilterRules.filter((rule) =>
+      perspectiveGroups.allIds.has(rule.perspectiveId)
+    ),
+  };
+}
+
+function getSharedFilterDraft(
+  access: EmployeeExperienceUserAccess
+): SharedFilterRule {
+  if (access.sharedFilterRule) {
+    return {
+      field: access.sharedFilterRule.field,
+      allowedValues: [...access.sharedFilterRule.allowedValues],
+    };
+  }
+
+  const firstRule = access.perspectiveFilterRules[0];
+  if (firstRule) {
+    return {
+      field: firstRule.field,
+      allowedValues: [...firstRule.allowedValues],
+    };
+  }
+
+  return { field: "company", allowedValues: [] };
+}
+
 function trimIntegrationPrefix(label: string) {
   return label.replace(/^Integration\s*-\s*/i, "");
+}
+
+function parseAllowedValuesInput(input: string) {
+  return Array.from(
+    new Set(
+      input
+        .split(/\r?\n/)
+        .map((value) => value.trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 function sortUsers(users: FirebaseUserDoc[]) {
@@ -134,7 +244,8 @@ function formatRoleLabel(role: FirebasePortalRole) {
 export function AdminUserManagement({
   initialUsers,
   clients,
-  eyebrow = "Admin Workspace",
+  dashboardAssignments = [],
+  eyebrow: _eyebrow = "Admin Workspace",
   title = "Users",
   description = "Review every portal user in one place, including role, status, and workspace assignments, then manage access centrally as client needs change.",
   savePath = "/api/admin/users",
@@ -147,26 +258,33 @@ export function AdminUserManagement({
   const [bannerMessage, setBannerMessage] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [roleFilter, setRoleFilter] = useState<"all" | FirebasePortalRole>("all");
+  const [selectedClientId, setSelectedClientId] = useState<string>(
+    clients[0]?.id ?? "__internal__"
+  );
 
   const clientNameById = useMemo(
     () => new Map(clients.map((client) => [client.id, client.name])),
     [clients]
   );
 
-  const summaryCards = useMemo(() => {
-    const activeUsers = users.filter((user) => user.isActive).length;
-    const internalUsers = users.filter(
+  const clientRail = useMemo(() => {
+    const items = clients
+      .map((client) => ({
+        id: client.id,
+        name: client.name,
+        count: users.filter((user) => user.clientIds.includes(client.id)).length,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+
+    const internalCount = users.filter(
       (user) => user.role === "super_admin" || user.role === "internal_admin"
     ).length;
-    const clientAdmins = users.filter((user) => user.role === "client_admin" && user.isActive).length;
 
     return [
-      { label: "Total users", value: users.length, icon: Users },
-      { label: "Active users", value: activeUsers, icon: UserCog },
-      { label: "Internal access", value: internalUsers, icon: ShieldCheck },
-      { label: "Client admins", value: clientAdmins, icon: KeyRound },
+      { id: "__internal__", name: "Caliber Internal", count: internalCount },
+      ...items,
     ];
-  }, [users]);
+  }, [clients, users]);
 
   const tableRows = useMemo<AdminUserRow[]>(
     () =>
@@ -175,11 +293,17 @@ export function AdminUserManagement({
           if (statusFilter === "active" && !user.isActive) return false;
           if (statusFilter === "inactive" && user.isActive) return false;
           if (roleFilter !== "all" && user.role !== roleFilter) return false;
-          return true;
+          if (selectedClientId === "__internal__") {
+            return user.role === "super_admin" || user.role === "internal_admin";
+          }
+          return user.clientIds.includes(selectedClientId);
         })
         .map((user) => ({ ...user, id: user.uid })),
-    [users, statusFilter, roleFilter]
+    [users, statusFilter, roleFilter, selectedClientId]
   );
+
+  const selectedClientLabel =
+    clientRail.find((item) => item.id === selectedClientId)?.name ?? "Users";
 
   function updateAssignedClient(clientId: string, checked: boolean) {
     setForm((current) => {
@@ -191,9 +315,36 @@ export function AdminUserManagement({
         ? Array.from(new Set([...current.clientIds, clientId]))
         : current.clientIds.filter((value) => value !== clientId);
 
+      const availableDashboards = buildDashboardOptionsForClients(
+        nextClientIds,
+        dashboardAssignments,
+        CLIENT_SCOPED_ROLES.has(current.role)
+      );
+      const availableDashboardIds = availableDashboards.map((option) => option.id);
+      const nextAccess = pruneAccessForDashboards(
+        current.employeeExperienceAccess,
+        current.employeeExperienceAccess.dashboardAccessMode === "restricted"
+          ? current.employeeExperienceAccess.allowedDashboardAssetIds.filter((id) =>
+              availableDashboardIds.some(
+                (dashboardId) =>
+                  dashboardId === id ||
+                  isDashboardAssetAllowed(dashboardId, [id]) ||
+                  isDashboardAssetAllowed(id, [dashboardId])
+              )
+            )
+          : availableDashboardIds
+      );
+
       return {
         ...current,
         clientIds: nextClientIds,
+        employeeExperienceAccess: {
+          ...nextAccess,
+          allowedDashboardAssetIds:
+            current.employeeExperienceAccess.dashboardAccessMode === "restricted"
+              ? nextAccess.allowedDashboardAssetIds
+              : current.employeeExperienceAccess.allowedDashboardAssetIds,
+        },
       };
     });
   }
@@ -242,64 +393,115 @@ export function AdminUserManagement({
     form?.employeeExperienceAccess.dashboardAccessMode === "restricted";
   const perspectiveAccessRestricted =
     form?.employeeExperienceAccess.perspectiveAccessMode === "restricted";
+  const availableDashboardOptions = useMemo(() => {
+    if (!form) {
+      return [] as Array<{ id: string; label: string }>;
+    }
+    return buildDashboardOptionsForClients(
+      form.clientIds,
+      dashboardAssignments,
+      CLIENT_SCOPED_ROLES.has(form.role)
+    );
+  }, [form, dashboardAssignments]);
+  const availableDashboardIds = useMemo(
+    () => availableDashboardOptions.map((option) => option.id),
+    [availableDashboardOptions]
+  );
   const effectiveDashboardIds = useMemo(() => {
     if (!form) {
       return [] as string[];
     }
-    return dashboardAccessRestricted
-      ? form.employeeExperienceAccess.allowedDashboardAssetIds
-      : DASHBOARD_ACCESS_IDS;
-  }, [form, dashboardAccessRestricted]);
+    if (dashboardAccessRestricted) {
+      return form.employeeExperienceAccess.allowedDashboardAssetIds.filter((id) =>
+        availableDashboardIds.some(
+          (dashboardId) =>
+            dashboardId === id ||
+            isDashboardAssetAllowed(dashboardId, [id]) ||
+            isDashboardAssetAllowed(id, [dashboardId])
+        )
+      );
+    }
+    return availableDashboardIds.length > 0 ? availableDashboardIds : DASHBOARD_ACCESS_IDS;
+  }, [form, dashboardAccessRestricted, availableDashboardIds]);
   const availablePerspectiveGroups = useMemo(
     () => resolvePerspectiveOptionsForDashboards(effectiveDashboardIds),
     [effectiveDashboardIds]
   );
-  const defaultFilterRulePerspectiveId =
-    availablePerspectiveGroups.allOptions[0]?.id ?? "integration.brandReport";
-  const filterRuleFieldOptions = [
-    "company",
-    "brand",
-    "location",
-    "department",
-    "division",
-    "fieldCategory",
-    "jobTitle",
-    "supervisor",
-  ];
+  const filterRulesConfigured =
+    Boolean(form?.employeeExperienceAccess.sharedFilterRule) ||
+    (form?.employeeExperienceAccess.perspectiveFilterRules.length ?? 0) > 0;
+  const sharedFilterDraft = form ? getSharedFilterDraft(form.employeeExperienceAccess) : null;
+  const hasLegacyPerspectiveFilterRules =
+    (form?.employeeExperienceAccess.perspectiveFilterRules.length ?? 0) > 0;
+  const filterRuleFieldOptions = FILTER_RULE_FIELD_OPTIONS;
 
   return (
     <div className="space-y-6">
-      <AdminDirectoryShell
-        filters={
-          <Card className="rounded-[28px] border-[#D6DEE3] bg-white">
-            <CardHeader>
-              <CardTitle className="text-base font-semibold uppercase tracking-[0.2em] text-[#102533]">
-                Filters
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      <div className="rounded-2xl border border-[#D4DAD4] bg-[#EEF2EE]">
+        <div className="grid min-h-[680px] grid-cols-[220px_1fr]">
+          <aside className="border-r border-[#D4DAD4] bg-[#F5F8F5] px-3 py-5">
+            <p className="px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A9A8C]">
+              Clients
+            </p>
+            <div className="mt-2 space-y-1">
+              {clientRail.map((client) => {
+                const active = client.id === selectedClientId;
+                return (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() => setSelectedClientId(client.id)}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left ${
+                      active ? "bg-[#E4EDE5]" : "hover:bg-[#ECF2ED]"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        active ? "bg-[#386B45]" : "bg-[#C7D0D8]"
+                      }`}
+                    />
+                    <span
+                      className={`min-w-0 truncate text-sm ${
+                        active ? "font-semibold text-[#152238]" : "text-[#6E7E96]"
+                      }`}
+                    >
+                      {client.name}
+                    </span>
+                    {client.count > 0 ? (
+                      <span className="ml-auto rounded-full bg-[#C8E0CB] px-2 py-0.5 text-[10px] font-bold text-[#386B45]">
+                        {client.count}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+
+          <section className="px-8 py-7">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[#60727D]">
-                  Status
-                </label>
+                <p className="text-xs font-semibold text-[#8A9A8C]">{selectedClientLabel}</p>
+                <h1 className="text-2xl font-bold text-[#152238]">{title}</h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
                 <Select
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
-                  className="mt-2 rounded-2xl border-[#D6DEE3]"
+                  onChange={(event) =>
+                    setStatusFilter(event.target.value as "all" | "active" | "inactive")
+                  }
+                  className="h-10 min-w-[130px] rounded-full border-[#D4DAD4] bg-white"
                 >
-                  <option value="all">All users</option>
+                  <option value="all">All status</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </Select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold uppercase tracking-[0.16em] text-[#60727D]">
-                  Role
-                </label>
                 <Select
                   value={roleFilter}
-                  onChange={(event) => setRoleFilter(event.target.value as "all" | FirebasePortalRole)}
-                  className="mt-2 rounded-2xl border-[#D6DEE3]"
+                  onChange={(event) =>
+                    setRoleFilter(event.target.value as "all" | FirebasePortalRole)
+                  }
+                  className="h-10 min-w-[150px] rounded-full border-[#D4DAD4] bg-white"
                 >
                   <option value="all">All roles</option>
                   {ROLE_OPTIONS.map((role) => (
@@ -309,141 +511,101 @@ export function AdminUserManagement({
                   ))}
                 </Select>
               </div>
-            </CardContent>
-          </Card>
-        }
-        sidePanel={
-          <div className="space-y-4">
-            <Card className="rounded-[28px] border-[#D6DEE3] bg-white">
-              <CardHeader>
-                <CardTitle className="text-base font-semibold uppercase tracking-[0.2em] text-[#102533]">
-                  Access Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-2xl bg-[#F5F8FA] px-4 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#60727D]">
-                    Internal roles
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-[#60727D]">
-                    `Super Admin` and `Internal Admin` users are managed centrally and do not require
-                    client assignments.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[#F5F8FA] px-4 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#60727D]">
-                    Client roles
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-[#60727D]">
-                    `Client Admin`, `Executive`, `Management`, and `Employee` users should stay
-                    attached only to the workspaces they need to access.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[#F5F8FA] px-4 py-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#60727D]">
-                    Password resets
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-[#60727D]">
-                    Enter a new password while editing a user if credentials need to be rotated or
-                    reset.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        }
-      >
-        <div className="space-y-8">
-          <AdminDirectoryOverview
-            title={title}
-            description={description}
-            metrics={summaryCards.map((item) => ({ label: item.label, value: item.value }))}
-          />
-
-          {bannerMessage ? (
-            <div className="rounded-2xl border border-[#D6DEE3] bg-[#F5F8FA] px-4 py-3 text-sm text-[#355365]">
-              {bannerMessage}
             </div>
-          ) : null}
 
-          <AdminDirectorySection
-            title="Portal User Directory"
-            description="A collective view of active and inactive users, their access level, and assigned client workspaces."
-            columns={[
-              { key: "user", label: "User" },
-              { key: "access", label: "Access" },
-              { key: "assignments", label: "Assignments" },
-              { key: "updated", label: "Updated" },
-              { key: "actions", label: "Actions" },
-            ]}
-            rows={tableRows.map((user) => ({
-              id: user.id,
-              cells: [
-                <div key="user">
-                  <p className="font-medium text-text-primary">{user.fullName}</p>
-                  <p className="text-xs text-text-muted">{user.email}</p>
-                </div>,
-                <div key="access" className="flex flex-wrap items-center justify-center gap-2">
-                  <Badge variant={user.isActive ? "success" : "secondary"}>
-                    {user.isActive ? "Active" : "Inactive"}
-                  </Badge>
-                  <Badge variant="default">{formatRoleLabel(user.role)}</Badge>
-                </div>,
-                <div key="assignments" className="space-y-1">
-                  {user.clientIds.length === 0 ? (
-                    <span className="text-text-muted">All internal access</span>
+            {bannerMessage ? (
+              <div className="mb-4 rounded-xl border border-[#D4DAD4] bg-white px-4 py-3 text-sm text-[#355365]">
+                {bannerMessage}
+              </div>
+            ) : null}
+
+            <div className="overflow-hidden rounded-xl border border-[#D4DAD4] bg-white">
+              <table className="w-full border-collapse text-sm">
+                <thead className="bg-[#F1F5F1]">
+                  <tr className="border-b-2 border-[#D4DAD4] text-left text-[11px] uppercase tracking-[0.1em] text-[#6E7E96]">
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Assignments</th>
+                    <th className="px-4 py-3">Updated</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-8 text-sm text-[#6E7E96]" colSpan={6}>
+                        No users match this client and filter selection.
+                      </td>
+                    </tr>
                   ) : (
-                    <>
-                      <p className="text-sm text-text-primary">
-                        {user.clientIds.length} workspace{user.clientIds.length === 1 ? "" : "s"}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        {user.clientIds
-                          .map((clientId) => clientNameById.get(clientId) ?? clientId)
-                          .join(", ")}
-                      </p>
-                    </>
+                    tableRows.map((user) => (
+                      <tr key={user.id} className="border-b border-[#EEF2EE] last:border-b-0">
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-[#152238]">{user.fullName}</p>
+                          <p className="text-xs text-[#6E7E96]">{user.email}</p>
+                        </td>
+                        <td className="px-4 py-3 text-[#3B4B63]">
+                          {formatRoleLabel(user.role)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${
+                              user.isActive
+                                ? "bg-[#E4EDE5] text-[#2F7048]"
+                                : "bg-[#EDF2F5] text-[#60727D]"
+                            }`}
+                          >
+                            {user.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[#3B4B63]">
+                          {user.clientIds.length === 0
+                            ? "Internal access"
+                            : user.clientIds
+                                .map((clientId) => clientNameById.get(clientId) ?? clientId)
+                                .join(", ")}
+                        </td>
+                        <td className="px-4 py-3 text-[#6E7E96]">
+                          {new Date(user.updatedAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-[13px] font-semibold">
+                          <button
+                            type="button"
+                            className="text-[#386B45]"
+                            onClick={() => {
+                              setForm({
+                                uid: user.uid,
+                                fullName: user.fullName,
+                                email: user.email,
+                                role: user.role,
+                                isActive: user.isActive,
+                                password: "",
+                                clientIds: user.clientIds,
+                                employeeExperienceAccess: sanitizeEmployeeExperienceUserAccess(
+                                  user.employeeExperienceAccess
+                                ),
+                              });
+                              setError("");
+                              setDialogOpen(true);
+                            }}
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )}
-                  {user.employeeExperienceAccess?.allowedPerspectiveIds?.length ||
-                  user.employeeExperienceAccess?.brandReportAllowedBrands?.length ? (
-                    <p className="text-xs text-[#60727D]">
-                      Restricted EE access
-                    </p>
-                  ) : null}
-                </div>,
-                <span key="updated" className="font-medium text-[#60727D]">
-                  {new Date(user.updatedAt).toLocaleDateString()}
-                </span>,
-                <div key="actions" className="flex items-center justify-center">
-                  <Button
-                    variant="outline"
-                    className="rounded-full border-[#C9D2D8]"
-                    onClick={() => {
-                      setForm({
-                        uid: user.uid,
-                        fullName: user.fullName,
-                        email: user.email,
-                        role: user.role,
-                        isActive: user.isActive,
-                        password: "",
-                        clientIds: user.clientIds,
-                        employeeExperienceAccess: sanitizeEmployeeExperienceUserAccess(
-                          user.employeeExperienceAccess
-                        ),
-                      });
-                      setError("");
-                      setDialogOpen(true);
-                    }}
-                  >
-                    Manage / Edit
-                  </Button>
-                </div>,
-              ],
-            }))}
-            emptyMessage="No portal users found."
-          />
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-3 text-xs italic text-[#8A9A8C]">
+              {description}
+            </p>
+          </section>
         </div>
-      </AdminDirectoryShell>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="h-[90vh] w-[min(96vw,1280px)] max-w-[1280px] overflow-hidden rounded-[28px] border-[#D6DEE3] p-0">
@@ -572,7 +734,8 @@ export function AdminUserManagement({
               <div className="rounded-2xl border border-[#E1E7EB] bg-[#F9FBFC] px-4 py-4">
                 <p className="text-sm font-medium text-[#102533]">Perspective Access</p>
                 <p className="mt-1 text-sm text-[#60727D]">
-                  Set dashboard, perspective, and Brand Report filter visibility for this user.
+                  Choose dashboards and perspectives for the selected workspace, then optionally set
+                  one shared filter that applies across all of them.
                 </p>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -585,10 +748,21 @@ export function AdminUserManagement({
                         const mode = event.target.value as "full" | "restricted";
                         const nextAllowedDashboardAssetIds =
                           mode === "restricted"
-                            ? current.employeeExperienceAccess.allowedDashboardAssetIds
+                            ? current.employeeExperienceAccess.allowedDashboardAssetIds.filter((id) =>
+                                availableDashboardIds.some(
+                                  (dashboardId) =>
+                                    dashboardId === id ||
+                                    isDashboardAssetAllowed(dashboardId, [id]) ||
+                                    isDashboardAssetAllowed(id, [dashboardId])
+                                )
+                              )
                             : [];
                         const nextPerspectiveGroups = resolvePerspectiveOptionsForDashboards(
-                          mode === "restricted" ? nextAllowedDashboardAssetIds : DASHBOARD_ACCESS_IDS
+                          mode === "restricted"
+                            ? nextAllowedDashboardAssetIds
+                            : availableDashboardIds.length > 0
+                              ? availableDashboardIds
+                              : DASHBOARD_ACCESS_IDS
                         );
                         return {
                           ...current,
@@ -638,34 +812,39 @@ export function AdminUserManagement({
                   </Select>
 
                   <Select
-                    label="Filter rules"
-                    value={form.employeeExperienceAccess.perspectiveFilterRules.length > 0 ? "configured" : "none"}
+                    label="Shared filter"
+                    value={filterRulesConfigured ? "configured" : "none"}
                     onChange={(event) =>
                       setForm((current) => {
                         if (!current) return current;
                         const mode = event.target.value as "configured" | "none";
+                        if (mode === "none") {
+                          return {
+                            ...current,
+                            employeeExperienceAccess: {
+                              ...current.employeeExperienceAccess,
+                              sharedFilterRule: null,
+                              // Clearing intentionally removes legacy per-perspective rules too.
+                              perspectiveFilterRules: [],
+                            },
+                          };
+                        }
+
+                        const draft = getSharedFilterDraft(current.employeeExperienceAccess);
                         return {
                           ...current,
                           employeeExperienceAccess: {
                             ...current.employeeExperienceAccess,
-                            perspectiveFilterRules:
-                              mode === "configured"
-                                ? current.employeeExperienceAccess.perspectiveFilterRules.length > 0
-                                  ? current.employeeExperienceAccess.perspectiveFilterRules
-                                  : [
-                                      {
-                                        perspectiveId: defaultFilterRulePerspectiveId,
-                                        field: "company",
-                                        allowedValues: [],
-                                      } satisfies PerspectiveFilterRule,
-                                    ]
-                                : [],
+                            sharedFilterRule: {
+                              field: draft.field || "company",
+                              allowedValues: draft.allowedValues,
+                            },
                           },
                         };
                       })
                     }
                   >
-                    <option value="none">No filter rules</option>
+                    <option value="none">No shared filter</option>
                     <option value="configured">Configured</option>
                   </Select>
                 </div>
@@ -675,60 +854,85 @@ export function AdminUserManagement({
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#60727D]">
                       Allowed Dashboards
                     </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {DASHBOARD_ACCESS_OPTIONS.map((option) => {
-                        const checked = form.employeeExperienceAccess.allowedDashboardAssetIds.includes(
-                          option.id
-                        );
-                        return (
-                          <label
-                            key={option.id}
-                            className="flex items-start gap-3 rounded-2xl border border-[#D6DEE3] bg-white px-4 py-3 text-sm text-[#355365]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(event) =>
-                                setForm((current) => {
-                                  if (!current) return current;
-                                  const next = event.target.checked
-                                    ? Array.from(
-                                        new Set([
-                                          ...current.employeeExperienceAccess.allowedDashboardAssetIds,
-                                          option.id,
-                                        ])
-                                      )
-                                    : current.employeeExperienceAccess.allowedDashboardAssetIds.filter(
-                                        (value) => value !== option.id
-                                      );
-                                  const nextPerspectiveGroups = resolvePerspectiveOptionsForDashboards(
-                                    next
-                                  );
-                                  return {
-                                    ...current,
-                                    employeeExperienceAccess: {
-                                      ...current.employeeExperienceAccess,
-                                      allowedDashboardAssetIds: next,
-                                      allowedPerspectiveIds:
-                                        current.employeeExperienceAccess.allowedPerspectiveIds.filter(
-                                          (value) => nextPerspectiveGroups.allIds.has(value)
-                                        ),
-                                      perspectiveFilterRules:
-                                        current.employeeExperienceAccess.perspectiveFilterRules.filter(
-                                          (rule) =>
-                                            nextPerspectiveGroups.allIds.has(rule.perspectiveId)
-                                        ),
-                                    },
-                                  };
-                                })
-                              }
-                              className="mt-0.5 h-4 w-4 rounded border-[#C9D2D8]"
-                            />
-                            <span className="block font-medium text-[#102533]">{option.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <p className="mt-2 text-xs text-[#60727D]">
+                      {CLIENT_SCOPED_ROLES.has(form.role)
+                        ? "Only dashboards assigned to the selected workspace(s) are listed."
+                        : "Select which dashboards this user can open."}
+                    </p>
+                    {availableDashboardOptions.length === 0 ? (
+                      <p className="mt-3 rounded-2xl border border-[#D6DEE3] bg-[#F5F8FA] px-4 py-3 text-sm text-[#60727D]">
+                        Select a workspace assignment first to see available dashboards.
+                      </p>
+                    ) : (
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {availableDashboardOptions.map((option) => {
+                          const checked = form.employeeExperienceAccess.allowedDashboardAssetIds.some(
+                            (id) =>
+                              id === option.id ||
+                              isDashboardAssetAllowed(option.id, [id]) ||
+                              isDashboardAssetAllowed(id, [option.id])
+                          );
+                          return (
+                            <label
+                              key={option.id}
+                              className="flex items-start gap-3 rounded-2xl border border-[#D6DEE3] bg-white px-4 py-3 text-sm text-[#355365]"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) =>
+                                  setForm((current) => {
+                                    if (!current) return current;
+                                    const next = event.target.checked
+                                      ? Array.from(
+                                          new Set([
+                                            ...current.employeeExperienceAccess.allowedDashboardAssetIds.filter(
+                                              (id) =>
+                                                !(
+                                                  id === option.id ||
+                                                  isDashboardAssetAllowed(option.id, [id]) ||
+                                                  isDashboardAssetAllowed(id, [option.id])
+                                                )
+                                            ),
+                                            option.id,
+                                          ])
+                                        )
+                                      : current.employeeExperienceAccess.allowedDashboardAssetIds.filter(
+                                          (id) =>
+                                            !(
+                                              id === option.id ||
+                                              isDashboardAssetAllowed(option.id, [id]) ||
+                                              isDashboardAssetAllowed(id, [option.id])
+                                            )
+                                        );
+                                    const nextPerspectiveGroups =
+                                      resolvePerspectiveOptionsForDashboards(next);
+                                    return {
+                                      ...current,
+                                      employeeExperienceAccess: {
+                                        ...current.employeeExperienceAccess,
+                                        allowedDashboardAssetIds: next,
+                                        allowedPerspectiveIds:
+                                          current.employeeExperienceAccess.allowedPerspectiveIds.filter(
+                                            (value) => nextPerspectiveGroups.allIds.has(value)
+                                          ),
+                                        perspectiveFilterRules:
+                                          current.employeeExperienceAccess.perspectiveFilterRules.filter(
+                                            (rule) =>
+                                              nextPerspectiveGroups.allIds.has(rule.perspectiveId)
+                                          ),
+                                      },
+                                    };
+                                  })
+                                }
+                                className="mt-0.5 h-4 w-4 rounded border-[#C9D2D8]"
+                              />
+                              <span className="block font-medium text-[#102533]">{option.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 ) : null}
 
@@ -738,7 +942,8 @@ export function AdminUserManagement({
                       Allowed Perspectives
                     </p>
                     <p className="mt-2 text-xs text-[#60727D]">
-                      Perspective options only appear for the dashboard families selected above.
+                      Perspective options only appear for dashboards available in the selected
+                      workspace.
                     </p>
                     <div className="mt-4 space-y-4">
                       {availablePerspectiveGroups.integrationOptions.length > 0 ? (
@@ -853,169 +1058,233 @@ export function AdminUserManagement({
                   </div>
                 ) : null}
 
-                {form.employeeExperienceAccess.perspectiveFilterRules.length > 0 ? (
+                {filterRulesConfigured && sharedFilterDraft ? (
                   <div className="mt-4 rounded-2xl border border-[#D6DEE3] bg-white px-4 py-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#60727D]">
-                      Perspective Filter Rules
+                      Shared Filter
                     </p>
-                    <div className="mt-3 space-y-3">
-                      {form.employeeExperienceAccess.perspectiveFilterRules.map((rule, index) => (
-                        <div
-                          key={`${rule.perspectiveId}-${rule.field}-${index}`}
-                          className="rounded-2xl border border-[#D6DEE3] bg-[#F9FBFC] px-4 py-4"
-                        >
-                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
-                            <Select
-                              label="Perspective"
-                              value={rule.perspectiveId}
-                              onChange={(event) =>
-                                setForm((current) => {
-                                  if (!current) return current;
-                                  const next = current.employeeExperienceAccess.perspectiveFilterRules.map(
-                                    (item, itemIndex) =>
-                                      itemIndex === index
-                                        ? { ...item, perspectiveId: event.target.value }
-                                        : item
-                                  );
-                                  return {
-                                    ...current,
-                                    employeeExperienceAccess: {
-                                      ...current.employeeExperienceAccess,
-                                      perspectiveFilterRules: next,
-                                    },
-                                  };
-                                })
-                              }
-                            >
-                              <optgroup label="Integration">
-                                {availablePerspectiveGroups.integrationOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {trimIntegrationPrefix(option.label)}
-                                  </option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Employee Experience">
-                                {availablePerspectiveGroups.employeeExperienceOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </Select>
-                            <Input
-                              label="Filter field"
-                              value={rule.field}
-                              onChange={(event) =>
-                                setForm((current) => {
-                                  if (!current) return current;
-                                  const next = current.employeeExperienceAccess.perspectiveFilterRules.map(
-                                    (item, itemIndex) =>
-                                      itemIndex === index
-                                        ? { ...item, field: event.target.value }
-                                        : item
-                                  );
-                                  return {
-                                    ...current,
-                                    employeeExperienceAccess: {
-                                      ...current.employeeExperienceAccess,
-                                      perspectiveFilterRules: next,
-                                    },
-                                  };
-                                })
-                              }
-                              placeholder="company"
-                              list={`rule-field-options-${index}`}
-                            />
-                            <datalist id={`rule-field-options-${index}`}>
-                              {filterRuleFieldOptions.map((value) => (
-                                <option key={value} value={value} />
-                              ))}
-                            </datalist>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="rounded-full border-[#C9D2D8]"
-                              onClick={() =>
-                                setForm((current) => {
-                                  if (!current) return current;
-                                  const next = current.employeeExperienceAccess.perspectiveFilterRules.filter(
-                                    (_item, itemIndex) => itemIndex !== index
-                                  );
-                                  return {
-                                    ...current,
-                                    employeeExperienceAccess: {
-                                      ...current.employeeExperienceAccess,
-                                      perspectiveFilterRules: next,
-                                    },
-                                  };
-                                })
-                              }
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                          <Textarea
-                            label="Allowed values (one per line)"
-                            value={rule.allowedValues.join("\n")}
-                            onChange={(event) =>
-                              setForm((current) => {
-                                if (!current) return current;
-                                const values = Array.from(
-                                  new Set(
-                                    event.target.value
-                                      .split(/\r?\n|,/)
-                                      .map((value) => value.trim())
-                                      .filter(Boolean)
-                                  )
-                                );
-                                const next = current.employeeExperienceAccess.perspectiveFilterRules.map(
-                                  (item, itemIndex) =>
-                                    itemIndex === index
-                                      ? { ...item, allowedValues: values }
-                                      : item
-                                );
-                                return {
-                                  ...current,
-                                  employeeExperienceAccess: {
-                                    ...current.employeeExperienceAccess,
-                                    perspectiveFilterRules: next,
+                    <p className="mt-2 text-xs text-[#60727D]">
+                      Choose one field and the allowed value(s). This applies across every perspective
+                      this user can open.
+                    </p>
+                    {hasLegacyPerspectiveFilterRules ? (
+                      <p className="mt-2 rounded-2xl border border-[#E8CC70]/50 bg-[#FFF8E8] px-3 py-2 text-xs text-[#7A5A12]">
+                        Existing perspective-specific rules are preserved and still apply. The shared
+                        filter covers everything else.
+                      </p>
+                    ) : null}
+                    <div className="mt-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:items-start">
+                      <div>
+                        <Select
+                          label="Filter field"
+                          value={sharedFilterDraft.field}
+                          onChange={(event) =>
+                            setForm((current) => {
+                              if (!current) return current;
+                              return {
+                                ...current,
+                                employeeExperienceAccess: {
+                                  ...current.employeeExperienceAccess,
+                                  sharedFilterRule: {
+                                    field: event.target.value,
+                                    allowedValues:
+                                      current.employeeExperienceAccess.sharedFilterRule
+                                        ?.allowedValues ?? sharedFilterDraft.allowedValues,
                                   },
-                                };
-                              })
-                            }
-                            placeholder={"CNC"}
-                            className="mt-3 min-h-[88px]"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="rounded-full border-[#C9D2D8]"
-                        onClick={() =>
+                                },
+                              };
+                            })
+                          }
+                        >
+                          {filterRuleFieldOptions.map((value) => (
+                            <option key={value} value={value}>
+                              {value}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Textarea
+                        label="Allowed values (comma or one per line)"
+                        value={sharedFilterDraft.allowedValues.join("\n")}
+                        onChange={(event) =>
                           setForm((current) => {
                             if (!current) return current;
+                            const values = parseAllowedValuesInput(event.target.value);
                             return {
                               ...current,
                               employeeExperienceAccess: {
                                 ...current.employeeExperienceAccess,
-                                perspectiveFilterRules: [
-                                  ...current.employeeExperienceAccess.perspectiveFilterRules,
-                                  {
-                                    perspectiveId: "integration.brandReport",
-                                    field: "company",
-                                    allowedValues: [],
-                                  },
-                                ],
+                                sharedFilterRule: {
+                                  field:
+                                    current.employeeExperienceAccess.sharedFilterRule?.field ||
+                                    sharedFilterDraft.field ||
+                                    "company",
+                                  allowedValues: values,
+                                },
                               },
                             };
                           })
                         }
-                      >
-                        Add Rule
-                      </Button>
+                        placeholder={"CNC"}
+                        className="min-h-[88px]"
+                      />
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-[#E1E7EB] bg-[#F9FBFC] p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#60727D]">
+                          Additional Filter Guidelines
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="rounded-full border-[#C9D2D8]"
+                          onClick={() =>
+                            setForm((current) => {
+                              if (!current) return current;
+                              const fallbackPerspective =
+                                availablePerspectiveGroups.allOptions[0]?.id ?? "";
+                              if (!fallbackPerspective) {
+                                return current;
+                              }
+                              return {
+                                ...current,
+                                employeeExperienceAccess: {
+                                  ...current.employeeExperienceAccess,
+                                  perspectiveFilterRules: [
+                                    ...current.employeeExperienceAccess.perspectiveFilterRules,
+                                    {
+                                      perspectiveId: fallbackPerspective,
+                                      field: sharedFilterDraft.field || "company",
+                                      allowedValues: [],
+                                    },
+                                  ],
+                                },
+                              };
+                            })
+                          }
+                        >
+                          Add guideline
+                        </Button>
+                      </div>
+                      {availablePerspectiveGroups.allOptions.length === 0 ? (
+                        <p className="mt-2 text-xs text-[#60727D]">
+                          Select an allowed dashboard first so perspective-specific guidelines can be added.
+                        </p>
+                      ) : null}
+                      {form.employeeExperienceAccess.perspectiveFilterRules.length === 0 ? (
+                        <p className="mt-2 text-xs text-[#60727D]">
+                          No extra guidelines configured.
+                        </p>
+                      ) : (
+                        <div className="mt-3 space-y-3">
+                          {form.employeeExperienceAccess.perspectiveFilterRules.map((rule, ruleIndex) => (
+                            <div key={`${rule.perspectiveId}-${rule.field}-${ruleIndex}`} className="rounded-xl border border-[#D6DEE3] bg-white p-3">
+                              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto] md:items-end">
+                                <Select
+                                  label="Perspective"
+                                  value={rule.perspectiveId}
+                                  onChange={(event) =>
+                                    setForm((current) => {
+                                      if (!current) return current;
+                                      const nextRules = [...current.employeeExperienceAccess.perspectiveFilterRules];
+                                      nextRules[ruleIndex] = {
+                                        ...nextRules[ruleIndex],
+                                        perspectiveId: event.target.value,
+                                      };
+                                      return {
+                                        ...current,
+                                        employeeExperienceAccess: {
+                                          ...current.employeeExperienceAccess,
+                                          perspectiveFilterRules: nextRules,
+                                        },
+                                      };
+                                    })
+                                  }
+                                >
+                                  {availablePerspectiveGroups.allOptions.map((option) => (
+                                    <option key={option.id} value={option.id}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </Select>
+                                <Select
+                                  label="Filter field"
+                                  value={rule.field}
+                                  onChange={(event) =>
+                                    setForm((current) => {
+                                      if (!current) return current;
+                                      const nextRules = [...current.employeeExperienceAccess.perspectiveFilterRules];
+                                      nextRules[ruleIndex] = {
+                                        ...nextRules[ruleIndex],
+                                        field: event.target.value,
+                                      };
+                                      return {
+                                        ...current,
+                                        employeeExperienceAccess: {
+                                          ...current.employeeExperienceAccess,
+                                          perspectiveFilterRules: nextRules,
+                                        },
+                                      };
+                                    })
+                                  }
+                                >
+                                  {filterRuleFieldOptions.map((value) => (
+                                    <option key={value} value={value}>
+                                      {value}
+                                    </option>
+                                  ))}
+                                </Select>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="rounded-full border-[#C9D2D8]"
+                                  onClick={() =>
+                                    setForm((current) => {
+                                      if (!current) return current;
+                                      return {
+                                        ...current,
+                                        employeeExperienceAccess: {
+                                          ...current.employeeExperienceAccess,
+                                          perspectiveFilterRules:
+                                            current.employeeExperienceAccess.perspectiveFilterRules.filter(
+                                              (_, index) => index !== ruleIndex
+                                            ),
+                                        },
+                                      };
+                                    })
+                                  }
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                              <div className="mt-3">
+                                <Textarea
+                                  label="Allowed values (comma or one per line)"
+                                  value={rule.allowedValues.join("\n")}
+                                  onChange={(event) =>
+                                    setForm((current) => {
+                                      if (!current) return current;
+                                      const nextRules = [...current.employeeExperienceAccess.perspectiveFilterRules];
+                                      nextRules[ruleIndex] = {
+                                        ...nextRules[ruleIndex],
+                                        allowedValues: parseAllowedValuesInput(event.target.value),
+                                      };
+                                      return {
+                                        ...current,
+                                        employeeExperienceAccess: {
+                                          ...current.employeeExperienceAccess,
+                                          perspectiveFilterRules: nextRules,
+                                        },
+                                      };
+                                    })
+                                  }
+                                  className="min-h-[72px]"
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : null}

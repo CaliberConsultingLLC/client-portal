@@ -34,6 +34,20 @@ function statusPill(status: Readout["status"]) {
   return "bg-[#EDF2F5] text-[#60727D]";
 }
 
+function statusLabel(status: Readout["status"]) {
+  if (status === "published") return "Available";
+  if (status === "inactive") return "Hidden";
+  return "Draft";
+}
+
+function accessLabel(readout: Readout) {
+  if (readout.accessMode === "selected_users") {
+    const count = readout.allowedUserIds?.length ?? 0;
+    return `${count} user${count === 1 ? "" : "s"}`;
+  }
+  return "All client users";
+}
+
 export function ReadoutList({
   clients,
   surveyWavesByClientId,
@@ -89,7 +103,7 @@ export function ReadoutList({
         throw new Error(payload.error || "Unable to create readout.");
       }
 
-      router.push(`${basePath}/${payload.readout.id}?tab=intro`);
+      router.push(`${basePath}/${payload.readout.id}`);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Unable to create readout.");
     } finally {
@@ -102,6 +116,20 @@ export function ReadoutList({
     if (!response.ok) {
       const payload = (await response.json()) as { error?: string };
       alert(payload.error ?? "Unable to publish readout.");
+      return;
+    }
+    router.refresh();
+  }
+
+  async function setAvailability(readoutId: string, available: boolean) {
+    const response = await fetch(`/api/portal/readouts/${readoutId}/availability`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ available }),
+    });
+    if (!response.ok) {
+      const payload = (await response.json()) as { error?: string };
+      alert(payload.error ?? "Unable to update availability.");
       return;
     }
     router.refresh();
@@ -225,6 +253,7 @@ export function ReadoutList({
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Survey wave</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Access</th>
                   <th className="px-4 py-3">Last updated</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -232,7 +261,7 @@ export function ReadoutList({
               <tbody>
                 {clientReadouts.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-sm text-[#6E7E96]" colSpan={5}>
+                    <td className="px-4 py-8 text-sm text-[#6E7E96]" colSpan={6}>
                       No readouts yet for this client.
                     </td>
                   </tr>
@@ -249,39 +278,56 @@ export function ReadoutList({
                             readout.status
                           )}`}
                         >
-                          {readout.status}
+                          {statusLabel(readout.status)}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-[#3B4B63]">{accessLabel(readout)}</td>
                       <td className="px-4 py-3 text-[#6E7E96]">
                         {new Date(readout.updatedAt).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3 text-right text-[13px] font-semibold">
-                        <div className="flex items-center justify-end gap-3">
-                          <Link href={`${basePath}/${readout.id}?tab=intro`} className="text-[#386B45]">
-                            Edit
+                        <div className="flex flex-wrap items-center justify-end gap-3">
+                          <Link href={`${basePath}/${readout.id}`} className="text-[#6E7E96]">
+                            Details
+                          </Link>
+                          <Link
+                            href={`${basePath}/${readout.id}/modify`}
+                            className="text-[#386B45]"
+                          >
+                            Modify
                           </Link>
                           {readout.status === "published" ? (
-                            <Link href="/portal/insights" className="text-[#6E7E96]">
-                              View
-                            </Link>
+                            <button
+                              type="button"
+                              className="text-[#8A5E0A]"
+                              onClick={() => setAvailability(readout.id, false)}
+                            >
+                              Hide
+                            </button>
+                          ) : readout.status === "inactive" ? (
+                            <button
+                              type="button"
+                              className="text-[#386B45]"
+                              onClick={() => setAvailability(readout.id, true)}
+                            >
+                              Make available
+                            </button>
                           ) : (
-                            <>
-                              <button
-                                type="button"
-                                className="text-[#5E7898]"
-                                onClick={() => publishReadout(readout.id)}
-                              >
-                                Publish
-                              </button>
-                              <button
-                                type="button"
-                                className="text-[#C96B60]"
-                                onClick={() => deleteReadout(readout.id)}
-                              >
-                                Delete
-                              </button>
-                            </>
+                            <button
+                              type="button"
+                              className="text-[#5E7898]"
+                              onClick={() => publishReadout(readout.id)}
+                            >
+                              Publish
+                            </button>
                           )}
+                          <button
+                            type="button"
+                            className="text-[#C96B60]"
+                            onClick={() => deleteReadout(readout.id)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -292,8 +338,8 @@ export function ReadoutList({
           </div>
 
           <p className="mt-3 text-xs italic text-[#8A9A8C]">
-            Survey waves come from CSV analytics data. Only published readouts appear in the client&apos;s
-            Insights tab.
+            Use Details to assign specific users. Hide/Make available is the quick client kill switch.
+            Only Available readouts assigned to a user appear under Insights.
           </p>
         </section>
       </div>

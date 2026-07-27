@@ -1,10 +1,62 @@
-import type { Readout, ReadoutFinding, ReadoutIntro, ReadoutOutro, ReadoutStatus } from "@/types/readout";
+import { buildDefaultReadoutDeck } from "@/lib/readout/default-deck";
+import { getPortalClientById } from "@/lib/portal/clients";
+import type {
+  Readout,
+  ReadoutAccessMode,
+  ReadoutDeck,
+  ReadoutFinding,
+  ReadoutIntro,
+  ReadoutOutro,
+  ReadoutStatus,
+} from "@/types/readout";
 import { getFirebaseAdminFirestore } from "./admin";
+import type { FirebaseAppUser } from "./auth";
+import { isInternalFirebaseRole } from "./auth";
 
 const READOUTS_COLLECTION = "readouts";
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+export function normalizeReadoutAccessMode(value: unknown): ReadoutAccessMode {
+  return value === "selected_users" ? "selected_users" : "all_client_users";
+}
+
+export function normalizeReadoutAllowedUserIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.map((item) => String(item || "").trim()).filter(Boolean))];
+}
+
+export function normalizeFirebaseReadout(doc: Readout): Readout {
+  return {
+    ...doc,
+    accessMode: normalizeReadoutAccessMode(doc.accessMode),
+    allowedUserIds: normalizeReadoutAllowedUserIds(doc.allowedUserIds),
+  };
+}
+
+/** Whether a signed-in portal user may open this readout as a client viewer. */
+export function canClientUserAccessReadout(
+  user: Pick<FirebaseAppUser, "uid" | "role" | "clientIds">,
+  readout: Readout
+): boolean {
+  if (isInternalFirebaseRole(user.role)) {
+    return true;
+  }
+  if (readout.status !== "published" || !Boolean(readout.deck)) {
+    return false;
+  }
+  if (!user.clientIds.includes(readout.clientId)) {
+    return false;
+  }
+  const accessMode = normalizeReadoutAccessMode(readout.accessMode);
+  if (accessMode === "all_client_users") {
+    return true;
+  }
+  return normalizeReadoutAllowedUserIds(readout.allowedUserIds).includes(user.uid);
 }
 
 function slugify(value: string) {
@@ -288,8 +340,8 @@ export async function getFirebaseReadouts() {
       return defaults;
     }
 
-    const docs = snapshot.docs.map((doc) => doc.data() as Readout);
-    return mergeById(docs, defaults);
+    const docs = snapshot.docs.map((doc) => normalizeFirebaseReadout(doc.data() as Readout));
+    return mergeById(docs, defaults).map((doc) => normalizeFirebaseReadout(doc));
   } catch (error) {
     console.error("Failed to read Firebase readouts; falling back to defaults.", error);
     return buildDefaultReadouts();
@@ -313,6 +365,24 @@ export async function getPublishedFirebaseReadoutForClient(clientId: string) {
   return readouts.find((readout) => readout.status === "published") ?? null;
 }
 
+/** Prefer published; for internal editing fall back to newest draft/inactive with a deck. */
+export async function getInsightsReadoutForClient(clientId: string, allowDraft: boolean) {
+  const readouts = await getFirebaseReadoutsByClientId(clientId);
+  const published = readouts.find((readout) => readout.status === "published");
+  if (published) {
+    return published;
+  }
+  if (!allowDraft) {
+    return null;
+  }
+  return (
+    readouts.find((readout) => readout.status === "draft" && readout.deck) ??
+    readouts.find((readout) => Boolean(readout.deck)) ??
+    readouts[0] ??
+    null
+  );
+}
+
 interface CreateFirebaseReadoutInput {
   clientId: string;
   campaignId?: string | null;
@@ -327,15 +397,19 @@ interface UpdateFirebaseReadoutInput {
   surveyWaveLabel?: string | null;
   name?: string;
   status?: ReadoutStatus;
+  accessMode?: ReadoutAccessMode;
+  allowedUserIds?: string[];
   intro?: Partial<ReadoutIntro>;
   findings?: ReadoutFinding[];
   outro?: Partial<ReadoutOutro>;
+  deck?: ReadoutDeck | null;
 }
 
 export async function createFirebaseReadout(input: CreateFirebaseReadoutInput) {
   const timestamp = nowIso();
   const baseId = `${slugify(input.name)}-${slugify(input.clientId)}`;
   const readoutId = `${baseId}-${timestamp.slice(0, 10)}`;
+  const clientName = getPortalClientById(input.clientId)?.name ?? input.clientId;
 
   const readout: Readout = {
     id: readoutId,
@@ -344,9 +418,12 @@ export async function createFirebaseReadout(input: CreateFirebaseReadoutInput) {
     surveyWaveLabel: input.surveyWaveLabel?.trim() || null,
     name: input.name.trim(),
     status: "draft",
+    accessMode: "selected_users",
+    allowedUserIds: [],
     intro: defaultIntro(),
     findings: defaultReadoutFindings(),
     outro: defaultOutro(),
+    deck: buildDefaultReadoutDeck(clientName),
     createdAt: timestamp,
     updatedAt: timestamp,
     publishedAt: null,
@@ -356,7 +433,7 @@ export async function createFirebaseReadout(input: CreateFirebaseReadoutInput) {
   await getFirebaseAdminFirestore()
     .collection(READOUTS_COLLECTION)
     .doc(readout.id)
-    .set(readout, { merge: true });
+    .set(JSON.parse(JSON.stringify(readout)) as Readout, { merge: true });
 
   return readout;
 }
@@ -378,16 +455,25 @@ export async function updateFirebaseReadout(input: UpdateFirebaseReadoutInput) {
         : existingReadout.surveyWaveLabel,
     name: input.name?.trim() || existingReadout.name,
     status: input.status ?? existingReadout.status,
+    accessMode:
+      input.accessMode !== undefined
+        ? normalizeReadoutAccessMode(input.accessMode)
+        : normalizeReadoutAccessMode(existingReadout.accessMode),
+    allowedUserIds:
+      input.allowedUserIds !== undefined
+        ? normalizeReadoutAllowedUserIds(input.allowedUserIds)
+        : normalizeReadoutAllowedUserIds(existingReadout.allowedUserIds),
     intro: input.intro ? { ...existingReadout.intro, ...input.intro } : existingReadout.intro,
     findings: input.findings ?? existingReadout.findings,
     outro: input.outro ? { ...existingReadout.outro, ...input.outro } : existingReadout.outro,
+    deck: input.deck !== undefined ? input.deck : existingReadout.deck,
     updatedAt: nowIso(),
   };
 
   await getFirebaseAdminFirestore()
     .collection(READOUTS_COLLECTION)
     .doc(existingReadout.id)
-    .set(updatedReadout, { merge: true });
+    .set(JSON.parse(JSON.stringify(updatedReadout)) as Readout, { merge: true });
 
   return updatedReadout;
 }
@@ -399,12 +485,48 @@ export async function publishFirebaseReadout(readoutId: string) {
     throw new Error("Readout not found.");
   }
 
+  const hasDeck = Boolean(readout.deck?.order?.length && readout.deck.cover?.headline?.trim());
   const introConfigured = Boolean(readout.intro.headline.trim() && readout.intro.body.trim());
   const outroConfigured = Boolean(readout.outro.headline.trim());
   const enabledFindings = readout.findings.filter((finding) => finding.enabled).length;
+  const legacyReady = introConfigured && outroConfigured && enabledFindings >= 1;
 
-  if (!introConfigured || !outroConfigured || enabledFindings < 1) {
+  if (!hasDeck && !legacyReady) {
     throw new Error("Readout is not ready to publish.");
+  }
+
+  return setFirebaseReadoutClientAvailability(readoutId, true);
+}
+
+/** Quick kill switch: Available (published) ↔ Hidden (inactive). Keeps the deck intact. */
+export async function setFirebaseReadoutClientAvailability(
+  readoutId: string,
+  available: boolean
+) {
+  const readout = await getFirebaseReadoutById(readoutId);
+
+  if (!readout) {
+    throw new Error("Readout not found.");
+  }
+
+  if (!available) {
+    if (readout.status !== "published") {
+      return normalizeFirebaseReadout(readout);
+    }
+    const hidden: Readout = {
+      ...normalizeFirebaseReadout(readout),
+      status: "inactive",
+      updatedAt: nowIso(),
+    };
+    await getFirebaseAdminFirestore()
+      .collection(READOUTS_COLLECTION)
+      .doc(readout.id)
+      .set(JSON.parse(JSON.stringify(hidden)) as Readout, { merge: true });
+    return hidden;
+  }
+
+  if (!readout.deck && !readout.intro.headline.trim()) {
+    throw new Error("Readout is not ready to make available.");
   }
 
   const timestamp = nowIso();
@@ -428,9 +550,9 @@ export async function publishFirebaseReadout(readoutId: string) {
   });
 
   const publishedReadout: Readout = {
-    ...readout,
+    ...normalizeFirebaseReadout(readout),
     status: "published",
-    publishedAt: timestamp,
+    publishedAt: readout.publishedAt ?? timestamp,
     updatedAt: timestamp,
   };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -19,6 +19,9 @@ import {
 } from "@/components/collaboration/score-color-scale";
 import { RelationshipMap } from "@/components/collaboration/relationship-map";
 import { ScoreTable } from "@/components/collaboration/score-table";
+import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
+import { HeaderKpiPortal } from "@/components/dashboard/design-shell";
+import { useCollabHeaderPortal } from "@/components/collaboration/report-header-portal";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -58,6 +61,37 @@ import {
   buildDepartmentCiByDept,
   buildDepartmentSegmentSummary,
 } from "@/lib/collaboration/demo-insights";
+
+/**
+ * Wraps a single collaboration visual so it registers with the dashboard export
+ * registry (feeding the page-level "Download report" composite) and, inside the
+ * design shell, exposes the same upper-right corner PNG button used across the EE
+ * dashboards. `file` becomes the per-visual download filename.
+ */
+function Vx({
+  order,
+  label,
+  file,
+  className,
+  children,
+}: {
+  order: number;
+  label: string;
+  file: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <RegisteredVisualExportFrame
+      order={order}
+      label={label}
+      filename={`${file}.png`}
+      className={className}
+    >
+      {children}
+    </RegisteredVisualExportFrame>
+  );
+}
 
 function ScoreChip({
   value,
@@ -349,6 +383,19 @@ function ReportSummaryHeader({
   description?: React.ReactNode;
   metrics?: Array<{ label: string; value: string | number; sublabel?: string }>;
 }) {
+  const headerPortalId = useCollabHeaderPortal();
+  // Inside the universal design shell: the shell owns the title + header row, so
+  // this report header portals ONLY its KPI tiles up into the shell header and
+  // renders nothing inline (no duplicate title/box).
+  if (headerPortalId) {
+    return (
+      <HeaderKpiPortal
+        portalId={headerPortalId}
+        surfaceTreatment="1b"
+        items={metrics.map((metric) => ({ label: metric.label, value: String(metric.value) }))}
+      />
+    );
+  }
   return (
     <Card className="border-border-strong bg-white">
       <CardContent className="flex flex-col gap-6 p-6 xl:flex-row xl:items-center xl:justify-between">
@@ -703,6 +750,7 @@ export function ExecutiveSummaryTab({
         ]}
       />
 
+      <Vx order={10} label="Download executive readout" file="executive-readout">
       <Card className="rounded-[24px] border-border-strong">
         <CardHeader>
           <CardTitle>Executive Readout</CardTitle>
@@ -723,9 +771,11 @@ export function ExecutiveSummaryTab({
           ))}
         </CardContent>
       </Card>
+      </Vx>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border-strong">
+        <Vx order={20} label="Download attention list" file="executive-attention" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Departments Needing Executive Attention</CardTitle>
             <CardDescription>
@@ -759,8 +809,10 @@ export function ExecutiveSummaryTab({
             ))}
           </CardContent>
         </Card>
+        </Vx>
 
-        <Card className="border-border-strong">
+        <Vx order={30} label="Download relationship watchlist" file="executive-watchlist" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Critical Relationship Watchlist</CardTitle>
             <CardDescription>
@@ -795,6 +847,7 @@ export function ExecutiveSummaryTab({
             ))}
           </CardContent>
         </Card>
+        </Vx>
       </div>
     </div>
   );
@@ -822,6 +875,7 @@ export function CriticalRelationshipsTab({
         tone="warning"
         action="Use the ordering tool in Demo Lab to surface the relationships leadership considers most vital."
       />
+      <Vx order={10} label="Download relationship summary" file="critical-relationships-summary">
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-border-strong bg-surface-2">
           <CardContent className="p-5">
@@ -872,9 +926,11 @@ export function CriticalRelationshipsTab({
           </CardContent>
         </Card>
       </div>
+      </Vx>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border-strong">
+        <Vx order={20} label="Download executive focus relationships" file="critical-executive-focus" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Executive Focus Relationships</CardTitle>
             <CardDescription>
@@ -909,7 +965,9 @@ export function CriticalRelationshipsTab({
             ))}
           </CardContent>
         </Card>
-        <Card className="border-border-strong">
+        </Vx>
+        <Vx order={30} label="Download relationships to protect" file="critical-protect" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Relationships To Protect</CardTitle>
             <CardDescription>
@@ -940,6 +998,7 @@ export function CriticalRelationshipsTab({
             ))}
           </CardContent>
         </Card>
+        </Vx>
       </div>
     </div>
   );
@@ -1024,6 +1083,7 @@ export function SegmentSignalsTab({
       />
 
       <div className="space-y-6">
+        <Vx order={10} label="Download role signal" file="segment-role-signal">
         <Card className="border-border-strong">
           <CardHeader>
             <CardTitle>Role Signal</CardTitle>
@@ -1032,6 +1092,8 @@ export function SegmentSignalsTab({
             <DataTable columns={columns} data={sortedRoleSummary} />
           </CardContent>
         </Card>
+        </Vx>
+        <Vx order={20} label="Download generation signal" file="segment-generation-signal">
         <Card className="border-border-strong">
           <CardHeader>
             <CardTitle>Generation Signal</CardTitle>
@@ -1040,6 +1102,8 @@ export function SegmentSignalsTab({
             <DataTable columns={columns} data={sortedGenerationSummary} />
           </CardContent>
         </Card>
+        </Vx>
+        <Vx order={30} label="Download tenure signal" file="segment-tenure-signal">
         <Card className="border-border-strong">
           <CardHeader>
             <CardTitle>Tenure Signal</CardTitle>
@@ -1048,6 +1112,7 @@ export function SegmentSignalsTab({
             <DataTable columns={columns} data={sortedTenureSummary} />
           </CardContent>
         </Card>
+        </Vx>
       </div>
     </div>
   );
@@ -1129,6 +1194,7 @@ export function DemoCdrsReportTab({
           />
           <div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
             <div className="lg:col-span-7">
+              <Vx order={10} label="Download incoming CDRS" file="cdrs-incoming" className="h-full">
               <Card className="h-full border-border-strong">
                 <CardHeader>
                   <CardTitle>Incoming CDRS</CardTitle>
@@ -1140,14 +1206,17 @@ export function DemoCdrsReportTab({
                 </p>
                 </CardContent>
               </Card>
+              </Vx>
             </div>
             <div className="lg:col-span-5">
+              <Vx order={20} label="Download outgoing CDRS" file="cdrs-outgoing" className="h-full">
               <ScoreTable
                 title="Outgoing CDRS"
                 headers={["Dept", "Score"]}
                 rows={outgoingData}
                 className="h-full"
               />
+              </Vx>
             </div>
           </div>
         </>
@@ -1279,6 +1348,7 @@ export function DemoCiReportTab({
           />
           <div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
             <div className="lg:col-span-7">
+              <Vx order={10} label="Download collaboration index chart" file="ci-index-chart" className="h-full">
               <Card className="h-full border-border-strong">
                 <CardHeader>
                   <CardTitle>Departmental Collaboration Index</CardTitle>
@@ -1296,8 +1366,10 @@ export function DemoCiReportTab({
                 </p>
                 </CardContent>
               </Card>
+              </Vx>
             </div>
             <div className="lg:col-span-5">
+              <Vx order={20} label="Download CI statements" file="ci-statements" className="h-full">
               <ScoreTable
                 title="CI Statements"
                 headers={["Statement", "Collab Index"]}
@@ -1308,9 +1380,11 @@ export function DemoCiReportTab({
                 maxValue={9}
                 className="h-full"
               />
+              </Vx>
             </div>
           </div>
 
+          <Vx order={30} label="Download collaboration index heatmap" file="ci-heatmap">
           <Card className="border-border-strong">
             <CardHeader>
               <CardTitle>Collaboration Index Heatmap</CardTitle>
@@ -1321,6 +1395,7 @@ export function DemoCiReportTab({
             </CardHeader>
             <CardContent className="pt-0">
               <HeatmapChart
+                variant="chip"
                 rows={departments}
                 columns={data.meta.ciQuestions}
                 data={ciHeatmapMatrix}
@@ -1333,6 +1408,7 @@ export function DemoCiReportTab({
               <ColorLegend className="mt-4 justify-center" />
             </CardContent>
           </Card>
+          </Vx>
         </>
       )}
     </div>
@@ -1410,6 +1486,7 @@ export function DepartmentCdrsReportTab({
         ]}
       />
 
+      <Vx order={10} label="Download relationship map" file="cdrs-report-map">
       <RelationshipMap
         selectedDepartment={selectedDepartment}
         incomingByDept={detail.incomingByDept}
@@ -1421,9 +1498,11 @@ export function DepartmentCdrsReportTab({
         generationRows={generationRows}
         tenureRows={tenureRows}
       />
+      </Vx>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border-strong">
+        <Vx order={20} label="Download incoming CDRS" file="cdrs-report-incoming" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Incoming CDRS</CardTitle>
             <CardDescription>
@@ -1443,12 +1522,15 @@ export function DepartmentCdrsReportTab({
             </p>
           </CardContent>
         </Card>
+        </Vx>
+        <Vx order={30} label="Download outgoing CDRS" file="cdrs-report-outgoing" className="h-full">
         <ScoreTable
           title="Outgoing CDRS"
           headers={["Department", "Score"]}
           rows={outgoingRows}
           className="h-full"
         />
+        </Vx>
       </div>
     </div>
   );
@@ -1572,7 +1654,8 @@ export function DepartmentCiReportTab({
       />
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border-strong">
+        <Vx order={10} label="Download statement scores" file="ci-report-statement-scores" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Statement Scores</CardTitle>
             <CardDescription>
@@ -1591,6 +1674,8 @@ export function DepartmentCiReportTab({
             />
           </CardContent>
         </Card>
+        </Vx>
+        <Vx order={20} label="Download CI statements" file="ci-report-statements" className="h-full">
         <ScoreTable
           title="Collaboration Index Statements"
           headers={["Statement", "Score"]}
@@ -1601,6 +1686,7 @@ export function DepartmentCiReportTab({
           maxValue={9}
           className="h-full"
         />
+        </Vx>
       </div>
 
       {selectedStatementLabel ? (
@@ -1610,6 +1696,7 @@ export function DepartmentCiReportTab({
         </p>
       ) : null}
 
+      <Vx order={30} label="Download CI relationship map" file="ci-report-map">
       <RelationshipMap
         variant="ci"
         selectedDepartment={selectedDepartment}
@@ -1624,6 +1711,7 @@ export function DepartmentCiReportTab({
         generationRows={flowGenerationRows}
         tenureRows={flowTenureRows}
       />
+      </Vx>
     </div>
   );
 }
@@ -1736,7 +1824,6 @@ export function Department360Tab({
   const strongestPartner = [...rows].sort((left, right) => right.mutual - left.mutual)[0];
   const highestAttentionPartner = rows[0];
   const weakestQuestion = questionInsights[0];
-  const strongestQuestion = [...questionInsights].sort((left, right) => right.score - left.score)[0];
   const ciAverage = average(
     data.departmentMetrics
       .map((metric) => metric.collaborationIndex)
@@ -1748,32 +1835,6 @@ export function Department360Tab({
       .map((metric) => Math.abs(metric.outgoingCDRS - metric.incomingCDRS))
       .filter((value) => value > 0)
   );
-  const insightCards = [
-    buildLensInsightCard(
-      respondents,
-      selectedDepartment,
-      "Department lens",
-      (respondent) => respondent.department
-    ),
-    buildLensInsightCard(
-      respondents,
-      selectedDepartment,
-      "Role lens",
-      (respondent) => respondent.role
-    ),
-    buildLensInsightCard(
-      respondents,
-      selectedDepartment,
-      "Generation lens",
-      (respondent) => respondent.generation
-    ),
-    buildLensInsightCard(
-      respondents,
-      selectedDepartment,
-      "Tenure lens",
-      (respondent) => respondent.tenure
-    ),
-  ].filter((card): card is InsightCard => Boolean(card));
   const storyLead = `${selectedDepartment} ${summarizeStanding(
     detail.incomingCDRS,
     data.meta.dwsAverageIncoming,
@@ -1823,8 +1884,8 @@ export function Department360Tab({
         ]}
       />
 
-      <Card className="border-border-strong">
-        <CardContent className="p-4">
+      <Vx order={10} label="Download department overview" file="dept360-overview">
+      <div>
           <div className="rounded-xl border border-border-strong bg-gradient-to-br from-surface-2 via-white to-nsp-blue-50/40 px-4 py-3">
             <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr] lg:items-start">
               <div>
@@ -1887,113 +1948,8 @@ export function Department360Tab({
               summary="How communication, coordination, and follow-through feel in practice."
             />
           </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 xl:grid-cols-4">
-        {insightCards.map((card) => (
-          <Card key={card.id} className="border-border-strong">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{card.title}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div
-                className="mb-4 h-1.5 rounded-full"
-                style={{
-                  backgroundColor: scoreScaleColor(
-                    card.title === "Department lens"
-                      ? detail.incomingCDRS
-                      : card.title === "Role lens"
-                        ? detail.outgoingCDRS
-                        : detail.collaborationIndex,
-                    3,
-                    6,
-                    9
-                  ),
-                }}
-              />
-              <p className="text-sm font-semibold leading-relaxed text-text-primary">
-                {card.headline}
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                {card.detail}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
       </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Strengths To Reinforce</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-2xl bg-surface-2 px-4 py-4">
-              <p className="text-sm font-semibold text-text-primary">
-                {strongestPartner?.partner ?? "No clear partner yet"} is the strongest
-                two-way relationship.
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                Mutual relational strength is{" "}
-                {strongestPartner ? formatScoreForDisplay(strongestPartner.mutual) : "—"}.
-                Use this relationship as the example of how {selectedDepartment} can
-                operate with credibility and clarity across the enterprise.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-surface-2 px-4 py-4">
-              <p className="text-sm font-semibold text-text-primary">
-                {shortQuestionLabel(strongestQuestion?.question ?? "")} is landing best.
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                This dimension is scoring{" "}
-                {strongestQuestion ? formatScoreForDisplay(strongestQuestion.score) : "—"}{" "}
-                and
-                gives leaders a practical proof point to preserve while improvement work
-                begins elsewhere.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Where To Focus Next</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-2xl bg-surface-2 px-4 py-4">
-              <p className="text-sm font-semibold text-text-primary">
-                {highestAttentionPartner?.partner ?? "No partner"} deserves near-term
-                management attention.
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                Incoming is{" "}
-                {highestAttentionPartner
-                  ? formatScoreForDisplay(highestAttentionPartner.incoming)
-                  : "—"}{" "}
-                while outgoing is{" "}
-                {highestAttentionPartner
-                  ? formatScoreForDisplay(highestAttentionPartner.outgoing)
-                  : "—"}
-                , which
-                suggests a meaningful perception mismatch. Start with clearer
-                expectations, ownership, and operating rhythm between these teams.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-surface-2 px-4 py-4">
-              <p className="text-sm font-semibold text-text-primary">
-                {shortQuestionLabel(weakestQuestion?.question ?? "")} is the clearest
-                experience opportunity.
-              </p>
-              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                This incoming CI dimension is scoring{" "}
-                {weakestQuestion ? formatScoreForDisplay(weakestQuestion.score) : "—"}.
-                {weakestQuestion ? ` ${actionHint(weakestQuestion.question)}` : ""}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      </Vx>
     </div>
   );
 }
@@ -2205,7 +2161,8 @@ export function CiHotspotsTab({
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-border-strong">
+        <Vx order={10} label="Download incoming experience dimensions" file="ci-hotspots-dimensions" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Incoming Experience Dimensions</CardTitle>
           </CardHeader>
@@ -2213,7 +2170,9 @@ export function CiHotspotsTab({
             <DataTable columns={questionColumns} data={sortedQuestionInsights} />
           </CardContent>
         </Card>
-        <Card className="border-border-strong">
+        </Vx>
+        <Vx order={20} label="Download partner dimension scores" file="ci-hotspots-partners" className="h-full">
+        <Card className="h-full border-border-strong">
           <CardHeader>
             <CardTitle>Partner-Specific Dimension Scores</CardTitle>
           </CardHeader>
@@ -2221,6 +2180,7 @@ export function CiHotspotsTab({
             <DataTable columns={partnerColumns} data={sortedPartnerHotspots} />
           </CardContent>
         </Card>
+        </Vx>
       </div>
     </div>
   );
@@ -2251,6 +2211,7 @@ export function ActionPrioritiesTab({
         tone="neutral"
         action="Work through these in sequence instead of trying to fix every weak signal at once."
       />
+      <Vx order={10} label="Download action priorities" file="action-priorities">
       <Card className="border-border-strong">
         <CardHeader>
           <CardTitle>Action Priorities</CardTitle>
@@ -2263,7 +2224,9 @@ export function ActionPrioritiesTab({
           <ActionLadder title="Recommended sequence" items={priorities} />
         </CardContent>
       </Card>
+      </Vx>
 
+      <Vx order={20} label="Download strengths to scale" file="action-strengths">
       <Card className="border-border-strong">
         <CardHeader>
           <CardTitle>Strengths To Scale</CardTitle>
@@ -2286,6 +2249,7 @@ export function ActionPrioritiesTab({
           ))}
         </CardContent>
       </Card>
+      </Vx>
     </div>
   );
 }

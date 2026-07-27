@@ -20,14 +20,14 @@ interface AdminDirectoryTableRow {
 interface AdminDirectoryOverviewProps {
   title: string;
   description: string;
-  metrics: AdminDirectoryMetric[];
+  metrics?: AdminDirectoryMetric[];
   actions?: React.ReactNode;
 }
 
 export function AdminDirectoryOverview({
   title,
   description,
-  metrics,
+  metrics = [],
   actions,
 }: AdminDirectoryOverviewProps) {
   return (
@@ -42,18 +42,20 @@ export function AdminDirectoryOverview({
         {actions ? <div className="flex flex-wrap gap-3">{actions}</div> : null}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {metrics.map((metric) => (
-          <Card key={metric.label} className="rounded-[24px] border-[#D6DEE3] bg-white shadow-sm">
-            <CardContent className="p-5">
-              <p className="text-2xl font-extrabold text-[#2B2B2B]">{metric.value}</p>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#60727D]">
-                {metric.label}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {metrics.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          {metrics.map((metric) => (
+            <Card key={metric.label} className="rounded-[24px] border-[#D6DEE3] bg-white shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-2xl font-extrabold text-[#2B2B2B]">{metric.value}</p>
+                <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#60727D]">
+                  {metric.label}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

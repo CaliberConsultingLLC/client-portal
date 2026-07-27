@@ -28,6 +28,41 @@ interface ClientWorkspacePageProps {
   }>;
 }
 
+function formatDashboardType(assetId: string) {
+  const base = assetId.split("--")[0] ?? assetId;
+  const normalized = base
+    .replace(/-dashboard$/i, "")
+    .replace(/-/g, " ")
+    .trim();
+
+  if (!normalized) {
+    return "Dashboard";
+  }
+
+  return normalized
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatWorkspaceDate(value?: string) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export default async function ClientWorkspacePage({ params }: ClientWorkspacePageProps) {
   const { clientId } = await params;
   const user = await requireFirebasePortalUser();
@@ -47,6 +82,83 @@ export default async function ClientWorkspacePage({ params }: ClientWorkspacePag
   const activeUsers = workspaceUsers.filter((workspaceUser) => workspaceUser.isActive);
   const canManageUsers = canManageClientUsers(user, clientId);
   const isInternal = isInternalFirebaseRole(user.role);
+  const isClientAdmin = user.role === "client_admin";
+  // Average client viewers (executive/management/employee) get a stripped-down
+  // workspace that goes straight to their assigned dashboards.
+  const isStreamlinedViewer = !isInternal && !isClientAdmin;
+
+  if (isStreamlinedViewer) {
+    const publishedAssignments = assignments.filter((assignment) => assignment.published);
+
+    return (
+      <PortalContentFrame centerMaxWidthClassName="max-w-[1440px]">
+        <div className="space-y-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#60727D]">
+              Client Workspace
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#2B2B2B]">
+              {client.name}
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[#60727D]">
+              This workspace is intended for your client-specific dashboards, data sources, and
+              documents. Open a dashboard below to get started.
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-[24px] border border-[#8798AA] bg-white shadow-[0_18px_40px_-30px_rgba(21,34,56,0.45)]">
+            <div className="grid grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-4 border-b border-[#E2E8EF] bg-[#E2E8EF] px-6 py-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60727D]">
+                Assigned dashboard
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60727D]">
+                Type
+              </span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#60727D]">
+                Updated
+              </span>
+              <span className="sr-only">Open</span>
+            </div>
+
+            {publishedAssignments.length === 0 ? (
+              <div className="px-6 py-16 text-center text-sm text-[#60727D]">
+                No dashboards have been assigned to your workspace yet.
+              </div>
+            ) : (
+              publishedAssignments.map((assignment) => (
+                <Link
+                  key={assignment.id}
+                  href={assignment.href}
+                  className="group grid grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-4 border-b border-[#D3DDE7] px-6 py-6 transition-colors last:border-b-0 hover:bg-[#F5F8FA]"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-semibold text-[#2B2B2B]">
+                      {assignment.title}
+                    </p>
+                    {assignment.description ? (
+                      <p className="mt-1 truncate text-sm text-[#60727D]">
+                        {assignment.description}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="text-sm font-medium text-[#2B2B2B]">
+                    {formatDashboardType(assignment.assetId)}
+                  </span>
+                  <span className="text-sm text-[#60727D]">
+                    {formatWorkspaceDate(assignment.updatedAt)}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-[#C9D2D8] px-4 py-2 text-sm font-medium text-[#2B2B2B] transition-colors group-hover:border-[#386B45] group-hover:bg-[#386B45] group-hover:text-white">
+                    Open
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                </Link>
+              ))
+            )}
+          </div>
+        </div>
+      </PortalContentFrame>
+    );
+  }
 
   return (
     <PortalContentFrame>

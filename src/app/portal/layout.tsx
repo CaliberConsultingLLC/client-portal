@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { PortalShell } from "@/components/portal/portal-shell";
 import {
+  getActualRole,
   isInternalFirebaseRole,
-  isSuperAdmin,
   requireFirebasePortalUser,
 } from "@/lib/firebase/auth";
 import { getAccessibleDashboardAssignments, getAccessiblePortalClients } from "@/lib/firebase/portal-access";
@@ -26,7 +26,12 @@ export default async function PortalLayout({
   const demoAssignments = assignments.filter((assignment) => demoClientIds.has(assignment.clientId));
   const defaultDemoLabHref = "/portal/dashboards/lab/collaboration?demoLab=open";
 
-  const canPreviewAsUser = isSuperAdmin(user);
+  // Any internal admin (super or internal) can preview the portal as another user.
+  const canPreviewAsUser = isInternalFirebaseRole(getActualRole(user));
+  // Average client viewers (executive/management/employee) get a stripped-down
+  // "Home only" experience. Internal staff and client admins keep full nav.
+  const restrictToHomeNav =
+    !isInternalFirebaseRole(user.role) && user.role !== "client_admin";
   const viewAsUsers = canPreviewAsUser
     ? (await listAllFirebaseUsers())
         .filter((entry) => entry.isActive)
@@ -49,6 +54,7 @@ export default async function PortalLayout({
       demoDashboardAssetIds={demoAssignments.map((assignment) => assignment.assetId)}
       hasDemoWorkspaceAccess={demoClientIds.size > 0}
       defaultDemoLabHref={defaultDemoLabHref}
+      restrictToHomeNav={restrictToHomeNav}
     >
       {children}
     </PortalShell>

@@ -15,11 +15,16 @@ import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface DeptCell { current: number; comparisons: Record<string, number> }
-interface Statement { id: string; text: string; byDept: Record<string, DeptCell> }
-interface Index { id: string; name: string; statements: Statement[] }
+interface Statement { id: string; text: string; byDept: Record<string, DeptCell>; org?: DeptCell }
+/** Person-average score for one population: the current campaign plus every comparison. */
+interface ScoreCell { current: number | null; comparisons: Record<string, number | null> }
+/** Person-average scores per group, plus the org's own direct person average. */
+interface ScoreBlock { byGroup: Record<string, ScoreCell>; org: ScoreCell }
+interface Index { id: string; name: string; statements: Statement[]; score?: ScoreBlock }
 interface Comparison { id: string; label: string; labelLong: string }
 interface Department { id: string; name: string }
 interface Data {
+  overall?: ScoreBlock;
   client: { name: string; tagline?: string; logoUrl?: string };
   current: { id: string; label: string; labelLong: string; responseRate?: number };
   comparisons: Comparison[];
@@ -269,6 +274,7 @@ export function EEDepartmentComparison({
   fieldLayout = false,
   compact = false,
   showStatementHeatmap = true,
+  verticalHeatmapHeaders,
   chromeless = false,
   headerPortalId,
   basinReportSurface = false,
@@ -294,6 +300,8 @@ export function EEDepartmentComparison({
   fieldLayout?: boolean;
   compact?: boolean;
   showStatementHeatmap?: boolean;
+  /** Force vertical column headers on the statement heatmap (many supervisors). */
+  verticalHeatmapHeaders?: boolean;
   /** Basin group surface treatment "1b" (DWS Field redesign pilot only):
    * shared canvas tint, soft blue borders/shadows, and vertical section
    * labels — see the matching prop on `EELocationComparison`. Every other
@@ -338,27 +346,20 @@ export function EEDepartmentComparison({
     ? null
     : idx.statements.find((statement) => statement.id === statementId) ?? null;
 
+  // One index selected scores that index; "All indexes" scores every statement in
+  // a single pass. Both are person averages precomputed by the projection.
+  const scopeScore = selectedIndexes.length === 1 ? selectedIndexes[0]?.score : data.overall;
+  const readCell = (cell: ScoreCell | undefined) => {
+    const value = typeof cell?.current === "number" ? r1(cell.current) : 0;
+    const prior = cell?.comparisons?.[compId];
+    const prev = typeof prior === "number" && prior > 0 ? r1(prior) : null;
+    return { value, prev, delta: prev == null ? null : r1(value - prev) };
+  };
+
   const rows = useMemo(() => departments.map(d => {
-    let cur: number, prev: number | null;
-    if (activeStatement) {
-      const cell = activeStatement.byDept[d.id];
-      cur = cell.current;
-      const prior = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
-      prev = prior != null && prior > 0 ? prior : null;
-    } else {
-      const statements = selectedIndexes.flatMap((index) => index.statements);
-      const curs = statements.map((statement) => statement.byDept[d.id].current);
-      const prevs = statements
-        .map((statement) => {
-          const prior = statement.byDept[d.id].comparisons[compId];
-          return Object.prototype.hasOwnProperty.call(statement.byDept[d.id].comparisons, compId) && prior > 0 ? prior : null;
-        })
-        .filter((value): value is number => value != null);
-      cur = r1(mean(curs));
-      prev = prevs.length > 0 ? r1(mean(prevs)) : null;
-    }
-    return { id: d.id, name: d.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
-  }), [departments, selectedIndexes, activeStatement, compId]);
+    const cell = activeStatement ? activeStatement.byDept[d.id] : scopeScore?.byGroup?.[d.id];
+    return { id: d.id, name: d.name, ...readCell(cell) };
+  }), [departments, scopeScore, activeStatement, compId]);
 
   const primaryFilteredRows = useMemo(
     () => (primaryFilterValue ? rows.filter((row) => row.name === primaryFilterValue) : rows),
@@ -371,9 +372,11 @@ export function EEDepartmentComparison({
     const validRows = primaryFilteredRows.filter((row) => row.delta != null).map((row) => ({ delta: row.delta as number }));
     return computeDeltaAxis(validRows, fallback);
   }, [data.display?.deltaAxis, primaryFilteredRows]);
-  const overallAvg = r1(mean(primaryFilteredRows.map((row) => row.value)));
-  const priorRows = primaryFilteredRows.filter((row) => row.prev != null).map((row) => row.prev as number);
-  const overallPrev = priorRows.length > 0 ? r1(mean(priorRows)) : null;
+  // Company average is the direct average of every respondent — never the mean of
+  // the unit rows on the chart.
+  const orgCell = activeStatement ? activeStatement.org : scopeScore?.org;
+  const overallAvg = useMemo(() => readCell(orgCell).value, [orgCell, compId]);
+  const overallPrev = useMemo(() => readCell(orgCell).prev, [orgCell, compId]);
   const overallDelta = overallPrev == null ? null : r1(overallAvg - overallPrev);
   const rowsByValueDesc = useMemo(
     () => [...primaryFilteredRows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
@@ -410,27 +413,13 @@ export function EEDepartmentComparison({
     const secondaryStatement = statementId === ALL || resolvedIndexes.length !== 1
       ? null
       : resolvedIdx?.statements.find((statement) => statement.id === statementId) ?? null;
+    const secondaryScope =
+      resolvedIndexes.length === 1 ? resolvedIndexes[0]?.score : secondaryData.overall;
     return secondaryData.departments.map((department) => {
-      let cur: number;
-      let prev: number | null;
-      if (secondaryStatement) {
-        const cell = secondaryStatement.byDept[department.id];
-        cur = cell.current;
-        const prior = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
-        prev = prior != null && prior > 0 ? prior : null;
-      } else {
-        const statements = resolvedIndexes.flatMap((index) => index.statements);
-        const curs = statements.map((statement) => statement.byDept[department.id].current);
-        const prevs = statements
-          .map((statement) => {
-            const prior = statement.byDept[department.id].comparisons[compId];
-            return Object.prototype.hasOwnProperty.call(statement.byDept[department.id].comparisons, compId) && prior > 0 ? prior : null;
-          })
-          .filter((value): value is number => value != null);
-        cur = r1(mean(curs));
-        prev = prevs.length > 0 ? r1(mean(prevs)) : null;
-      }
-      return { id: department.id, name: department.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
+      const cell = secondaryStatement
+        ? secondaryStatement.byDept[department.id]
+        : secondaryScope?.byGroup?.[department.id];
+      return { id: department.id, name: department.name, ...readCell(cell) };
     });
   }, [secondaryData, indexId, statementId, compId]);
   const secondaryFilteredRows = useMemo(
@@ -451,10 +440,23 @@ export function EEDepartmentComparison({
         ) as Array<{ id: string; name: string; value: number; prev: number | null; delta: number }>,
     [secondaryFilteredRows]
   );
-  const secondaryOverallAvg = useMemo(
-    () => (secondaryFilteredRows.length > 0 ? r1(mean(secondaryFilteredRows.map((row) => row.value))) : overallAvg),
-    [secondaryFilteredRows, overallAvg]
-  );
+  // Same person-weighted org average as primary — never equal-weight of secondary rows.
+  const secondaryOverallAvg = useMemo(() => {
+    if (!secondaryData) return overallAvg;
+    const sourceIndex = !indexId
+      ? secondaryData.indexes
+      : secondaryData.indexes.filter((item) => item.id === indexId);
+    const resolvedIndexes = sourceIndex.length > 0 ? sourceIndex : secondaryData.indexes;
+    const resolvedIdx = resolvedIndexes[0] ?? secondaryData.indexes[0];
+    const secondaryStatement =
+      statementId !== ALL && resolvedIndexes.length === 1
+        ? resolvedIdx?.statements.find((statement) => statement.id === statementId) ?? null
+        : null;
+    const secondaryScope =
+      resolvedIndexes.length === 1 ? resolvedIndexes[0]?.score : secondaryData.overall;
+    const cell = secondaryStatement ? secondaryStatement.org : secondaryScope?.org;
+    return typeof cell?.current === "number" ? r1(cell.current) : overallAvg;
+  }, [secondaryData, indexId, statementId, overallAvg]);
 
   // Same 5-point floor/ceil rounding as the Basin Report's bar chart, sized
   // to whatever's actually on screen (both rows sets + their averages)
@@ -679,7 +681,7 @@ export function EEDepartmentComparison({
                     <h3 className="card-title">Current Campaign — {primaryLabel}{idx ? ` · ${idx.name}` : ""}</h3>
                   </div>
                   <div className="card-body">
-                    <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} uniform compact={compact} />
+                    <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} uniform compact={compact} benchmarkLabel={benchmarkLabel} />
                   </div>
                 </div>
                 </RegisteredVisualExportFrame>
@@ -705,7 +707,7 @@ export function EEDepartmentComparison({
                   <h3 className="card-title">Current Campaign — {primaryLabel}</h3>
                 </div>
                 <div className="card-body">
-                  <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} />
+                  <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} benchmarkLabel={benchmarkLabel} />
                 </div>
               </div>
               </RegisteredVisualExportFrame>
@@ -725,8 +727,12 @@ export function EEDepartmentComparison({
                     statements={idx.statements}
                     columns={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name }))}
                     getValue={(statementId, columnId) => idx.statements.find((s) => s.id === statementId)?.byDept[columnId]?.current ?? null}
+                    getColumnAverage={(columnId) => idx.score?.byGroup?.[columnId]?.current ?? null}
+                    getRowAverage={(statementId) => idx.statements.find((s) => s.id === statementId)?.org?.current ?? null}
+                    grandAverage={idx.score?.org?.current ?? null}
                     scoreColor={sc}
                     columnHeader={`${idx.name} Statement`}
+                    verticalHeaders={verticalHeatmapHeaders}
                   />
                 </div>
               </div>
@@ -788,7 +794,7 @@ export function EEDepartmentComparison({
                     <h3 className="card-title">Current Campaign — Department</h3>
                   </div>
                   <div className="card-body">
-                    <BrandComparisonChart rows={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: secondaryOverallAvg, delta: r1(row.value - secondaryOverallAvg) }))} axis={barAxis} scoreColor={sc} uniform={fieldLayout} />
+                    <BrandComparisonChart rows={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: secondaryOverallAvg, delta: r1(row.value - secondaryOverallAvg) }))} axis={barAxis} scoreColor={sc} uniform={fieldLayout} benchmarkLabel={benchmarkLabel} />
                   </div>
                 </div>
                 </RegisteredVisualExportFrame>
@@ -822,8 +828,12 @@ export function EEDepartmentComparison({
                           statements={secondaryIdx.statements}
                           columns={secondaryRowsByValueDesc.map((row) => ({ id: row.id, name: row.name }))}
                           getValue={(statementId, columnId) => secondaryIdx.statements.find((s) => s.id === statementId)?.byDept[columnId]?.current ?? null}
+                          getColumnAverage={(columnId) => secondaryIdx.score?.byGroup?.[columnId]?.current ?? null}
+                          getRowAverage={(statementId) => secondaryIdx.statements.find((s) => s.id === statementId)?.org?.current ?? null}
+                          grandAverage={secondaryIdx.score?.org?.current ?? null}
                           scoreColor={sc}
                           columnHeader={`${secondaryIdx.name} Statement`}
+                          verticalHeaders={verticalHeatmapHeaders}
                         />
                       </div>
                     </div>

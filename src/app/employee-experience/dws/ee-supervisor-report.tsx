@@ -1,12 +1,17 @@
 // @ts-nocheck
 "use client";
 
-import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
 import { toSupervisorReportData } from "./ee-demo-fixture";
 import {
   ClientMark,
   DateHead,
+  EmbeddedFilterCard,
   EEReportStyles,
+  FilterStack,
+  PillOptionRow,
   RailSection,
   f1,
   isLightBand,
@@ -90,7 +95,23 @@ function SupBarChart({ rows, axis, scoreColor }) {
   );
 }
 
-export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout = false }: { data: any; benchmarkLabel?: string; fieldLayout?: boolean }) {
+export function EESupervisorReport({
+  data,
+  benchmarkLabel = "CSG",
+  fieldLayout = false,
+  chromeless = false,
+  basinReportSurface = false,
+  filtersPortalId,
+  filterPersistenceKey,
+}: {
+  data: any;
+  benchmarkLabel?: string;
+  fieldLayout?: boolean;
+  chromeless?: boolean;
+  basinReportSurface?: boolean;
+  filtersPortalId?: string;
+  filterPersistenceKey?: string;
+}) {
   const { client, current, comparisons, scale, supervisors = [], index, display } = data;
   const exportRegistry = useVisualExportRegistry();
   const registryActive = useVisualRegistryActive();
@@ -104,16 +125,28 @@ export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout =
     setStmtSort((prev) => (prev.col === col ? { col, dir: prev.dir === "desc" ? "asc" : "desc" } : { col, dir: "desc" }));
   const sortArrow = (col: "score" | "vsorg") =>
     fieldLayout && stmtSort.col === col ? (stmtSort.dir === "desc" ? " ↓" : " ↑") : "";
-  const [supervisorId, setSupervisorId] = useState(supervisors[0]?.id ?? "");
-  const [currentCampaignId, setCurrentCampaignId] = useState(() => {
+  const [supervisorId, setSupervisorId] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "supervisorId",
+    () => supervisors[0]?.id ?? ""
+  );
+  const [currentCampaignId, setCurrentCampaignId] = usePersistedDashboardFilter(filterPersistenceKey, "currentCampaignId", () => {
     const preferredCurrent = [current, ...comparisons].find((campaign) => campaignMatches(campaign, PREFERRED_CURRENT_CAMPAIGN));
     return preferredCurrent?.id ?? current.id;
   });
-  const [priorCampaignId, setPriorCampaignId] = useState(() => {
+  const [priorCampaignId, setPriorCampaignId] = usePersistedDashboardFilter(filterPersistenceKey, "priorCampaignId", () => {
     const preferredPrior = comparisons.find((campaign) => campaignMatches(campaign, PREFERRED_PRIOR_CAMPAIGN));
     return preferredPrior?.id ?? comparisons[comparisons.length - 1]?.id ?? "";
   });
   const supervisor = supervisors.find((item) => item.id === supervisorId) ?? supervisors[0];
+  const [filtersPortalNode, setFiltersPortalNode] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!chromeless || !filtersPortalId) {
+      setFiltersPortalNode(null);
+      return;
+    }
+    setFiltersPortalNode(document.getElementById(filtersPortalId));
+  }, [chromeless, filtersPortalId]);
   const timeline = useMemo(
     () => [...comparisons.map((item) => ({ ...item, key: item.id })), { ...current, key: "current" }],
     [comparisons, current]
@@ -169,20 +202,16 @@ export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout =
     );
   }
 
-  const supervisorCurrentValues = index.statements
-    .map((statement) => supervisorValue(statement, curCamp))
-    .filter((value): value is number => value != null);
-  const supervisorPreviousValues = previous
-    ? index.statements
-        .map((statement) => supervisorValue(statement, previous))
-        .filter((value): value is number => value != null)
-    : [];
-  const orgCurrentValues = index.statements
-    .map((statement) => orgValue(statement, curCamp))
-    .filter((value): value is number => value != null);
-  const supervisorOverall = supervisorCurrentValues.length > 0 ? round1(mean(supervisorCurrentValues)) : null;
-  const supervisorPrevious = supervisorPreviousValues.length > 0 ? round1(mean(supervisorPreviousValues)) : null;
-  const orgOverall = orgCurrentValues.length > 0 ? round1(mean(orgCurrentValues)) : null;
+  // Headline scores read the projection's person averages: the supervisor's score
+  // is the average of their people, the org score the average of everyone.
+  const readScore = (cell, campaign) => {
+    if (!cell) return null;
+    const value = campaign?.key === "current" ? cell.current : cell.comparisons?.[campaign?.key];
+    return hasScore(value) ? round1(value) : null;
+  };
+  const supervisorOverall = readScore(index.score?.byGroup?.[supervisorId], curCamp);
+  const supervisorPrevious = previous ? readScore(index.score?.byGroup?.[supervisorId], previous) : null;
+  const orgOverall = readScore(index.score?.org, curCamp);
   const overallDelta =
     supervisorOverall == null || supervisorPrevious == null ? null : round1(supervisorOverall - supervisorPrevious);
   const vsOrg = supervisorOverall == null || orgOverall == null ? null : round1(supervisorOverall - orgOverall);
@@ -195,38 +224,84 @@ export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout =
     });
   }
 
-  return (
-    <div className="canvas">
-      <EEReportStyles />
-      <aside className="rail left">
-        <div className="client-card"><ClientMark client={client} /><div className="client-head">SUPERVISOR REPORT</div></div>
+  const timelineRecentFirst = [...timeline].reverse();
+  const railControls = (
+    <FilterStack>
+      {chromeless ? (
+        <EmbeddedFilterCard title="Supervisor">
+          <PillOptionRow
+            value={supervisorId}
+            onChange={setSupervisorId}
+            options={supervisors.map((item) => ({ id: item.id, label: item.name }))}
+          />
+          <p className="rs-hint" style={{ margin: "9px 2px 0" }}>
+            {supervisor.dept} · {supervisor.responses} responses
+          </p>
+        </EmbeddedFilterCard>
+      ) : (
         <RailSection title="Supervisor" defaultOpen>
           <select className="rail-select" value={supervisorId} onChange={(event) => setSupervisorId(event.target.value)}>
             {supervisors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
           <p className="rs-hint">{supervisor.dept} · {supervisor.responses} responses</p>
         </RailSection>
-        {hasComparison ? (
-        <RailSection title="Campaign Selection">
-          <div className="flex flex-col gap-3">
-            <div>
-              <span className="block text-center text-xs font-medium text-[#6E7E96]">Current</span>
-              <select className="rail-select" value={curCamp.id} onChange={(event) => setCurrentCampaignId(event.target.value)}>
-                {timeline.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
-              </select>
+      )}
+      {hasComparison ? (
+        chromeless ? (
+          <EmbeddedFilterCard title="Campaign Selection">
+            <div className="flex flex-col gap-3">
+              <div>
+                <span className="mb-1.5 block text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8798AA]">Current</span>
+                <PillOptionRow
+                  value={curCamp.id}
+                  onChange={setCurrentCampaignId}
+                  options={timelineRecentFirst.map((campaign) => ({ id: campaign.id, label: campaign.labelLong || campaign.label }))}
+                />
+              </div>
+              <div>
+                <span className="mb-1.5 block text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-[#8798AA]">Compared To</span>
+                <PillOptionRow
+                  value={previous?.id ?? ""}
+                  onChange={setPriorCampaignId}
+                  options={timelineRecentFirst.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => ({ id: campaign.id, label: campaign.labelLong || campaign.label }))}
+                />
+              </div>
             </div>
-            <div>
-              <span className="block text-center text-xs font-medium text-[#6E7E96]">Compared To</span>
-              <select className="rail-select" value={previous?.id ?? ""} onChange={(event) => setPriorCampaignId(event.target.value)}>
-                {timeline.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
-              </select>
+          </EmbeddedFilterCard>
+        ) : (
+          <RailSection title="Campaign Selection">
+            <div className="flex flex-col gap-3">
+              <div>
+                <span className="block text-center text-xs font-medium text-[#6E7E96]">Current</span>
+                <select className="rail-select" value={curCamp.id} onChange={(event) => setCurrentCampaignId(event.target.value)}>
+                  {timelineRecentFirst.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <span className="block text-center text-xs font-medium text-[#6E7E96]">Compared To</span>
+                <select className="rail-select" value={previous?.id ?? ""} onChange={(event) => setPriorCampaignId(event.target.value)}>
+                  {timelineRecentFirst.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.labelLong || campaign.label}</option>)}
+                </select>
+              </div>
             </div>
-          </div>
-        </RailSection>
-        ) : null}
-      </aside>
+          </RailSection>
+        )
+      ) : null}
+    </FilterStack>
+  );
 
-      <main className="center">
+  return (
+    <div className={chromeless ? "canvas fr-persp-main" : "canvas"} style={chromeless ? { background: basinReportSurface ? "#F4F4EF" : "#fff", margin: 0, padding: 0 } : undefined}>
+      <EEReportStyles />
+      {chromeless && filtersPortalNode ? createPortal(railControls, filtersPortalNode) : null}
+      {!chromeless ? (
+      <aside className="rail left">
+        <div className="client-card"><ClientMark client={client} /><div className="client-head">SUPERVISOR REPORT</div></div>
+        {railControls}
+      </aside>
+      ) : null}
+
+      <main className="center" style={chromeless ? { margin: 0, padding: 0, background: basinReportSurface ? "#F4F4EF" : "#fff" } : undefined}>
         <div className="center-inner">
           <div className="hero">
             <div><h2>{supervisor.name}</h2><p className="hero-sub">{curCamp.labelLong}{previous ? ` (trend vs ${previous.label})` : ""}</p></div>
@@ -289,6 +364,7 @@ export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout =
         </div>
       </main>
 
+      {!chromeless ? (
       <aside className="rail right">
         <EEContextRail
           scale={scale}
@@ -302,6 +378,7 @@ export function EESupervisorReport({ data, benchmarkLabel = "CSG", fieldLayout =
           )}
         />
       </aside>
+      ) : null}
     </div>
   );
 }

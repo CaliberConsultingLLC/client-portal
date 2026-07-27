@@ -5,6 +5,7 @@ import {
   getFirebaseSessionDurationMs,
 } from "@/lib/firebase/auth";
 import { getFirebaseAdminAuth } from "@/lib/firebase/admin";
+import { getFirebaseUserDoc } from "@/lib/firebase/user-store";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,9 +16,18 @@ export async function POST(request: NextRequest) {
     }
 
     const expiresIn = getFirebaseSessionDurationMs();
+    const decoded = await getFirebaseAdminAuth().verifyIdToken(idToken);
     const sessionCookie = await getFirebaseAdminAuth().createSessionCookie(idToken, {
       expiresIn,
     });
+    const userDoc = await getFirebaseUserDoc(decoded.uid);
+
+    if (!userDoc || !userDoc.isActive) {
+      return NextResponse.json(
+        { error: "Unable to create authenticated session." },
+        { status: 403 }
+      );
+    }
 
     const cookieStore = await cookies();
     cookieStore.set(FIREBASE_SESSION_COOKIE_NAME, sessionCookie, {

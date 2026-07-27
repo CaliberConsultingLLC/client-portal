@@ -13,9 +13,12 @@ import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Statement { text: string; current: number; comparisons: Record<string, number> }
-interface Index { id: string; name: string; responses: number; statements: Statement[] }
+/** Person-average score for one population: the current campaign plus every comparison. */
+interface ScoreCell { current: number | null; comparisons: Record<string, number | null> }
+interface Index { id: string; name: string; responses: number; statements: Statement[]; score?: ScoreCell }
 interface Comparison { id: string; label: string; labelLong: string }
 interface Data {
+  overallScore?: ScoreCell;
   client: { name: string; tagline?: string; logoUrl?: string };
   current: { label: string; labelLong: string; responseRate?: number };
   comparisons: Comparison[];
@@ -310,8 +313,17 @@ export function EECampaignResults({
 
   const validDeltaRows = useMemo(() => rows.filter((row) => row.delta != null), [rows]);
 
-  const curAvg  = useMemo(() => r1(mean(rows.map(r => r.v))),    [rows]);
-  const prevAvg = useMemo(() => validDeltaRows.length > 0 ? r1(mean(validDeltaRows.map(r => r.prev as number))) : null, [validDeltaRows]);
+  // Headline score is the direct person average for the selected scope, not the
+  // mean of the statement rows below it.
+  const scopeCell = selectedIndexes.length === 1 ? selectedIndexes[0]?.score : data.overallScore;
+  const curAvg = useMemo(
+    () => (typeof scopeCell?.current === "number" ? r1(scopeCell.current) : 0),
+    [scopeCell]
+  );
+  const prevAvg = useMemo(() => {
+    const prior = scopeCell?.comparisons?.[compId];
+    return typeof prior === "number" && prior > 0 ? r1(prior) : null;
+  }, [scopeCell, compId]);
   const yoy     = prevAvg == null ? null : r1(curAvg - prevAvg);
 
   const rrPct = current.responseRate != null ? `${Math.round(current.responseRate * 100)}%` : "—";  const avgColor = sc(curAvg);
@@ -469,9 +481,15 @@ export function EECampaignResults({
                           delta: prev == null ? null : r1(statement.current - prev),
                         };
                       });
-                      const indexCurrent = r1(mean(statementRows.map((row) => row.current)));
-                      const deltaValues = statementRows.map((row) => row.delta).filter((value): value is number => value != null);
-                      const indexDelta = deltaValues.length > 0 ? r1(mean(deltaValues)) : null;
+                      // Index row is the person average for that index, never the
+                      // mean of the statement rows nested under it.
+                      const indexCurrent =
+                        typeof index.score?.current === "number" ? r1(index.score.current) : 0;
+                      const indexPrior = index.score?.comparisons?.[compId];
+                      const indexDelta =
+                        typeof indexPrior === "number" && indexPrior > 0
+                          ? r1(indexCurrent - r1(indexPrior))
+                          : null;
                       const currentColor = sc(indexCurrent);
                       return (
                         <>

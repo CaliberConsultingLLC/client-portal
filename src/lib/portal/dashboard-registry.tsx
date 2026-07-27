@@ -11,10 +11,7 @@ import {
 } from "@/lib/employee-experience/dws-dashboard";
 import { getDashboardPerspectiveInstancesByDashboardId } from "@/lib/firebase/perspective-store";
 import { loadCanopyIntegrationDashboardData } from "@/lib/integration-effectiveness/canopy-demo";
-import {
-  resolveAllowedValuesForPerspective,
-  type EmployeeExperienceUserAccess,
-} from "@/lib/firebase/user-access";
+import { type EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
 
 export interface PortalDashboardRenderOptions {
   dashboardInstanceId?: string;
@@ -44,34 +41,9 @@ function eeDashboardProps(options?: PortalDashboardRenderOptions) {
 
 async function renderEmployeeExperienceDashboard(options?: PortalDashboardRenderOptions) {
   const sharedProps = eeDashboardProps(options);
-  const userAccess = options?.employeeExperienceAccess;
-  const ruleBasedAllowedBrands = resolveAllowedValuesForPerspective(
-    userAccess,
-    ["ee-brand-report", "integration.brandReport"],
-    ["company", "brand", "location", "site"]
-  );
-  const brandRestricted =
-    ruleBasedAllowedBrands.length > 0 ||
-    userAccess?.brandReportAccessMode === "restricted" ||
-    (userAccess?.brandReportAllowedBrands.length ?? 0) > 0;
-  const allowedBrandSet =
-    brandRestricted
-      ? new Set(
-          ruleBasedAllowedBrands.length > 0
-            ? ruleBasedAllowedBrands
-            : userAccess?.brandReportAllowedBrands ?? []
-        )
-      : null;
-  const applyBrandRestrictions = (data: Awaited<ReturnType<typeof loadDwsEmployeeExperienceDashboardData>>) =>
-    allowedBrandSet
-      ? {
-          ...data,
-          respondents: data.respondents.filter((respondent) => allowedBrandSet.has(respondent.location)),
-        }
-      : data;
 
   if (options?.demo) {
-    const data = applyBrandRestrictions(await loadDwsEmployeeExperienceDashboardData({ demo: true }));
+    const data = await loadDwsEmployeeExperienceDashboardData({ demo: true });
     return (
       <DwsEmployeeExperienceDashboardClient
         data={data}
@@ -87,15 +59,9 @@ async function renderEmployeeExperienceDashboard(options?: PortalDashboardRender
       const data = await loadEmployeeExperienceSyntheticDemoData({
         hiddenDimensionIds: instance.settings.hiddenDimensionIds ?? [],
       });
-      const restrictedData = allowedBrandSet
-        ? {
-            ...data,
-            respondents: data.respondents.filter((respondent) => allowedBrandSet.has(respondent.location)),
-          }
-        : data;
       return (
         <DwsEmployeeExperienceDashboardClient
-          data={restrictedData}
+          data={data}
           logoUrl={instance.logoUrl ?? undefined}
           redesignLayout={instance.settings.redesignEnabled ?? false}
           {...sharedProps}
@@ -103,10 +69,10 @@ async function renderEmployeeExperienceDashboard(options?: PortalDashboardRender
       );
     }
 
-    const data = applyBrandRestrictions(await loadDwsEmployeeExperienceDashboardData({
+    const data = await loadDwsEmployeeExperienceDashboardData({
       hiddenDimensionIds: instance?.settings.hiddenDimensionIds ?? [],
       sourceClientId: instance?.dataSource.sourceClientId ?? undefined,
-    }));
+    });
     return (
       <DwsEmployeeExperienceDashboardClient
         data={data}
@@ -117,7 +83,7 @@ async function renderEmployeeExperienceDashboard(options?: PortalDashboardRender
     );
   }
 
-  const data = applyBrandRestrictions(await loadDwsEmployeeExperienceDashboardData());
+  const data = await loadDwsEmployeeExperienceDashboardData();
   return <DwsEmployeeExperienceDashboardClient data={data} {...sharedProps} />;
 }
 

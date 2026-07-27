@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       fullName,
       role,
       clientIds,
+      mustChangePassword: false,
     });
 
     return NextResponse.json({

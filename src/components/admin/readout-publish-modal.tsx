@@ -27,7 +27,8 @@ export function ReadoutPublishModal({
   const introConfigured = Boolean(readout.intro.headline.trim() && readout.intro.body.trim());
   const outroConfigured = Boolean(readout.outro.headline.trim());
   const enabledFindings = readout.findings.filter((finding) => finding.enabled).length;
-  const canPublish = introConfigured && outroConfigured && enabledFindings > 0;
+  const hasDeck = Boolean(readout.deck?.order?.length && readout.deck.cover?.headline?.trim());
+  const canPublish = hasDeck || (introConfigured && outroConfigured && enabledFindings > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -45,9 +46,13 @@ export function ReadoutPublishModal({
               Pre-flight check
             </p>
             <div className="space-y-2 text-sm text-[#152238]">
-              <p>{introConfigured ? "✓" : "○"} Intro configured (headline + body)</p>
-              <p>{enabledFindings > 0 ? "✓" : "○"} {enabledFindings} finding(s) selected</p>
-              <p>{outroConfigured ? "✓" : "○"} Outro configured (headline)</p>
+              <p>{hasDeck ? "✓" : "○"} Slide deck ready (cover + slides)</p>
+              <p>{introConfigured ? "✓" : "○"} Legacy intro configured (optional if deck ready)</p>
+              <p>
+                {enabledFindings > 0 ? "✓" : "○"} {enabledFindings} legacy finding(s) (optional if
+                deck ready)
+              </p>
+              <p>{outroConfigured ? "✓" : "○"} Legacy outro configured (optional if deck ready)</p>
             </div>
           </div>
 
@@ -64,8 +69,9 @@ export function ReadoutPublishModal({
           </div>
 
           <div className="rounded-lg border border-[#F0E2B6] bg-[#FFFDF5] px-4 py-3 text-sm text-[#7A5C0A]">
-            <strong>Goes live immediately.</strong> This executive will see the readout in Insights as
-            soon as you publish. You can update or unpublish later.
+            <strong>Goes live immediately for assigned viewers.</strong> Set access on the Details
+            page first (all client users or selected users). You can Hide it any time without losing
+            the deck.
           </div>
         </div>
 

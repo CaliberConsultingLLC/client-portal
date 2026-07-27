@@ -1,0 +1,76 @@
+---
+description: Every score in this portal is the direct average of the people it describes
+alwaysApply: true
+---
+
+# Person-Average Scoring (Non-Negotiable)
+
+## The rule
+
+**Every number on this portal is a direct average of people. Nothing else.**
+
+For any score, anywhere:
+
+1. **Determine which people the number describes.** Org view with no filters is
+   everyone in that campaign. Eighteen filters selected is the people who match
+   all eighteen. A department bar is the people in that department. An index
+   score is the same people, scored on that index's statements.
+2. **Average those people directly.** Each person contributes one value — the
+   mean of their own answers to the items in scope. Those person values are then
+   averaged with equal weight.
+3. **Never build a number out of other numbers.** No exceptions.
+
+## Correct
+
+```ts
+personAverageScore(respondentsInScope, itemIdsInScope)
+// per person: mean of their own answers to itemIdsInScope
+// then: equal-weight mean of those person values
+```
+
+Scope is set by `itemIds` (one statement, one index's statements, or every
+statement) and by the respondent population (campaign plus any active filters).
+
+## Forbidden
+
+- `mean(departments.map(d => d.score))` as org / Company Avg / vs Org
+- `mean(visibleRows.map(r => r.value))` as a chart's average line
+- `mean(index.statements.map(s => s.current))` as an index score
+- `mean(indexes.map(i => i.score))` as an overall or Total Index score
+- Averaging heatmap cells to produce a row average, column average, or grand total
+- Pooling every respondent's raw answers into one flat list (that weights people
+  by how many questions they answered — average each person first)
+- Deriving a total from any level beneath it, on any perspective, ever
+
+## How it is enforced in code
+
+`ee-live-projections.ts` exports `personAverageScore` and precomputes person
+averages so components never have to roll anything up:
+
+- `index.score` and `projection.overall` — `{ byGroup, org }` `PersonScoreBlock`s
+  for department, supervisor, location, division, job category, and brand
+  projections. `org` is its own direct person average, not a roll-up of `byGroup`.
+- `index.series` and `projection.overallSeries` — `PersonScoreSeries`
+  (`byDept` / `byLocation` / `byOrg` per campaign) for the historical projection.
+- `projectCampaignResultsData` — `index.score` and `overallScore`.
+- `ComparisonHeatmap` requires `getColumnAverage`, `getRowAverage`, and
+  `grandAverage` props; it will not average its own cells.
+
+A single statement cell is already a person average of that one statement, so
+statement rows may read those cells directly.
+
+## When adding anything new
+
+If a component needs an index, total, org, or segment score, read it from the
+projection's person-average block. If the projection does not expose it yet, add
+it there with `personAverageScore` — do not compute it in the component by
+averaging what is already on screen.
+
+Verify with `scripts/verify-person-average.mjs`, which recomputes every
+projection independently from raw respondents and fails on any mismatch.
+
+## Scope
+
+Every current and future EE / assessment dashboard in this portal — DWS, Field,
+CSG, and any client. Segment rows are person averages within the segment; org
+and group rollups are their own direct person averages.

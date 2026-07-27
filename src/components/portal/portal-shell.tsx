@@ -12,11 +12,13 @@ import {
   Megaphone,
   MapPin,
   BookText,
+  KeyRound,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppTopBanner } from "@/components/shared/app-top-banner";
 import { FirebaseSignOutButton } from "@/components/auth/firebase-sign-out-button";
+import { PortalPasswordDialog } from "@/components/portal/portal-password-dialog";
 import { ViewAsToggle, type ViewAsUserOption } from "@/components/portal/view-as-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,7 +28,7 @@ const navItems = [
   { label: "Clients", href: "/portal/clients", icon: Building2 },
   { label: "Users", href: "/portal/users", icon: Users },
   { label: "Dashboards", href: "/portal/dashboards", icon: BarChart3 },
-  { label: "Insights", href: "/portal/insights", icon: NotebookPen },
+  { label: "Insights", href: "/portal/insights", icon: NotebookPen, clientsOnly: true },
   { label: "Readouts", href: "/portal/readouts", icon: BookText },
   { label: "Workspace Map", href: "/portal/workspace-map", icon: MapPin },
   // Perspectives and Live Fielding temporarily hidden to reduce nav overflow
@@ -51,6 +53,8 @@ interface PortalShellProps {
   /** All users the super admin can preview as. */
   viewAsUsers?: ViewAsUserOption[];
   defaultDemoLabHref?: string;
+  /** When true, the top nav collapses to just "Home" (average client viewers). */
+  restrictToHomeNav?: boolean;
 }
 
 function normalizeDashboardAssetId(assetId: string) {
@@ -129,13 +133,16 @@ export function PortalShell({
   viewingAsUserUid = null,
   viewAsUsers = [],
   defaultDemoLabHref = "/portal/dashboards/lab/collaboration?demoLab=open",
+  restrictToHomeNav = false,
 }: PortalShellProps) {
   const pathname = usePathname();
-  const [isInsightsEditing, setIsInsightsEditing] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+
   // Internal-only top-nav. Clients reach their census through the campaign
   // card's "Census" button instead of a global Census tab.
   const internalOnlyNav = new Set([
     "/portal/clients",
+    "/portal/users",
     "/portal/readouts",
     "/portal/workspace-map",
     "/portal/perspectives",
@@ -145,11 +152,20 @@ export function PortalShell({
   ]);
   const canSeeInternalNav = isInternalUser && !isViewingAsUser;
   const visibleNavItems = navItems.filter((item) => {
+    // Average client viewers get a single "Home" entry — nothing else.
+    if (restrictToHomeNav) {
+      return item.href === "/portal";
+    }
+
+    if ("clientsOnly" in item && item.clientsOnly) {
+      return !isInternalUser || isViewingAsUser;
+    }
+
     if (internalOnlyNav.has(item.href)) {
       return canSeeInternalNav;
     }
 
-    // Home, Users, Dashboards, and Live Fielding are visible to everyone.
+    // Home, Dashboards, and Live Fielding are visible to everyone else.
     return true;
   });
   const dashboardPathParts = pathname.split("/").filter(Boolean);
@@ -172,8 +188,8 @@ export function PortalShell({
     isDashboardRoute &&
     !DEMO_LAB_DISABLED_ASSET_IDS.has(normalizeDashboardAssetId(currentDashboardAssetId)) &&
     (isInternalUser || isDemoDashboardRoute || hasDemoWorkspaceAccess);
-  const isInsightsRoute = pathname.startsWith("/portal/insights");
-  const insightsEditing = isInsightsRoute ? isInsightsEditing : false;
+  const isModifyRoute = pathname.startsWith("/portal/readouts/") && pathname.endsWith("/modify");
+  const isInsightsRoute = pathname.startsWith("/portal/insights") || isModifyRoute;
 
   useEffect(() => {
     if (!isInsightsRoute) {
@@ -224,6 +240,18 @@ export function PortalShell({
               </p>
             ) : null}
           </div>
+          {!isViewingAsUser ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setChangePasswordOpen(true)}
+              className="h-9 w-9 shrink-0 rounded-full p-0 text-white/60 hover:bg-white/10 hover:text-white [&_svg]:size-[18px]"
+              title="Change password"
+              aria-label="Change password"
+            >
+              <KeyRound className="h-4 w-4" />
+            </Button>
+          ) : null}
           <FirebaseSignOutButton
             redirectTo="/login"
             label=""
@@ -234,30 +262,21 @@ export function PortalShell({
         </div>
       </AppTopBanner>
 
+      <PortalPasswordDialog
+        open={changePasswordOpen}
+        onOpenChange={setChangePasswordOpen}
+        requireCurrentPassword
+        onSuccess={() => setChangePasswordOpen(false)}
+      />
+
       <main
         className={cn(
           "relative mx-auto w-full",
-          isDashboardRoute
-            ? "px-0 pb-8"
+          isDashboardRoute || isInsightsRoute
+            ? "px-0 pb-0"
             : "min-h-[calc(100vh-var(--app-top-banner-height))] bg-[#E8ECE9]"
         )}
       >
-        {isInternalUser && isInsightsRoute ? (
-          <div className="pointer-events-none absolute right-6 top-4 z-30">
-            <Button
-              type="button"
-              variant="outline"
-              className="pointer-events-auto rounded-full border-[#8798AA] bg-white px-4 text-[#152238] hover:bg-[#F5F8FA]"
-              onClick={() => {
-                const next = !insightsEditing;
-                setIsInsightsEditing(next);
-                window.dispatchEvent(new CustomEvent("portal-readout-edit-mode", { detail: next }));
-              }}
-            >
-              {insightsEditing ? "Done editing" : "Edit narrative"}
-            </Button>
-          </div>
-        ) : null}
         {children}
       </main>
     </div>

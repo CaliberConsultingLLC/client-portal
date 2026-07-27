@@ -15,11 +15,16 @@ import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface LocationCell { current: number; comparisons: Record<string, number> }
-interface Statement { id: string; text: string; byLocation: Record<string, LocationCell> }
-interface Index { id: string; name: string; statements: Statement[] }
+interface Statement { id: string; text: string; byLocation: Record<string, LocationCell>; org?: LocationCell }
+/** Person-average score for one population: the current campaign plus every comparison. */
+interface ScoreCell { current: number | null; comparisons: Record<string, number | null> }
+/** Person-average scores per group, plus the org's own direct person average. */
+interface ScoreBlock { byGroup: Record<string, ScoreCell>; org: ScoreCell }
+interface Index { id: string; name: string; statements: Statement[]; score?: ScoreBlock }
 interface Comparison { id: string; label: string; labelLong: string }
 interface Location { id: string; name: string }
 interface Data {
+  overall?: ScoreBlock;
   client: { name: string; tagline?: string; logoUrl?: string };
   current: { id: string; label: string; labelLong: string; responseRate?: number };
   comparisons: Comparison[];
@@ -327,27 +332,18 @@ export function EELocationComparison({
     ? null
     : idx.statements.find((statement) => statement.id === statementId) ?? null;
 
+  // One index selected scores that index; "All indexes" scores every statement in
+  // a single pass. Both are person averages precomputed by the projection.
+  const scopeScore = selectedIndexes.length === 1 ? selectedIndexes[0]?.score : data.overall;
+
   const rows = useMemo(() => locations.map(d => {
     let cur: number, prev: number | null;
-    if (activeStatement) {
-      const cell = activeStatement.byLocation[d.id];
-      cur = cell.current;
-      const prior = Object.prototype.hasOwnProperty.call(cell.comparisons, compId) ? cell.comparisons[compId] : null;
-      prev = prior != null && prior > 0 ? prior : null;
-    } else {
-      const statements = selectedIndexes.flatMap((index) => index.statements);
-      const curs = statements.map((statement) => statement.byLocation[d.id].current);
-      const prevs = statements
-        .map((statement) => {
-          const prior = statement.byLocation[d.id].comparisons[compId];
-          return Object.prototype.hasOwnProperty.call(statement.byLocation[d.id].comparisons, compId) && prior > 0 ? prior : null;
-        })
-        .filter((value): value is number => value != null);
-      cur = r1(mean(curs));
-      prev = prevs.length > 0 ? r1(mean(prevs)) : null;
-    }
+    const cell = activeStatement ? activeStatement.byLocation[d.id] : scopeScore?.byGroup?.[d.id];
+    cur = typeof cell?.current === "number" ? r1(cell.current) : 0;
+    const prior = cell?.comparisons?.[compId];
+    prev = typeof prior === "number" && prior > 0 ? r1(prior) : null;
     return { id: d.id, name: d.name, value: cur, prev, delta: prev == null ? null : r1(cur - prev) };
-  }), [locations, selectedIndexes, activeStatement, compId]);
+  }), [locations, scopeScore, activeStatement, compId]);
 
   const deltaAxis = useMemo(() => {
     const fallback = data.display?.deltaAxis
@@ -357,7 +353,13 @@ export function EELocationComparison({
     return computeDeltaAxis(validRows, fallback);
   }, [data.display?.deltaAxis, rows]);
 
-  const overallAvg = r1(mean(rows.map(r => r.value)));
+  // Company average is the direct average of every respondent — never the mean of
+  // the location rows on the chart.
+  const orgCell = activeStatement ? activeStatement.org : scopeScore?.org;
+  const overallAvg = useMemo(
+    () => (typeof orgCell?.current === "number" ? r1(orgCell.current) : 0),
+    [orgCell]
+  );
 
   // Same 5-point floor/ceil rounding as the Basin Report's bar chart, sized
   // to this dataset's actual range (bars + the org-average line) rather than
@@ -374,8 +376,10 @@ export function EELocationComparison({
     return { min, max, ticks: ticks.length > 0 ? ticks : [0, 20, 40, 60, 80, 100] };
   }, [rows, overallAvg]);
 
-  const priorRows = rows.filter((row) => row.prev != null).map((row) => row.prev as number);
-  const overallPrev = priorRows.length > 0 ? r1(mean(priorRows)) : null;
+  const overallPrev = useMemo(() => {
+    const prior = orgCell?.comparisons?.[compId];
+    return typeof prior === "number" && prior > 0 ? r1(prior) : null;
+  }, [orgCell, compId]);
   const overallDelta = overallPrev == null ? null : r1(overallAvg - overallPrev);
   const rowsByValueDesc = useMemo(
     () => [...rows].sort((left, right) => right.value - left.value || left.name.localeCompare(right.name)),
@@ -538,7 +542,7 @@ export function EELocationComparison({
                     <h3 className="card-title">Current Campaign{idx ? ` · ${idx.name}` : ""}</h3>
                   </div>
                   <div className="card-body">
-                    <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} uniform showOrgLine={false} />
+                    <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} uniform showOrgLine={false} benchmarkLabel={benchmarkLabel} />
                   </div>
                 </div>
                 </RegisteredVisualExportFrame>
@@ -564,7 +568,7 @@ export function EELocationComparison({
                   <h3 className="card-title">Current Campaign</h3>
                 </div>
                 <div className="card-body">
-                  <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} showOrgLine={false} />
+                  <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} showOrgLine={false} benchmarkLabel={benchmarkLabel} />
                 </div>
               </div>
               </RegisteredVisualExportFrame>
@@ -584,6 +588,9 @@ export function EELocationComparison({
                     statements={idx.statements}
                     columns={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name }))}
                     getValue={(statementId, columnId) => idx.statements.find((s) => s.id === statementId)?.byLocation[columnId]?.current ?? null}
+                    getColumnAverage={(columnId) => idx.score?.byGroup?.[columnId]?.current ?? null}
+                    getRowAverage={(statementId) => idx.statements.find((s) => s.id === statementId)?.org?.current ?? null}
+                    grandAverage={idx.score?.org?.current ?? null}
                     scoreColor={sc}
                     columnHeader={`${idx.name} Statement`}
                   />

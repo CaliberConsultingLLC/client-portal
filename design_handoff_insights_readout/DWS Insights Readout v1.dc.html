@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="image-slot.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/modern-screenshot@4.4.39/dist/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #E8ECE9; font-family: "Montserrat", "Inter", "Segoe UI", sans-serif; }
+  a { color: #386B45; text-decoration: none; }
+  a:hover { color: #C99A3C; }
+  [contenteditable="true"] { outline: 1px dashed rgba(201,154,60,0.55); outline-offset: 3px; border-radius: 2px; }
+</style>
+</helmet>
+
+<div style="display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#E8ECE9;color:#152238">
+
+  <!-- ===== Portal top banner ===== -->
+  <header style="flex-shrink:0;background:#242424;position:relative;z-index:50">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px">
+      <div style="display:flex;align-items:center;gap:16px;min-width:0;flex:1">
+        <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+          <img src="assets/CClogo3.png" alt="Caliber Consulting LLC logo" style="width:58px;height:auto;object-fit:contain">
+          <div style="line-height:1">
+            <div style="font-size:16px;font-weight:500;letter-spacing:0.22em;color:#FFFFFF">CALIBER CONSULTING LLC</div>
+            <div style="margin-top:4px;font-size:11px;text-transform:uppercase;letter-spacing:0.34em;color:#D7B35A">People &amp; Culture Solutions</div>
+          </div>
+        </div>
+        <div style="height:32px;width:1px;background:rgba(255,255,255,0.16);flex-shrink:0"></div>
+        <nav style="display:flex;align-items:center;gap:8px;overflow-x:auto;white-space:nowrap;min-width:0">
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Home</span>
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Clients</span>
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Users</span>
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Dashboards</span>
+          <span style="border-radius:12px;border:1px solid #D7B35A;background:#D7B35A;padding:8px 14px;font-size:13px;font-weight:500;color:#242424;box-shadow:0 6px 18px rgba(0,0,0,0.18);cursor:pointer">Insights</span>
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Readouts</span>
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Workspace Map</span>
+          <span style="border-radius:12px;border:1px solid transparent;padding:8px 14px;font-size:13px;font-weight:500;color:rgba(255,255,255,0.84);cursor:pointer" style-hover="border-color:#386B45;background:#386B45;color:#FFFFFF">Census</span>
+        </nav>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <div style="text-align:right;line-height:1.25">
+          <p style="margin:0;font-size:14px;font-weight:600;color:#FFFFFF">Dustin</p>
+          <p style="margin:0;font-size:11px;font-weight:500;color:rgba(255,255,255,0.55)">Caliber Consulting</p>
+        </div>
+        <div style="height:36px;width:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.6);cursor:pointer;font-size:16px" style-hover="background:rgba(255,255,255,0.1);color:#FFFFFF" title="Sign out">⎋</div>
+      </div>
+    </div>
+    <div style="height:1.5px;background:#FFFFFF"></div>
+    <div style="height:4px;background:#242424"></div>
+  </header>
+
+  <!-- ===== Readout viewer ===== -->
+  <main style="flex:1;min-height:0;position:relative">
+
+    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+      <div style="pointer-events:none;position:absolute;left:50%;bottom:76px;z-index:40;transform:translateX(-50%);border-radius:9999px;border:1px solid #F0E2B6;background:#FFFDF5;padding:8px 16px;font-size:12px;font-weight:500;color:#5A4410;box-shadow:0 6px 18px rgba(17,17,17,0.1);max-width:80%;text-align:center">✎ Editing — click text to rewrite · drag cards by their ⋮⋮ grips · gold handles resize · A A A sets text size.</div>
+    </sc-if>
+
+    <!-- ============ CONTENT SLIDES (data-driven) ============ -->
+    <sc-for list="{{ slidesArr }}" as="sl" hint-placeholder-count="3">
+      <div data-screen-label="{{ sl.screenLabel }}" data-export="{{ sl.key }}" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:26px 44px 78px;background:#EFF2ED;overflow:hidden;visibility:{{ sl.v }};z-index:{{ sl.z }}">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+          <span style="height:10px;width:10px;border-radius:50%;flex-shrink:0;background:{{ sl.dot }}"></span>
+          <span contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ sl.onLabel }}" style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.2em;color:#6E7E96;min-width:0;overflow-wrap:break-word">{{ sl.label }}</span>
+          <span contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ sl.onPill }}" style="border-radius:9999px;padding:3px 10px;font-size:10.5px;font-weight:700;background:{{ sl.pillBg }};color:{{ sl.pillFg }}">{{ sl.pill }}</span>
+          <button type="button" onClick="{{ dlSlide }}" title="Download this slide as a PNG image" style="margin-left:auto;display:inline-flex;align-items:center;justify-content:center;height:30px;width:30px;border-radius:50%;border:1px solid #CBD4CC;background:#FFFFFF;color:#3B4B63;font-size:15px;cursor:pointer;font-family:inherit;line-height:1;visibility:{{ chromeV }}" style-hover="border-color:#C99A3C;color:#C99A3C">⤓</button>
+          <span style="font-size:11.5px;font-weight:600;color:#9AA7B4">{{ sl.counter }}</span>
+        </div>
+
+        <h2 contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ sl.onHeadline }}" style="margin:0 0 12px;font-family:'Playfair Display',Georgia,serif;font-size:31px;line-height:1.14;letter-spacing:-0.01em;color:#152238;font-weight:600;max-width:1050px;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">{{ sl.headline }}</h2>
+        <div style="flex-shrink:0;height:2px;margin-bottom:16px;background:linear-gradient(90deg,#C99A3C 0 46px,#DCE3DD 46px)"></div>
+
+        <div style="display:grid;grid-template-columns:{{ sl.grid }};flex:1;min-height:0">
+          <!-- Column A -->
+          <div onDragOver="{{ allow }}" onDrop="{{ sl.dropA }}" style="min-width:0;display:flex;flex-direction:column;min-height:0;gap:12px;overflow-y:auto;padding-bottom:2px">
+            <sc-for list="{{ sl.colA }}" as="item" hint-placeholder-count="1">
+              <div onDragOver="{{ allow }}" onDrop="{{ item.drop }}" data-card="1" style="position:relative;flex-shrink:0;display:flex;flex-direction:column;flex:{{ item.flex }};min-height:{{ item.minH }};height:{{ item.h }};border-radius:{{ item.radius }};border:1px solid {{ item.border }};background:{{ item.bg }};overflow:hidden;box-shadow:{{ item.shadow }}">
+                <sc-if value="{{ item.isVisual }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;align-items:center;gap:9px;border-bottom:1px solid #E2E8EF;background:#F1F4F7;padding:8px 18px;flex-wrap:wrap">
+                    <span contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onVSubBlur }}" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#2B2B2B;min-width:0;overflow-wrap:break-word">{{ item.vsub }}</span>
+                    <span style="font-size:12px;color:#9AA7B4">›</span>
+                    <a href="#" title="{{ item.linkTitle }}" style="display:inline-flex;align-items:center;gap:6px;border-radius:9999px;background:#242424;color:#FFFFFF;padding:4px 11px;font-size:11px;font-weight:600" style-hover="background:#386B45;color:#FFFFFF">See in dashboard <span style="font-size:11px;color:#E8CC70">↗</span></a>
+                    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                      <select value="{{ item.persp }}" onChange="{{ item.setPersp }}" title="Choose which dashboard perspective this visual links to" style="border-radius:9999px;border:1px solid #C9AF6E;background:#FFFDF5;padding:4px 8px;font-size:11px;font-weight:600;color:#5A4410;font-family:inherit;cursor:pointer;max-width:150px">
+                        <option>Employee Experience</option>
+                        <option>Collaboration</option>
+                        <option>Open Text Insights</option>
+                        <option>Workspace Map</option>
+                        <option>Census</option>
+                      </select>
+                    </sc-if>
+                    <span draggable="{{ true }}" onDragStart="{{ item.dragStart }}" title="Drag to move this card" style="margin-left:auto;font-size:13px;letter-spacing:2px;color:#9AA7B4;cursor:grab;padding:3px 6px;visibility:{{ chromeV }}">⋮⋮</span>
+                    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                      <button type="button" onClick="{{ item.remove }}" title="Remove this card" style="height:20px;width:20px;border-radius:50%;border:1px solid #D8B0A8;background:#FBF1EF;color:#A2483A;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1" style-hover="background:#A2483A;color:#FFFFFF">✕</button>
+                    </sc-if>
+                  </div>
+                  <div style="flex:1;min-height:190px;padding:12px;position:relative">
+                    <div style="position:relative;width:100%;height:100%">
+                      <image-slot id="{{ item.slotId }}" shape="rounded" radius="8" fit="contain" placeholder="Screenshot a dashboard view and drop it here"></image-slot>
+                    </div>
+                  </div>
+                  <div style="border-top:1px solid #E2E8EF;background:#FBFCFB;padding:10px 20px">
+                    <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onCapBlur }}" style="margin:0;font-size:11px;line-height:1.5;color:#6E7E96;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">{{ item.caption }}</p>
+                  </div>
+                  <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                    <div onMouseDown="{{ item.vResize }}" onDoubleClick="{{ item.vReset }}" title="Drag to set this visual's height · double-click to auto-fill" style="height:13px;display:flex;align-items:center;justify-content:center;cursor:row-resize;background:#F7F9F8;border-top:1px solid #EDF1EE" style-hover="background:rgba(201,154,60,0.12)">
+                      <div style="width:44px;height:4px;border-radius:2px;background:#C9AF6E"></div>
+                    </div>
+                  </sc-if>
+                </sc-if>
+                <sc-if value="{{ item.isText }}" hint-placeholder-val="{{ false }}">
+                  <div draggable="{{ true }}" onDragStart="{{ item.dragStart }}" title="Drag to move this card" style="display:flex;align-items:center;justify-content:center;padding:5px 0 0;cursor:grab" style-hover="background:rgba(201,154,60,0.08)">
+                    <span style="font-size:12px;letter-spacing:3px;line-height:1;color:{{ item.gripColor }};visibility:{{ chromeV }}">⋮⋮⋮</span>
+                  </div>
+                  <div style="padding:4px 18px 14px">
+                    <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onSubBlur }}" style="margin:0 0 7px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;min-width:0;overflow-wrap:break-word;white-space:pre-wrap;font-size:{{ item.subSize }};min-height:{{ item.subMinH }};color:{{ item.labelColor }}">{{ item.subtitle }}</p>
+                    <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onBodyBlur }}" style="margin:0;min-width:0;overflow-wrap:break-word;white-space:pre-wrap;font-size:{{ item.bodySize }};line-height:{{ item.bodyLH }};color:{{ item.textColor }}">{{ item.body }}</p>
+                    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:7px;margin-top:11px">
+                        <button type="button" onClick="{{ item.size0 }}" title="Small text" style="border:none;background:transparent;padding:0 2px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;line-height:1;color:{{ item.a0c }}">A</button>
+                        <button type="button" onClick="{{ item.size1 }}" title="Medium text" style="border:none;background:transparent;padding:0 2px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;line-height:1;color:{{ item.a1c }}">A</button>
+                        <button type="button" onClick="{{ item.size2 }}" title="Large text (title size)" style="border:none;background:transparent;padding:0 2px;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;line-height:1;color:{{ item.a2c }}">A</button>
+                        <span style="height:16px;width:1px;background:#D8DEE2;margin:0 2px"></span>
+                        <sc-for list="{{ item.swatches }}" as="sw" hint-placeholder-count="7">
+                          <span onClick="{{ sw.pick }}" title="Set card color" style="height:17px;width:17px;border-radius:50%;cursor:pointer;flex-shrink:0;background:{{ sw.bg }};box-shadow:{{ sw.ring }}"></span>
+                        </sc-for>
+                        <button type="button" onClick="{{ item.remove }}" title="Remove this card" style="margin-left:auto;height:22px;width:22px;border-radius:50%;border:1px solid #D8B0A8;background:#FBF1EF;color:#A2483A;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;flex-shrink:0" style-hover="background:#A2483A;color:#FFFFFF">✕</button>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <!-- Column resize handle -->
+          <div onMouseDown="{{ sl.resize }}" onDoubleClick="{{ sl.swap }}" title="Drag to resize columns · double-click to swap them" style="display:flex;align-items:center;justify-content:center;cursor:col-resize;visibility:{{ handleV }}" style-hover="background:rgba(201,154,60,0.08)">
+            <div style="width:4px;height:44px;border-radius:2px;background:#C9AF6E"></div>
+          </div>
+
+          <!-- Column B -->
+          <div onDragOver="{{ allow }}" onDrop="{{ sl.dropB }}" style="min-width:0;display:flex;flex-direction:column;min-height:0;gap:12px;overflow-y:auto;padding-bottom:2px">
+            <sc-for list="{{ sl.colB }}" as="item" hint-placeholder-count="3">
+              <div onDragOver="{{ allow }}" onDrop="{{ item.drop }}" data-card="1" style="position:relative;flex-shrink:0;display:flex;flex-direction:column;flex:{{ item.flex }};min-height:{{ item.minH }};height:{{ item.h }};border-radius:{{ item.radius }};border:1px solid {{ item.border }};background:{{ item.bg }};overflow:hidden;box-shadow:{{ item.shadow }}">
+                <sc-if value="{{ item.isVisual }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:center;gap:9px;border-bottom:1px solid #E2E8EF;background:#F1F4F7;padding:8px 18px;flex-wrap:wrap">
+                    <span contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onVSubBlur }}" style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#2B2B2B;min-width:0;overflow-wrap:break-word">{{ item.vsub }}</span>
+                    <span style="font-size:12px;color:#9AA7B4">›</span>
+                    <a href="#" title="{{ item.linkTitle }}" style="display:inline-flex;align-items:center;gap:6px;border-radius:9999px;background:#242424;color:#FFFFFF;padding:4px 11px;font-size:11px;font-weight:600" style-hover="background:#386B45;color:#FFFFFF">See in dashboard <span style="font-size:11px;color:#E8CC70">↗</span></a>
+                    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                      <select value="{{ item.persp }}" onChange="{{ item.setPersp }}" title="Choose which dashboard perspective this visual links to" style="border-radius:9999px;border:1px solid #C9AF6E;background:#FFFDF5;padding:4px 8px;font-size:11px;font-weight:600;color:#5A4410;font-family:inherit;cursor:pointer;max-width:150px">
+                        <option>Employee Experience</option>
+                        <option>Collaboration</option>
+                        <option>Open Text Insights</option>
+                        <option>Workspace Map</option>
+                        <option>Census</option>
+                      </select>
+                    </sc-if>
+                    <span draggable="{{ true }}" onDragStart="{{ item.dragStart }}" title="Drag to move this card" style="margin-left:auto;font-size:13px;letter-spacing:2px;color:#9AA7B4;cursor:grab;padding:3px 6px;visibility:{{ chromeV }}">⋮⋮</span>
+                    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                      <button type="button" onClick="{{ item.remove }}" title="Remove this card" style="height:20px;width:20px;border-radius:50%;border:1px solid #D8B0A8;background:#FBF1EF;color:#A2483A;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1" style-hover="background:#A2483A;color:#FFFFFF">✕</button>
+                    </sc-if>
+                  </div>
+                  <div style="flex:1;min-height:190px;padding:12px;position:relative">
+                    <div style="position:relative;width:100%;height:100%">
+                      <image-slot id="{{ item.slotId }}" shape="rounded" radius="8" fit="contain" placeholder="Screenshot a dashboard view and drop it here"></image-slot>
+                    </div>
+                  </div>
+                  <div style="border-top:1px solid #E2E8EF;background:#FBFCFB;padding:10px 20px">
+                    <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onCapBlur }}" style="margin:0;font-size:11px;line-height:1.5;color:#6E7E96;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">{{ item.caption }}</p>
+                  </div>
+                  <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                    <div onMouseDown="{{ item.vResize }}" onDoubleClick="{{ item.vReset }}" title="Drag to set this visual's height · double-click to auto-fill" style="height:13px;display:flex;align-items:center;justify-content:center;cursor:row-resize;background:#F7F9F8;border-top:1px solid #EDF1EE" style-hover="background:rgba(201,154,60,0.12)">
+                      <div style="width:44px;height:4px;border-radius:2px;background:#C9AF6E"></div>
+                    </div>
+                  </sc-if>
+                </sc-if>
+                <sc-if value="{{ item.isText }}" hint-placeholder-val="{{ true }}">
+                  <div draggable="{{ true }}" onDragStart="{{ item.dragStart }}" title="Drag to move this card" style="display:flex;align-items:center;justify-content:center;padding:5px 0 0;cursor:grab" style-hover="background:rgba(201,154,60,0.08)">
+                    <span style="font-size:12px;letter-spacing:3px;line-height:1;color:{{ item.gripColor }};visibility:{{ chromeV }}">⋮⋮⋮</span>
+                  </div>
+                  <div style="padding:4px 18px 14px">
+                    <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onSubBlur }}" style="margin:0 0 7px;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;min-width:0;overflow-wrap:break-word;white-space:pre-wrap;font-size:{{ item.subSize }};min-height:{{ item.subMinH }};color:{{ item.labelColor }}">{{ item.subtitle }}</p>
+                    <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ item.onBodyBlur }}" style="margin:0;min-width:0;overflow-wrap:break-word;white-space:pre-wrap;font-size:{{ item.bodySize }};line-height:{{ item.bodyLH }};color:{{ item.textColor }}">{{ item.body }}</p>
+                    <sc-if value="{{ editing }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;align-items:center;gap:7px;margin-top:11px">
+                        <button type="button" onClick="{{ item.size0 }}" title="Small text" style="border:none;background:transparent;padding:0 2px;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer;line-height:1;color:{{ item.a0c }}">A</button>
+                        <button type="button" onClick="{{ item.size1 }}" title="Medium text" style="border:none;background:transparent;padding:0 2px;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;line-height:1;color:{{ item.a1c }}">A</button>
+                        <button type="button" onClick="{{ item.size2 }}" title="Large text (title size)" style="border:none;background:transparent;padding:0 2px;font-family:inherit;font-size:17px;font-weight:800;cursor:pointer;line-height:1;color:{{ item.a2c }}">A</button>
+                        <span style="height:16px;width:1px;background:#D8DEE2;margin:0 2px"></span>
+                        <sc-for list="{{ item.swatches }}" as="sw" hint-placeholder-count="7">
+                          <span onClick="{{ sw.pick }}" title="Set card color" style="height:17px;width:17px;border-radius:50%;cursor:pointer;flex-shrink:0;background:{{ sw.bg }};box-shadow:{{ sw.ring }}"></span>
+                        </sc-for>
+                        <button type="button" onClick="{{ item.remove }}" title="Remove this card" style="margin-left:auto;height:22px;width:22px;border-radius:50%;border:1px solid #D8B0A8;background:#FBF1EF;color:#A2483A;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;flex-shrink:0" style-hover="background:#A2483A;color:#FFFFFF">✕</button>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+
+    <!-- ============ COVER (last in DOM, on top by default) ============ -->
+    <div data-screen-label="Cover" data-export="cover" style="position:absolute;inset:0;display:flex;visibility:{{ v0 }};z-index:{{ z0 }}">
+      <!-- Dark left panel -->
+      <section style="display:flex;width:min(500px,44%);min-width:320px;flex-shrink:0;flex-direction:column;justify-content:safe center;background:linear-gradient(160deg,#242424 0%,#22301f 100%);padding:56px 44px;overflow-y:auto">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;height:58px;width:58px;border-radius:12px;background:#FFFFFF;padding:6px;box-shadow:0 6px 18px rgba(0,0,0,0.3);flex-shrink:0"><img src="assets/dws-logo.png" alt="Deep Well Services" style="max-width:100%;max-height:100%;object-fit:contain"></span>
+          <div style="min-width:0">
+            <p style="margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.22em;color:rgba(255,255,255,0.45)">Prepared for</p>
+            <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:2px 0 0;font-size:15px;font-weight:700;color:#FFFFFF;min-width:0;overflow-wrap:break-word">Deep Well Services</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:30px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;height:58px;width:58px;border-radius:12px;background:#FFFFFF;padding:6px;box-shadow:0 6px 18px rgba(0,0,0,0.3);flex-shrink:0"><img src="assets/caliber-seal.png" alt="Caliber Consulting seal" style="max-width:100%;max-height:100%;object-fit:contain"></span>
+          <div style="min-width:0">
+            <p style="margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.22em;color:rgba(255,255,255,0.45)">Prepared by</p>
+            <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:2px 0 0;font-size:15px;font-weight:700;color:#FFFFFF;min-width:0;overflow-wrap:break-word">Caliber Consulting</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px">
+          <span style="height:6px;width:6px;border-radius:50%;background:#E8CC70;flex-shrink:0"></span>
+          <span contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.24em;color:rgba(232,204,112,0.8);min-width:0;overflow-wrap:break-word">Insight readout · {{ waveLabel }}</span>
+        </div>
+        <h1 contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:0 0 18px;font-family:'Playfair Display',Georgia,serif;font-size:40px;line-height:1.12;letter-spacing:-0.01em;color:#FFFFFF;font-weight:600;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">The Deep Well experience, in three short chapters.</h1>
+        <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:0 0 30px;font-size:15px;line-height:1.65;color:rgba(255,255,255,0.65);min-width:0;overflow-wrap:break-word;white-space:pre-wrap">Everything here comes straight from your live dashboard. Three slides, one story: where you're heading, what your people are flagging, and what's worth celebrating.</p>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;visibility:{{ chromeV }}">
+          <button type="button" onClick="{{ begin }}" style="display:inline-flex;align-items:center;gap:10px;border-radius:9999px;border:none;background:linear-gradient(135deg,#E8CC70,#C99A3C);padding:14px 26px;font-size:14px;font-weight:700;color:#242424;cursor:pointer;font-family:inherit;box-shadow:0 8px 24px rgba(201,154,60,0.3)" style-hover="box-shadow:0 10px 30px rgba(201,154,60,0.45)">Begin the readout <span style="font-size:15px">→</span></button>
+          <button type="button" onClick="{{ dlAll }}" title="Download the full readout — every slide as a landscape page in one file" style="display:inline-flex;align-items:center;gap:9px;border-radius:9999px;border:1px solid rgba(232,204,112,0.55);background:transparent;padding:13px 22px;font-size:13.5px;font-weight:600;color:#E8CC70;cursor:pointer;font-family:inherit" style-hover="background:rgba(232,204,112,0.12)">{{ dlAllLabel }} <span style="font-size:15px">⤓</span></button>
+        </div>
+      </section>
+
+      <!-- Light right panel: agenda -->
+      <section style="display:flex;flex:1;min-width:0;flex-direction:column;justify-content:safe center;overflow-y:auto;background:#EFF2ED;padding:48px 40px">
+        <p style="margin:0 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:#6E7E96">What's in this readout</p>
+        <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:0 0 26px;font-family:'Playfair Display',Georgia,serif;font-size:21px;line-height:1.35;color:#152238;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">The chapters on screen — plus one we'll work through together.</p>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ agendaArr }}" as="ag" hint-placeholder-count="3">
+            <div onClick="{{ ag.go }}" style="display:flex;align-items:flex-start;gap:14px;border-radius:14px;border:1px solid #DCE3DD;background:#FFFFFF;padding:15px 18px;cursor:pointer" style-hover="border-color:#C99A3C;box-shadow:0 6px 16px rgba(21,34,56,0.08)">
+              <span style="font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:600;color:#C99A3C;line-height:1.2;flex-shrink:0;min-width:34px">{{ ag.num }}</span>
+              <div style="flex:1;min-width:0">
+                <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ ag.onTitle }}" style="margin:0 0 2px;font-size:12.5px;font-weight:700;color:#152238;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">{{ ag.title }}</p>
+                <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" onBlur="{{ ag.onDesc }}" style="margin:0;font-size:12px;line-height:1.5;color:#6E7E96;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">{{ ag.desc }}</p>
+              </div>
+              <span style="align-self:center;font-size:13px;color:#9AA7B4">→</span>
+            </div>
+          </sc-for>
+          <div style="display:flex;align-items:flex-start;gap:14px;border-radius:14px;border:1px dashed #C9D2D8;background:rgba(255,255,255,0.6);padding:15px 18px">
+            <span style="font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:600;color:#9AA7B4;line-height:1.2;flex-shrink:0;min-width:34px">{{ lastNum }}</span>
+            <div style="flex:1;min-width:0">
+              <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:0 0 2px;font-size:12.5px;font-weight:700;color:#152238;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">What happens next</p>
+              <p contentEditable="{{ editable }}" suppressContentEditableWarning="{{ true }}" style="margin:0;font-size:12px;line-height:1.5;color:#6E7E96;min-width:0;overflow-wrap:break-word;white-space:pre-wrap">Priorities we'll set together — covered live in your debrief.</p>
+            </div>
+            <span style="align-self:center;border-radius:9999px;background:#E8ECE9;padding:3px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#6E7E96">Live</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ Bottom-left cluster: add + edit (all screens) ============ -->
+    <div style="position:absolute;bottom:16px;left:24px;z-index:35;display:flex;flex-direction:column;align-items:flex-start;gap:10px;visibility:{{ chromeV }}">
+      <sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:6px;border-radius:14px;border:1px solid rgba(255,255,255,0.1);background:rgba(20,28,24,0.94);padding:8px;box-shadow:0 12px 34px rgba(0,0,0,0.35)">
+          <button type="button" onClick="{{ addVisual }}" style="display:flex;align-items:center;gap:10px;border-radius:10px;border:none;background:transparent;padding:9px 14px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);cursor:pointer;font-family:inherit;text-align:left" style-hover="background:rgba(232,204,112,0.22);color:#E8CC70"><span style="font-size:15px">▣</span> Add new visual</button>
+          <button type="button" onClick="{{ addText }}" style="display:flex;align-items:center;gap:10px;border-radius:10px;border:none;background:transparent;padding:9px 14px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);cursor:pointer;font-family:inherit;text-align:left" style-hover="background:rgba(232,204,112,0.22);color:#E8CC70"><span style="font-size:15px">¶</span> Add new text</button>
+        </div>
+      </sc-if>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button type="button" onClick="{{ plusAction }}" title="{{ plusTitle }}" style="height:46px;width:46px;border-radius:50%;border:none;background:linear-gradient(135deg,#E8CC70,#C99A3C);color:#242424;font-size:22px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 8px 24px rgba(201,154,60,0.4);line-height:1" style-hover="box-shadow:0 10px 30px rgba(201,154,60,0.55)">{{ plusGlyph }}</button>
+        <button type="button" onClick="{{ toggleEdit }}" style="border-radius:9999px;border:1px solid rgba(255,255,255,0.1);background:rgba(20,28,24,0.94);padding:13px 20px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);cursor:pointer;font-family:inherit;box-shadow:0 12px 34px rgba(0,0,0,0.35)" style-hover="color:#E8CC70">{{ editLabel }}</button>
+      </div>
+    </div>
+
+    <!-- ============ Shared footer nav (content slides only) ============ -->
+    <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:30;display:flex;align-items:center;gap:8px;border-radius:9999px;border:1px solid rgba(255,255,255,0.1);background:rgba(20,28,24,0.94);padding:8px 10px;box-shadow:0 12px 34px rgba(0,0,0,0.35);visibility:{{ footerV }}">
+      <button type="button" onClick="{{ prev }}" style="display:inline-flex;align-items:center;gap:8px;border-radius:9999px;border:none;background:rgba(255,255,255,0.08);padding:10px 20px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);cursor:pointer;font-family:inherit" style-hover="background:rgba(232,204,112,0.22);color:#E8CC70">← Prev</button>
+      <button type="button" onClick="{{ go0 }}" style="display:inline-flex;align-items:center;border-radius:9999px;border:none;background:rgba(255,255,255,0.08);padding:10px 20px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.85);cursor:pointer;font-family:inherit" style-hover="background:rgba(232,204,112,0.22);color:#E8CC70">Cover</button>
+      <button type="button" onClick="{{ next }}" style="display:inline-flex;align-items:center;gap:8px;border-radius:9999px;border:none;padding:10px 20px;font-size:13px;font-weight:700;color:#242424;cursor:pointer;font-family:inherit;background:linear-gradient(135deg,#E8CC70,#C99A3C)" style-hover="box-shadow:0 4px 14px rgba(201,154,60,0.5)">Next →</button>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;waveLabel&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Wave 3 · June 2026&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Readout&quot;}}">
+class Component extends DCLogic {
+  state = {
+    slide: 0,
+    editing: false,
+    menuOpen: false,
+    exporting: false,
+    busyAll: false,
+    persp: { s1: "Employee Experience", s2: "Open Text Insights", s3: "Employee Experience" },
+    order: ["s1", "s2", "s3"],
+    slides: {
+      s1: {
+        label: "Trajectory", pill: "Steady climb", pillBg: "#E7F2EB", pillFg: "#2F9151", dot: "#2F9151",
+        headline: "Favorability keeps climbing — three waves, three gains.",
+        blurb: "Three waves of favorability, one direction.",
+        r: 0.68,
+        cols: [["v1"], ["i1", "r1", "n1"]],
+        blocks: {
+          v1: { type: "visual", slot: "slide1-visual", sub: "Favorability over time", persp: "Employee Experience", caption: "Overall favorability, last three waves — captured from the live dashboard." },
+          i1: { type: "text", color: 6, subtitle: "", body: "Overall favorability rose from 66.2 to 67.7 across the last three waves. The gain is modest but consistent — and every department band moved in the same direction." },
+          r1: { type: "text", color: 0, subtitle: "The read", body: "Slow, broad-based gains are the healthiest kind. This is culture compounding — not a one-off bump from a single team or initiative." },
+          n1: { type: "text", color: 1, subtitle: "Do this next", body: "Keep the cadence. Run the next wave on the same questions so the line stays comparable — the trend is now your most valuable asset." },
+        },
+      },
+      s2: {
+        label: "Common Concerns", pill: "Themes, not alarms", pillBg: "#E9F0F7", pillFg: "#5E7898", dot: "#5E7898",
+        headline: "Five themes carry most of the commentary — and the loudest one is shrinking.",
+        blurb: "The five themes behind most open comments.",
+        r: 0.68,
+        cols: [["v2"], ["i2", "r2", "n2"]],
+        blocks: {
+          v2: { type: "visual", slot: "slide2-visual", sub: "Theme frequency", persp: "Open Text Insights", caption: "Share of open comments mentioning each theme — captured from the live dashboard." },
+          i2: { type: "text", color: 6, subtitle: "", body: "38% of open comments touch pay clarity — mostly shop-time rates. Mentions are down four points since the last wave. Equipment readiness is the only theme trending up." },
+          r2: { type: "text", color: 0, subtitle: "The read", body: "These are operational frictions, not culture problems. People flag them because they're invested — the tone of the comments stays constructive." },
+          n2: { type: "text", color: 2, subtitle: "Do this next", body: "Close the loop publicly on shop-time pay. One clear answer to the loudest theme is the highest-leverage response this quarter." },
+        },
+      },
+      s3: {
+        label: "Spotlights", pill: "Working well", pillBg: "#E7F2EB", pillFg: "#2F9151", dot: "#2F9151",
+        headline: "Where the culture is visibly working.",
+        blurb: "Where the culture is visibly working.",
+        r: 0.32,
+        cols: [["i3", "t3a", "t3b"], ["v3"]],
+        blocks: {
+          v3: { type: "visual", slot: "spotlight-hero", sub: "Spotlight", persp: "Employee Experience", caption: "A proof point worth showing — captured from the dashboard or the field." },
+          i3: { type: "text", color: 6, subtitle: "", body: "Two spotlights worth repeating to the whole company — proof that the \"One Team, One Family\" standard shows up in daily work, not just on posters." },
+          t3a: { type: "text", color: 1, subtitle: "Training culture — field crews", body: "New hires consistently name their supervisors' teaching as the reason they stay. That's retention you don't have to buy." },
+          t3b: { type: "text", color: 1, subtitle: "Onboarding — business support", body: "Described as \"virtually seamless\" in open comments — a repeatable playbook for hiring at growth speed." },
+        },
+      },
+    },
+  };
+
+  _storageKey = "dws-readout-v1-board";
+  _drag = null;
+
+  _presets = [
+    { bg: "#FFFFFF", border: "#DCE3DD", label: "#6E7E96", text: "#3B4B63" },
+    { bg: "#F1F8F3", border: "#CDE6D5", label: "#2F9151", text: "#3B4B63" },
+    { bg: "#F0F5FA", border: "#D5E2EE", label: "#5E7898", text: "#3B4B63" },
+    { bg: "#FBF5E3", border: "#EAD9A8", label: "#8A6A1F", text: "#5A4A28" },
+    { bg: "#242424", border: "#3A3A3A", label: "#E8CC70", text: "rgba(255,255,255,0.82)" },
+    { bg: "#3B4B63", border: "#4C5F7C", label: "#AFC4DC", text: "rgba(255,255,255,0.85)" },
+    { bg: "transparent", border: "transparent", label: "#6E7E96", text: "#3B4B63" },
+  ];
+
+  _sizes = [
+    { b: "13px", lh: "1.55", s: "10px" },
+    { b: "19px", lh: "1.45", s: "12px" },
+    { b: "31px", lh: "1.25", s: "14px" },
+  ];
+
+  _roman(n) {
+    const table = [[10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+    let out = "";
+    for (const [v, sym] of table) {
+      while (n >= v) { out += sym; n -= v; }
+    }
+    return out || "I";
+  }
+
+  _loadState() {
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      const patch = {};
+      if (saved.persp && saved.persp.s1) patch.persp = saved.persp;
+      if (saved.slides && saved.slides.s1 && saved.slides.s1.cols && saved.slides.s1.blocks) {
+        const merged = {};
+        const defaults = this.state.slides;
+        for (const key of Object.keys(saved.slides)) {
+          merged[key] = { ...(defaults[key] || {}), ...saved.slides[key] };
+        }
+        patch.slides = merged;
+        patch.order = Array.isArray(saved.order) && saved.order.length
+          ? saved.order.filter((k) => merged[k])
+          : ["s1", "s2", "s3"].filter((k) => merged[k]);
+      }
+      if (Object.keys(patch).length) this.setState(patch);
+    } catch (e) { /* ignore corrupt state */ }
+  }
+
+  _persist() {
+    try {
+      const { slides, persp, order } = this.state;
+      localStorage.setItem(this._storageKey, JSON.stringify({ slides, persp, order }));
+    } catch (e) { /* ignore */ }
+  }
+
+  _patchSlide(key, patch) {
+    this.setState((st) => ({ slides: { ...st.slides, [key]: { ...st.slides[key], ...patch } } }), () => this._persist());
+  }
+
+  _makeResize(key) {
+    return (e) => {
+      if (!this.state.editing) return;
+      e.preventDefault();
+      const grid = e.currentTarget.parentElement;
+      const rect = grid.getBoundingClientRect();
+      const move = (ev) => {
+        let f = (ev.clientX - rect.left) / rect.width;
+        f = Math.max(0.25, Math.min(0.78, f));
+        this._patchSlide(key, { r: Math.round(f * 1000) / 1000 });
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    };
+  }
+
+  _makeSwap(key) {
+    return () => {
+      if (!this.state.editing) return;
+      const sl = this.state.slides[key];
+      this._patchSlide(key, { cols: [sl.cols[1], sl.cols[0]], r: Math.round((1 - sl.r) * 1000) / 1000 });
+    };
+  }
+
+  _dropOn(key, targetId, colIdx) {
+    const d = this._drag;
+    this._drag = null;
+    if (!d || d.key !== key) return;
+    if (targetId === d.id) return;
+    this.setState((st) => {
+      const sl = st.slides[key];
+      const cols = [sl.cols[0].filter((x) => x !== d.id), sl.cols[1].filter((x) => x !== d.id)];
+      if (targetId) {
+        const ci = cols[0].includes(targetId) ? 0 : 1;
+        const idx = cols[ci].indexOf(targetId);
+        cols[ci].splice(idx, 0, d.id);
+      } else {
+        cols[colIdx].push(d.id);
+      }
+      return { slides: { ...st.slides, [key]: { ...sl, cols } } };
+    }, () => this._persist());
+  }
+
+  _updateBlock(key, id, patch) {
+    this.setState((st) => {
+      const sl = st.slides[key];
+      return { slides: { ...st.slides, [key]: { ...sl, blocks: { ...sl.blocks, [id]: { ...sl.blocks[id], ...patch } } } } };
+    }, () => this._persist());
+  }
+
+  _removeBlock(key, id) {
+    this.setState((st) => {
+      const sl = st.slides[key];
+      const blocks = { ...sl.blocks };
+      delete blocks[id];
+      return { slides: { ...st.slides, [key]: { ...sl, blocks, cols: [sl.cols[0].filter((x) => x !== id), sl.cols[1].filter((x) => x !== id)] } } };
+    }, () => this._persist());
+  }
+
+  _addBlock(type) {
+    const key = this.state.order[this.state.slide - 1];
+    if (!key || !this.state.slides[key]) return;
+    const id = "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const block = type === "visual"
+      ? { type: "visual", slot: "slot-" + id, sub: "New visual", persp: "Employee Experience", caption: "Describe what this visual shows." }
+      : { type: "text", color: 1, subtitle: "New text", body: "Click Edit narrative, then click here to write this text." };
+    this.setState((st) => {
+      const sl = st.slides[key];
+      const ci = sl.cols[0].length <= sl.cols[1].length ? 0 : 1;
+      const cols = ci === 0 ? [[...sl.cols[0], id], sl.cols[1]] : [sl.cols[0], [...sl.cols[1], id]];
+      return { slides: { ...st.slides, [key]: { ...sl, cols, blocks: { ...sl.blocks, [id]: block } } }, menuOpen: false };
+    }, () => this._persist());
+  }
+
+  _addSlide() {
+    const key = "sl" + Date.now().toString(36);
+    const vId = "v-" + key;
+    const iId = "i-" + key;
+    const meta = {
+      label: "New chapter", pill: "Draft", pillBg: "#FBF5E3", pillFg: "#8A6A1F", dot: "#C99A3C",
+      headline: "Click Edit narrative to write this headline.",
+      blurb: "Describe this chapter in one line.",
+      r: 0.68,
+      cols: [[vId], [iId]],
+      blocks: {
+        [vId]: { type: "visual", slot: "slot-" + vId, sub: "New visual", persp: "Employee Experience", caption: "Describe what this visual shows." },
+        [iId]: { type: "text", color: 6, subtitle: "", body: "Click Edit narrative, then click here to write this text." },
+      },
+    };
+    this.setState((st) => ({
+      slides: { ...st.slides, [key]: meta },
+      order: [...st.order, key],
+      slide: st.order.length + 1,
+      menuOpen: false,
+    }), () => this._persist());
+  }
+
+  _buildCol(key, colIdx) {
+    const sl = this.state.slides[key];
+    const editing = this.state.editing;
+    return sl.cols[colIdx].map((id) => {
+      const b = sl.blocks[id];
+      if (!b) return null;
+      const isVisual = b.type === "visual";
+      const p = this._presets[b.color] || this._presets[0];
+      const szi = b.size || 0;
+      const sz = this._sizes[szi] || this._sizes[0];
+      return {
+        id,
+        isVisual,
+        isText: !isVisual,
+        persp: b.persp || this.state.persp[key] || "Employee Experience",
+        vsub: b.sub || ({ v1: "Favorability over time", v2: "Theme frequency", v3: "Spotlight" }[id] || "New visual"),
+        linkTitle: "Opens " + (b.persp || this.state.persp[key] || "this view") + " in the dashboard",
+        h: isVisual && b.h ? b.h + "px" : "auto",
+        slotId: b.slot || "slot-" + id,
+        caption: b.caption || "",
+        subtitle: b.subtitle || "",
+        body: b.body || "",
+        subMinH: editing ? "12px" : "0",
+        bodySize: sz.b, bodyLH: sz.lh, subSize: sz.s,
+        size0: () => this._updateBlock(key, id, { size: 0 }),
+        size1: () => this._updateBlock(key, id, { size: 1 }),
+        size2: () => this._updateBlock(key, id, { size: 2 }),
+        a0c: szi === 0 ? "#C99A3C" : "#9AA7B4",
+        a1c: szi === 1 ? "#C99A3C" : "#9AA7B4",
+        a2c: szi === 2 ? "#C99A3C" : "#9AA7B4",
+        flex: isVisual ? (b.h ? "0 0 auto" : "1 1 240px") : "0 0 auto",
+        minH: isVisual ? (b.h ? "0" : "260px") : "0",
+        radius: isVisual ? "16px" : "14px",
+        border: isVisual ? "#8798AA" : p.border,
+        bg: isVisual ? "#FFFFFF" : p.bg,
+        shadow: isVisual ? "7px 9px 20px rgba(15,23,42,0.07),2px 3px 6px rgba(15,23,42,0.04)" : "none",
+        gripColor: isVisual ? "#9AA7B4" : (b.color === 6 ? "#B9C2CE" : p.label),
+        labelColor: p.label,
+        textColor: p.text,
+        dragStart: (e) => {
+          this._drag = { key, id };
+          e.dataTransfer.effectAllowed = "move";
+          try {
+            e.dataTransfer.setData("text/plain", id);
+            const card = e.currentTarget.closest ? e.currentTarget.closest("[data-card]") : null;
+            if (card) e.dataTransfer.setDragImage(card, 30, 14);
+          } catch (err) { /* ok */ }
+        },
+        drop: (e) => { e.preventDefault(); e.stopPropagation(); this._dropOn(key, id, null); },
+        remove: () => this._removeBlock(key, id),
+        onCapBlur: (e) => this._updateBlock(key, id, { caption: e.currentTarget.innerText }),
+        onSubBlur: (e) => this._updateBlock(key, id, { subtitle: e.currentTarget.innerText }),
+        onBodyBlur: (e) => this._updateBlock(key, id, { body: e.currentTarget.innerText }),
+        onVSubBlur: (e) => this._updateBlock(key, id, { sub: e.currentTarget.innerText }),
+        setPersp: (e) => this._updateBlock(key, id, { persp: e.currentTarget.value }),
+        vResize: (e) => this._startVResize(e, key, id),
+        vReset: () => { if (this.state.editing) this._updateBlock(key, id, { h: null }); },
+        swatches: this._presets.slice(0, 7).map((sp, i) => ({
+          bg: i === 6 ? "linear-gradient(135deg,#FFFFFF 42%,#C9D2D8 42% 58%,#FFFFFF 58%)" : sp.bg,
+          ring: i === (b.color || 0) ? "0 0 0 2.5px #C99A3C" : "inset 0 0 0 1px rgba(0,0,0,0.18)",
+          pick: () => this._updateBlock(key, id, { color: i }),
+        })),
+      };
+    }).filter(Boolean);
+  }
+
+  _startVResize(e, key, id) {
+    if (!this.state.editing) return;
+    e.preventDefault();
+    let card = e.currentTarget;
+    while (card && !(card.getAttribute && card.getAttribute("data-card"))) card = card.parentElement;
+    if (!card) return;
+    const top = card.getBoundingClientRect().top;
+    const move = (ev) => {
+      let h = Math.round(ev.clientY - top);
+      h = Math.max(220, Math.min(1400, h));
+      this._updateBlock(key, id, { h });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
+
+  _wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  async _captureEl(el) {
+    const ms = window.modernScreenshot;
+    if (!ms || !ms.domToCanvas) throw new Error("capture library not loaded");
+    return ms.domToCanvas(el, { scale: 2 });
+  }
+
+  async _downloadSlide() {
+    if (this.state.exporting) return;
+    const n = this.state.slide;
+    const key = this.state.order[n - 1];
+    if (!key) return;
+    this.setState({ editing: false, menuOpen: false, exporting: true });
+    await this._wait(200);
+    try {
+      const el = document.querySelector('[data-export="' + key + '"]');
+      const canvas = await this._captureEl(el);
+      const a = document.createElement("a");
+      a.download = "DWS Insights - Slide " + n + ".png";
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    } catch (err) {
+      console.warn("Slide export failed:", err);
+    }
+    this.setState({ exporting: false });
+  }
+
+  async _downloadAll() {
+    if (this.state.busyAll) return;
+    this.setState({ busyAll: true, editing: false, menuOpen: false, exporting: true });
+    await this._wait(100);
+    try {
+      const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+      if (!jsPDFCtor) throw new Error("pdf library not loaded");
+      const keys = ["cover"].concat(this.state.order);
+      let pdf = null;
+      for (let i = 0; i < keys.length; i++) {
+        this.setState({ slide: i });
+        await this._wait(450);
+        const el = document.querySelector('[data-export="' + keys[i] + '"]');
+        const canvas = await this._captureEl(el);
+        const w = Math.round(canvas.width / 2);
+        const h = Math.round(canvas.height / 2);
+        if (!pdf) pdf = new jsPDFCtor({ orientation: "landscape", unit: "px", format: [w, h], hotfixes: ["px_scaling"] });
+        else pdf.addPage([w, h], "landscape");
+        pdf.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, w, h);
+      }
+      pdf.save("DWS Insights Readout.pdf");
+    } catch (err) {
+      console.warn("Readout export failed:", err);
+    }
+    this.setState({ busyAll: false, exporting: false, slide: 0 });
+  }
+
+  componentDidMount() {
+    this._loadState();
+    this._onKey = (e) => {
+      if (this.state.editing) return;
+      const tag = (document.activeElement && document.activeElement.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const max = this.state.order.length;
+      if (e.key === "ArrowRight") this.setState((s) => ({ slide: Math.min(max, s.slide + 1) }));
+      if (e.key === "ArrowLeft") this.setState((s) => ({ slide: Math.max(0, s.slide - 1) }));
+    };
+    window.addEventListener("keydown", this._onKey);
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener("keydown", this._onKey);
+  }
+
+  renderVals() {
+    const s = this.state.slide;
+    const editing = this.state.editing;
+    const order = this.state.order;
+    const onCover = s === 0;
+    const go = (i) => () => this.setState({ slide: i, menuOpen: false });
+    const waveLabel = this.props.waveLabel ?? "Wave 3 · June 2026";
+
+    const slidesArr = order.map((key, idx) => {
+      const sl = this.state.slides[key];
+      const i = idx + 1;
+      return {
+        key,
+        v: s === i ? "visible" : "hidden",
+        z: s === i ? 5 : 1,
+        screenLabel: "Slide " + i + " - " + sl.label,
+        dot: sl.dot || "#2F9151",
+        label: sl.label || "Chapter",
+        pill: sl.pill || "—",
+        pillBg: sl.pillBg || "#E7F2EB",
+        pillFg: sl.pillFg || "#2F9151",
+        headline: sl.headline || "",
+        counter: "Slide " + i + " of " + order.length,
+        grid: (() => { const a = Math.round(sl.r * 1000) / 1000; const b = Math.round((1 - sl.r) * 1000) / 1000; return a + "fr 26px " + b + "fr"; })(),
+        colA: this._buildCol(key, 0),
+        colB: this._buildCol(key, 1),
+        dropA: (e) => { e.preventDefault(); this._dropOn(key, null, 0); },
+        dropB: (e) => { e.preventDefault(); this._dropOn(key, null, 1); },
+        resize: this._makeResize(key),
+        swap: this._makeSwap(key),
+        onLabel: (e) => this._patchSlide(key, { label: e.currentTarget.innerText }),
+        onPill: (e) => this._patchSlide(key, { pill: e.currentTarget.innerText }),
+        onHeadline: (e) => this._patchSlide(key, { headline: e.currentTarget.innerText }),
+      };
+    });
+
+    const agendaArr = order.map((key, idx) => {
+      const sl = this.state.slides[key];
+      return {
+        num: this._roman(idx + 1),
+        title: sl.label || "Chapter",
+        desc: sl.blurb || "",
+        go: () => { if (!this.state.editing) this.setState({ slide: idx + 1, menuOpen: false }); },
+        onTitle: (e) => this._patchSlide(key, { label: e.currentTarget.innerText }),
+        onDesc: (e) => this._patchSlide(key, { blurb: e.currentTarget.innerText }),
+      };
+    });
+
+    return {
+      waveLabel,
+      editing,
+      editable: editing,
+      editLabel: editing ? "Done editing" : "Edit narrative",
+      toggleEdit: () => this.setState((st) => ({ editing: !st.editing, menuOpen: false })),
+      v0: onCover ? "visible" : "hidden",
+      z0: onCover ? 5 : 1,
+      footerV: onCover ? "hidden" : "visible",
+      handleV: editing ? "visible" : "hidden",
+      chromeV: this.state.exporting ? "hidden" : "visible",
+      allow: (e) => { e.preventDefault(); },
+      slidesArr,
+      agendaArr,
+      lastNum: this._roman(order.length + 1),
+      dlSlide: () => this._downloadSlide(),
+      dlAll: () => this._downloadAll(),
+      dlAllLabel: this.state.busyAll ? "Preparing file…" : "Download all",
+      menuOpen: this.state.menuOpen && !onCover,
+      plusAction: onCover ? () => this._addSlide() : () => this.setState((st) => ({ menuOpen: !st.menuOpen })),
+      plusTitle: onCover ? "Add a new slide to the readout" : "Add an object to this slide",
+      plusGlyph: !onCover && this.state.menuOpen ? "×" : "+",
+      addVisual: () => this._addBlock("visual"),
+      addText: () => this._addBlock("text"),
+      begin: go(1),
+      go0: go(0),
+      prev: () => this.setState((st) => ({ slide: Math.max(0, st.slide - 1), menuOpen: false })),
+      next: () => this.setState((st) => ({ slide: st.slide >= st.order.length ? 0 : st.slide + 1, menuOpen: false })),
+    };
+  }
+}
+</script>
+</body>
+</html>

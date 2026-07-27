@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { Check, ChevronDown, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,39 +22,19 @@ export function ViewAsToggle({
   viewingAsUserUid,
   users,
 }: ViewAsToggleProps) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const busy = saving;
 
-  const busy = saving || isPending;
   const activeUser = users.find((item) => item.uid === viewingAsUserUid) ?? null;
-
-  async function apply(enabled: boolean, uid?: string) {
+  function navigateViewAs(uid?: string) {
     setOpen(false);
-    setError(null);
     setSaving(true);
-    try {
-      const response = await fetch("/api/portal/view-as", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, uid }),
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to switch user view");
-      }
-      // Role is resolved server-side, so refresh and land on Home to reflect it.
-      startTransition(() => {
-        router.replace("/portal");
-        router.refresh();
-      });
-    } catch {
-      setError("Unable to update user view.");
-    } finally {
-      setSaving(false);
-    }
+    const ts = Date.now();
+    const target = uid
+      ? `/api/portal/view-as?uid=${encodeURIComponent(uid)}&next=${encodeURIComponent("/portal")}&ts=${ts}`
+      : `/api/portal/view-as?next=${encodeURIComponent("/portal")}&ts=${ts}`;
+    window.location.assign(target);
   }
 
   const label = isViewingAsUser
@@ -102,7 +81,7 @@ export function ViewAsToggle({
                   <button
                     key={item.uid}
                     type="button"
-                    onClick={() => apply(true, item.uid)}
+                    onClick={() => navigateViewAs(item.uid)}
                     className="flex w-full items-center justify-between gap-2 px-4 py-2 text-left text-sm text-white/84 hover:bg-[#386B45] hover:text-white"
                   >
                     <span className="min-w-0">
@@ -118,7 +97,7 @@ export function ViewAsToggle({
               <div className="mt-1 border-t border-white/10 pt-1">
                 <button
                   type="button"
-                  onClick={() => apply(false)}
+                  onClick={() => navigateViewAs()}
                   className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm font-semibold text-[#E8CC70] hover:bg-[#386B45] hover:text-white"
                 >
                   <EyeOff className="h-4 w-4" />
@@ -128,11 +107,6 @@ export function ViewAsToggle({
             ) : null}
           </div>
         </>
-      ) : null}
-      {error ? (
-        <p className="absolute right-0 mt-2 whitespace-nowrap rounded-lg bg-[#8A3D3A] px-3 py-1.5 text-xs font-semibold text-white shadow-lg">
-          {error}
-        </p>
       ) : null}
     </div>
   );

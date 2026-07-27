@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
 import { toHistoricalData } from "./ee-demo-fixture";
 import {
   ClientMark,
@@ -85,19 +86,19 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
   return path;
 }
 
+// Picks the smallest "round" tick step that keeps the axis to ~5 intervals, so a
+// tight score window still lands on readable gridlines.
+function niceTickStep(range: number) {
+  return [0.5, 1, 2, 2.5, 5, 10, 20].find((step) => range / step <= 5) ?? 25;
+}
+
 function HistoryChart({
   campaigns,
   values,
-  orgValues,
-  backdropSeries = [],
-  yDomain,
   compact = false,
 }: {
   campaigns: any[];
   values: number[];
-  orgValues?: number[] | null;
-  backdropSeries?: Array<{ id: string; values: number[] }>;
-  yDomain?: { min: number; max: number };
   compact?: boolean;
 }) {
   const width = compact ? 640 : 940;
@@ -105,28 +106,25 @@ function HistoryChart({
   const pad = { left: 36, right: compact ? 42 : 74, top: 18, bottom: 36 };
   const months = campaigns.map((campaign) => campaign.month);
   const maxMonth = Math.max(...months);
-  const domain = [
-    ...values,
-    ...(orgValues ?? []),
-    ...backdropSeries.flatMap((series) => series.values),
-  ];
+  // The axis frames only what is actually plotted, so real movement fills the
+  // chart instead of flattening against a wide fixed window.
+  const domain = values;
   const domainMin = Math.min(...domain);
   const domainMax = Math.max(...domain);
-  const domainPad = Math.max(1.5, (domainMax - domainMin) * 0.25);
-  const min = yDomain?.min ?? Math.floor(domainMin - domainPad);
-  const max = yDomain?.max ?? Math.ceil(domainMax + domainPad);
+  const domainPad = Math.max(0.5, (domainMax - domainMin) * 0.2);
+  const step = niceTickStep(domainMax - domainMin + domainPad * 2);
+  const min = Math.floor((domainMin - domainPad) / step) * step;
+  const max = Math.ceil((domainMax + domainPad) / step) * step;
+  const tickDecimals = step < 1 ? 1 : 0;
   const xFor = (month) => pad.left + (month / maxMonth) * (width - pad.left - pad.right);
   const yFor = (value) => pad.top + (1 - (value - min) / (max - min)) * (height - pad.top - pad.bottom);
   const points = campaigns.map((campaign, index) => ({ x: xFor(campaign.month), y: yFor(values[index]), value: values[index] }));
   const line = buildSmoothPath(points);
   const area = `${buildSmoothPath(points)} L${points.at(-1).x},${height - pad.bottom} L${points[0].x},${height - pad.bottom} Z`;
-  const orgPoints = orgValues?.map((value, index) => ({ x: xFor(campaigns[index].month), y: yFor(value), value }));
-  const orgLine = orgPoints ? buildSmoothPath(orgPoints) : "";
-  const backdropPaths = backdropSeries.map((series) => {
-    const pts = series.values.map((value, index) => ({ x: xFor(campaigns[index].month), y: yFor(value) }));
-    return { id: series.id, path: buildSmoothPath(pts) };
-  });
-  const yTicks = Array.from({ length: 5 }, (_, index) => min + ((max - min) * index) / 4);
+  const yTicks = Array.from(
+    { length: Math.round((max - min) / step) + 1 },
+    (_, index) => min + index * step
+  );
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full" role="img">
@@ -135,7 +133,7 @@ function HistoryChart({
         return (
           <g key={tick}>
             <line x1={pad.left} x2={width - pad.right} y1={y} y2={y} stroke="#D3DDE7" strokeDasharray="4 6" strokeWidth="1" opacity=".8" />
-            <text x={pad.left - 10} y={y + 4} textAnchor="end" fill="#6E7E96" fontSize="10" fontWeight="700">{tick.toFixed(0)}</text>
+            <text x={pad.left - 10} y={y + 4} textAnchor="end" fill="#6E7E96" fontSize="10" fontWeight="700">{tick.toFixed(tickDecimals)}</text>
           </g>
         );
       })}
@@ -143,23 +141,6 @@ function HistoryChart({
         <line key={campaigns[index].id} x1={point.x} x2={point.x} y1={pad.top} y2={height - pad.bottom} stroke="#E2E8EF" strokeDasharray="3 8" strokeWidth="1" />
       ))}
       <path d={area} fill="rgba(129,153,180,.22)" />
-      {backdropPaths.map((path, index) => (
-        <path
-          key={path.id}
-          d={path.path}
-          fill="none"
-          stroke={["#A5B4C7", "#B3BFCE", "#BFC9D6", "#CDD4DE", "#D6DCE4"][index % 5]}
-          strokeWidth="1.4"
-          opacity=".75"
-        />
-      ))}
-      {orgLine ? <path d={orgLine} fill="none" stroke="#1C252A" strokeDasharray="6 5" strokeWidth="1.5" opacity=".7" /> : null}
-      {orgPoints?.length && !compact ? (
-        <g>
-          <rect x={orgPoints.at(-1).x + 10} y={orgPoints.at(-1).y - 12} width="72" height="20" rx="10" fill="#FFFFFF" stroke="#8798AA" />
-          <text x={orgPoints.at(-1).x + 46} y={orgPoints.at(-1).y + 2} textAnchor="middle" fill="#1C252A" fontSize="10" fontWeight="800">Org avg</text>
-        </g>
-      ) : null}
       <path d={line} fill="none" stroke="#3F5F86" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
       {points.map((point, index) => (
         <g key={campaigns[index].id}>
@@ -178,15 +159,20 @@ export function EEHistoricalReport({
   embedded = false,
   variant = "history",
   currentCampaignLabel,
+  comparisonCampaignLabel,
   selectedIndexId,
   chromeless = false,
   headerPortalId,
   basinReportSurface = false,
+  filterPersistenceKey,
 }: {
   data: any;
   embedded?: boolean;
   variant?: "history" | "overview";
   currentCampaignLabel?: string;
+  /** Label of the campaign selected in Compared To. When set, Delta Last uses
+   * this campaign instead of the chronologically previous one. */
+  comparisonCampaignLabel?: string;
   selectedIndexId?: string;
   chromeless?: boolean;
   headerPortalId?: string;
@@ -195,8 +181,9 @@ export function EEHistoricalReport({
    * labels — see the matching prop on `EELocationComparison`. Every other
    * caller leaves this unset and keeps the hard-edged default look. */
   basinReportSurface?: boolean;
+  filterPersistenceKey?: string;
 }) {
-  const { client, scale, departments, campaigns, indexes } = data;
+  const { client, scale, departments, campaigns, indexes, orgResponsesByCampaign, overallSeries } = data;
   const exportRegistry = useVisualExportRegistry();
   const registryActive = useVisualRegistryActive();
   const registryOn = registryActive && Boolean(exportRegistry);
@@ -204,97 +191,85 @@ export function EEHistoricalReport({
   // trend and all delta (Delta Last / Delta All) signifiers are suppressed.
   const hasComparison = campaigns.length > 1;
   const scoreColor = makeGradientColor(scale.min, scale.max);
-  const [deptId, setDeptId] = useState(ALL);
-  const [focus, setFocus] = useState(selectedIndexId ?? ALL);
+  const [deptId, setDeptId] = usePersistedDashboardFilter(filterPersistenceKey, "deptId", ALL);
+  const [focus, setFocus] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "focus",
+    () => selectedIndexId ?? ALL
+  );
   const isAll = deptId === ALL;
   const dept = departments.find((item) => item.id === deptId) ?? departments[0];
   const first = campaigns[0];
   const last = campaigns[campaigns.length - 1];
-  const allStatements = useMemo(() => indexes.flatMap((index) => index.statements), [indexes]);
   const focusIndex = focus === ALL ? null : indexes.find((index) => index.id === focus);
-  const scopeStatements = focusIndex ? focusIndex.statements : allStatements;
   const totalResponsesByCampaign = useMemo(
     () =>
       Object.fromEntries(
         campaigns.map((campaign) => [
           campaign.id,
-          departments.reduce(
-            (sum, item) => sum + Number(item.responsesByCampaign?.[campaign.id] ?? item.responses ?? 0),
-            0
-          ),
+          typeof orgResponsesByCampaign?.[campaign.id] === "number"
+            ? orgResponsesByCampaign[campaign.id]
+            : departments.reduce(
+                (sum, item) => sum + Number(item.responsesByCampaign?.[campaign.id] ?? item.responses ?? 0),
+                0
+              ),
         ])
       ) as Record<string, number>,
-    [campaigns, departments]
+    [campaigns, departments, orgResponsesByCampaign]
   );
 
+  // A statement cell is already the direct average of the people it covers, so a
+  // statement row just reads the right population's cell — org or department.
   const orgStatementValue = (statement, campaignId) => {
-    let num = 0;
-    let den = 0;
-    departments.forEach((item) => {
-      const responses = Number(item.responsesByCampaign?.[campaignId] ?? item.responses ?? 0);
-      if (responses <= 0) return;
-      const score = statement.byDept[item.id]?.[campaignId];
-      if (score == null) return;
-      num += score * responses;
-      den += responses;
-    });
-    return den > 0 ? num / den : null;
+    const value = statement.byOrg?.[campaignId];
+    return typeof value === "number" ? round1(value) : null;
   };
   const statementValue = (statement, campaignId) => {
     if (isAll) return orgStatementValue(statement, campaignId);
     const v = statement.byDept[deptId]?.[campaignId];
     return v != null ? round1(v) : null;
   };
-  const avgAt = (statements, campaignId) => {
-    const vals = statements.map((s) => statementValue(s, campaignId)).filter((v) => v != null) as number[];
-    return vals.length > 0 ? round1(mean(vals)) : 0;
+  // Index and overall scores come from the projection's person-average series.
+  // They are never rebuilt here by averaging statement or department cells.
+  const scoreAt = (scoreSeries, campaignId) => {
+    const value = isAll ? scoreSeries?.byOrg?.[campaignId] : scoreSeries?.byDept?.[deptId]?.[campaignId];
+    return typeof value === "number" ? round1(value) : 0;
   };
-  const orgAvgAt = (statements, campaignId) => {
-    const vals = statements.map((s) => orgStatementValue(s, campaignId)).filter((v) => v != null) as number[];
-    return vals.length > 0 ? round1(mean(vals)) : 0;
-  };
-
-  const allIndexBackdropSeries = useMemo(
-    () =>
-      indexes.slice(0, 5).map((index) => ({
-        id: index.id,
-        values: campaigns.map((campaign) => avgAt(index.statements, campaign.id)),
-      })),
-    [campaigns, indexes]
-  );
-  const overallSeries = useMemo(
-    () => campaigns.map((campaign) => avgAt(allStatements, campaign.id)),
-    [allStatements, campaigns]
+  const overallValues = useMemo(
+    () => campaigns.map((campaign) => scoreAt(overallSeries, campaign.id)),
+    [campaigns, overallSeries, deptId, isAll]
   );
   const series = focusIndex
-    ? campaigns.map((campaign) => avgAt(focusIndex.statements, campaign.id))
-    : overallSeries;
-  const backdropSeries = useMemo(() => {
-    return allIndexBackdropSeries
-      .filter((indexSeries) => !focusIndex || indexSeries.id !== focusIndex.id)
-      .map((indexSeries) => ({
-        id: indexSeries.id,
-        values: indexSeries.values,
-      }));
-  }, [allIndexBackdropSeries, focusIndex]);
-  const fixedYDomain = useMemo(() => {
-    const stableValues = [...overallSeries, ...allIndexBackdropSeries.flatMap((seriesItem) => seriesItem.values)];
-    const stableMin = Math.min(...stableValues);
-    const stableMax = Math.max(...stableValues);
-    const pad = Math.max(1.5, (stableMax - stableMin) * 0.25);
-    return { min: Math.floor(stableMin - pad), max: Math.ceil(stableMax + pad) };
-  }, [allIndexBackdropSeries, overallSeries]);
-  const orgSeries = isAll ? null : campaigns.map((campaign) => orgAvgAt(scopeStatements, campaign.id));
+    ? campaigns.map((campaign) => scoreAt(focusIndex.series, campaign.id))
+    : overallValues;
   const activeCampaignIndex = Math.max(
     0,
     currentCampaignLabel
-      ? campaigns.findIndex((campaign) => campaign.label === currentCampaignLabel)
+      ? campaigns.findIndex(
+          (campaign) =>
+            campaign.label === currentCampaignLabel ||
+            campaign.label?.toLowerCase() === currentCampaignLabel.toLowerCase()
+        )
       : campaigns.length - 1
   );
   const activeCampaign = campaigns[activeCampaignIndex] ?? last;
-  const previousCampaign = activeCampaignIndex > 0 ? campaigns[activeCampaignIndex - 1] : null;
+  // Prefer the rail's Compared To selection; fall back to chronological prior.
+  const previousCampaignIndex = (() => {
+    if (comparisonCampaignLabel) {
+      const matched = campaigns.findIndex(
+        (campaign) =>
+          campaign.label === comparisonCampaignLabel ||
+          campaign.label?.toLowerCase() === comparisonCampaignLabel.toLowerCase()
+      );
+      if (matched >= 0 && matched !== activeCampaignIndex) return matched;
+      return -1;
+    }
+    return activeCampaignIndex > 0 ? activeCampaignIndex - 1 : -1;
+  })();
+  const previousCampaign = previousCampaignIndex >= 0 ? campaigns[previousCampaignIndex] : null;
   const currentScore = series[activeCampaignIndex] ?? series.at(-1);
-  const deltaLast = previousCampaign ? round1(currentScore - series[activeCampaignIndex - 1]) : null;
+  const deltaLast =
+    previousCampaignIndex >= 0 ? round1(currentScore - series[previousCampaignIndex]) : null;
   const deltaAll = round1(currentScore - series[0]);
   const peakIndex = series.reduce((best, value, index) => value > series[best] ? index : best, 0);
   const scopeLabel = focusIndex ? `${focusIndex.name} index` : "Overall (all indexes)";
@@ -317,8 +292,8 @@ export function EEHistoricalReport({
   const indexSnapshots = useMemo(
     () =>
       indexes.map((index) => {
-        const current = avgAt(index.statements, activeCampaign.id);
-        const previous = previousCampaign ? avgAt(index.statements, previousCampaign.id) : null;
+        const current = scoreAt(index.series, activeCampaign.id);
+        const previous = previousCampaign ? scoreAt(index.series, previousCampaign.id) : null;
         return {
           id: index.id,
           name: index.name,
@@ -335,6 +310,9 @@ export function EEHistoricalReport({
     const sortedByCurrent = [...indexSnapshots].sort((left, right) => right.current - left.current);
     const strongest = sortedByCurrent[0];
     const watch = sortedByCurrent[sortedByCurrent.length - 1];
+    if (!strongest || !watch) {
+      return "Organization snapshot: campaign results are available, but index-level trend detail is still loading.";
+    }
     const spread = round1(strongest.current - watch.current);
     const deltas = indexSnapshots
       .map((index) => index.delta)
@@ -379,26 +357,19 @@ export function EEHistoricalReport({
       const cleaned = String(value || "").trim().toLowerCase();
       return BRAND_ALIASES[cleaned] ?? value;
     };
-    const scoreForStatement = (statement, departmentId, campaignId) => {
-      const value = statement.byDept?.[departmentId]?.[campaignId];
+    const locationKey = (brand: string) =>
+      String(brand || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+    const brandStatementScore = (statement, brandName, campaignId) => {
+      const value = statement.byLocation?.[locationKey(brandName)]?.[campaignId];
       return typeof value === "number" ? value : null;
     };
-    const weightedIndexScore = (index, deptItems, campaignId) => {
-      const statementScores = index.statements
-        .map((statement) => {
-          let num = 0;
-          let den = 0;
-          deptItems.forEach((department) => {
-            const value = scoreForStatement(statement, department.id, campaignId);
-            const weight = Number(department.responsesByCampaign?.[campaignId] ?? department.responses ?? 0);
-            if (value == null || weight <= 0) return;
-            num += value * weight;
-            den += weight;
-          });
-          return den > 0 ? num / den : null;
-        })
-        .filter((value): value is number => value != null);
-      return statementScores.length > 0 ? round1(mean(statementScores)) : null;
+    const indexScore = (index, brandName, campaignId) => {
+      const value = index.series?.byLocation?.[locationKey(brandName)]?.[campaignId];
+      return typeof value === "number" ? round1(value) : null;
     };
 
     const grouped = new Map<string, any[]>();
@@ -415,44 +386,27 @@ export function EEHistoricalReport({
     ];
 
     return orderedBrands.map((brand) => {
+      try {
       const deptItems = grouped.get(brand) ?? [];
 
       const statementSignals = indexes
         .flatMap((index) =>
           index.statements.map((statement) => {
+            const currentAverage = brandStatementScore(statement, brand, activeCampaign.id);
+            if (currentAverage == null) return null;
+
+            const previousAverage = previousCampaign
+              ? brandStatementScore(statement, brand, previousCampaign.id)
+              : null;
+
             const deptScores = deptItems
               .map((department) => {
                 const score = statement.byDept?.[department.id]?.[activeCampaign.id];
-                const weight = Number(department.responsesByCampaign?.[activeCampaign.id] ?? department.responses ?? 0);
-                return typeof score === "number" && weight > 0
-                  ? { department: department.name, score, weight }
+                return typeof score === "number"
+                  ? { department: department.name, score }
                   : null;
               })
-              .filter((entry): entry is { department: string; score: number; weight: number } => entry != null);
-            if (deptScores.length === 0) return null;
-
-            const currentWeighted =
-              deptScores.reduce((sum, entry) => sum + entry.score * entry.weight, 0) /
-              deptScores.reduce((sum, entry) => sum + entry.weight, 0);
-
-            const previousScores =
-              previousCampaign
-                ? deptItems
-                    .map((department) => {
-                      const score = statement.byDept?.[department.id]?.[previousCampaign.id];
-                      const weight = Number(department.responsesByCampaign?.[previousCampaign.id] ?? 0);
-                      return typeof score === "number" && weight > 0
-                        ? { score, weight }
-                        : null;
-                    })
-                    .filter((entry): entry is { score: number; weight: number } => entry != null)
-                : [];
-
-            const previousWeighted =
-              previousScores.length > 0
-                ? previousScores.reduce((sum, entry) => sum + entry.score * entry.weight, 0) /
-                  previousScores.reduce((sum, entry) => sum + entry.weight, 0)
-                : null;
+              .filter((entry): entry is { department: string; score: number } => entry != null);
 
             const sortedDeptScores = [...deptScores].sort((left, right) => left.score - right.score);
             const lowestDept = sortedDeptScores[0];
@@ -461,10 +415,13 @@ export function EEHistoricalReport({
             return {
               indexName: index.name,
               statement: statement.text,
-              current: round1(currentWeighted),
-              delta: previousWeighted == null ? null : round1(currentWeighted - previousWeighted),
-              spread: round1(highestDept.score - lowestDept.score),
-              lowestDept: lowestDept.department,
+              current: round1(currentAverage),
+              delta: previousAverage == null ? null : round1(currentAverage - previousAverage),
+              spread:
+                lowestDept && highestDept
+                  ? round1(highestDept.score - lowestDept.score)
+                  : 0,
+              lowestDept: lowestDept?.department ?? "",
             };
           })
         )
@@ -482,7 +439,7 @@ export function EEHistoricalReport({
         );
 
       const lowestStatements = [...statementSignals].sort((left, right) => left.current - right.current).slice(0, 3);
-      const weakest = lowestStatements[0];
+      const weakest = lowestStatements[0] ?? null;
       const keyAnomaly =
         [...statementSignals].sort((left, right) => right.spread - left.spread)[0] ?? weakest;
       const decliningWatch =
@@ -492,7 +449,7 @@ export function EEHistoricalReport({
       const indexSnapshotsForBrand = indexes
         .map((index) => ({
           name: index.name,
-          score: weightedIndexScore(index, deptItems, activeCampaign.id),
+          score: indexScore(index, brand, activeCampaign.id),
         }))
         .filter((entry): entry is { name: string; score: number } => entry.score != null)
         .sort((left, right) => right.score - left.score);
@@ -508,15 +465,27 @@ export function EEHistoricalReport({
         0
       );
 
-      const actionSentence = decliningWatch
-        ? `Start with "${shortStatement(decliningWatch.statement)}" first, where momentum is reversing (${f1(decliningWatch.delta ?? 0)}), then tighten leader follow-through in ${keyAnomaly.lowestDept} to stabilize delivery.`
-        : `Prioritize one focused action plan around "${shortStatement(weakest?.statement ?? "")}" and require weekly leader follow-through in ${keyAnomaly.lowestDept} until consistency improves.`;
+      // Agentic summaries must degrade, never crash: if a signal piece is
+      // missing (no department spread, no weak statement, etc.), omit that
+      // clause instead of reading undefined properties.
+      const followThroughDept = keyAnomaly?.lowestDept?.trim() || null;
+      const actionSentence = !weakest
+        ? null
+        : decliningWatch
+          ? followThroughDept
+            ? `Start with "${shortStatement(decliningWatch.statement)}" first, where momentum is reversing (${f1(decliningWatch.delta ?? 0)}), then tighten leader follow-through in ${followThroughDept} to stabilize delivery.`
+            : `Start with "${shortStatement(decliningWatch.statement)}" first, where momentum is reversing (${f1(decliningWatch.delta ?? 0)}).`
+          : followThroughDept
+            ? `Prioritize one focused action plan around "${shortStatement(weakest.statement)}" and require weekly leader follow-through in ${followThroughDept} until consistency improves.`
+            : `Prioritize one focused action plan around "${shortStatement(weakest.statement)}" until consistency improves.`;
       const contextSentence =
         topIndex && bottomIndex && indexSpread != null
           ? `${brand} is not failing broadly, but execution is uneven: ${topIndex.name} outperforms ${bottomIndex.name} by ${indexSpread.toFixed(1)} points.`
           : `${brand} shows mixed performance, with clear pockets where execution is not translating into a consistent employee experience.`;
       const signalSentence = weakest
-        ? `The clearest friction is "${shortStatement(weakest.statement)}" at ${weakest.current.toFixed(1)}, and the widest internal gap appears in "${shortStatement(keyAnomaly.statement)}" (${keyAnomaly.spread.toFixed(1)}-point spread).`
+        ? keyAnomaly
+          ? `The clearest friction is "${shortStatement(weakest.statement)}" at ${weakest.current.toFixed(1)}, and the widest internal gap appears in "${shortStatement(keyAnomaly.statement)}" (${keyAnomaly.spread.toFixed(1)}-point spread).`
+          : `The clearest friction is "${shortStatement(weakest.statement)}" at ${weakest.current.toFixed(1)}.`
         : `${brand} has limited signal in the current cut, so directional interpretation should remain provisional until response depth improves.`;
       const closingSentence =
         responseCountForBrand >= 30
@@ -524,12 +493,20 @@ export function EEHistoricalReport({
           : `Response volume is still light (${responseCountForBrand}), so validate direction next cycle while acting on the current weak spot.`;
       const text = !weakest
         ? signalSentence
-        : `${contextSentence} ${signalSentence} ${actionSentence} ${closingSentence}`;
+        : [contextSentence, signalSentence, actionSentence, closingSentence].filter(Boolean).join(" ");
       return {
         id: brand,
         name: brand,
         insight: clampWords(text, 100),
       };
+      } catch (error) {
+        console.error(`Failed to build agentic brand insight for ${brand}`, error);
+        return {
+          id: brand,
+          name: brand,
+          insight: `${brand} insight is unavailable for this campaign cut. Dashboard data remains intact — skip this summary and use the tables and charts below.`,
+        };
+      }
     });
   }, [departments, indexes, activeCampaign.id, previousCampaign?.id, currentScore, first.label]);
 
@@ -635,9 +612,9 @@ export function EEHistoricalReport({
                       </thead>
                       <tbody>
                         {indexes.map((index) => {
-                          const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
+                          const indexValues = campaigns.map((campaign) => scoreAt(index.series, campaign.id));
                           const indexLast = indexValues[activeCampaignIndex] ?? indexValues.at(-1);
-                          const indexDeltaLast = previousCampaign ? round1(indexLast - indexValues[activeCampaignIndex - 1]) : null;
+                          const indexDeltaLast = previousCampaignIndex >= 0 ? round1(indexLast - indexValues[previousCampaignIndex]) : null;
                           const indexColor = scoreColor(indexLast);
                           return (
                             <tr key={index.id} className="stmt-row">
@@ -657,7 +634,7 @@ export function EEHistoricalReport({
               <RegisteredVisualExportFrame order={20} label="Download chart" filename={exportFile("score-over-time")}>
               <div className="card">
                 <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} yDomain={fixedYDomain} compact /></div>
+                <div className="card-body"><HistoryChart campaigns={campaigns} values={series} compact /></div>
               </div>
               </RegisteredVisualExportFrame>
               ) : null}
@@ -666,7 +643,7 @@ export function EEHistoricalReport({
             <RegisteredVisualExportFrame order={10} label="Download chart" filename={exportFile("score-over-time")}>
             <div className="card" style={{ marginBottom: basinReportSurface ? 36 : 18 }}>
               <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} orgValues={orgSeries} backdropSeries={backdropSeries} yDomain={fixedYDomain} /></div>
+              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} /></div>
             </div>
             </RegisteredVisualExportFrame>
           ) : null}
@@ -698,9 +675,9 @@ export function EEHistoricalReport({
               <tbody>
                 {indexes.map((index) => {
                   const open = focus === index.id;
-                  const indexValues = campaigns.map((campaign) => avgAt(index.statements, campaign.id));
+                  const indexValues = campaigns.map((campaign) => scoreAt(index.series, campaign.id));
                   const indexLast = indexValues[activeCampaignIndex] ?? indexValues.at(-1);
-                  const indexDeltaLast = previousCampaign ? round1(indexLast - indexValues[activeCampaignIndex - 1]) : null;
+                  const indexDeltaLast = previousCampaignIndex >= 0 ? round1(indexLast - indexValues[previousCampaignIndex]) : null;
                   const indexDeltaAll = round1(indexLast - indexValues[0]);
                   return (
                     <>
@@ -722,7 +699,7 @@ export function EEHistoricalReport({
                       {open && index.statements.map((statement) => {
                         const values = campaigns.map((campaign) => statementValue(statement, campaign.id));
                         const statementLast = values[activeCampaignIndex] ?? values.at(-1);
-                        const prevVal = previousCampaign ? (values[activeCampaignIndex - 1] ?? null) : null;
+                        const prevVal = previousCampaignIndex >= 0 ? (values[previousCampaignIndex] ?? null) : null;
                         const statementDeltaLast = statementLast != null && prevVal != null ? round1(statementLast - prevVal) : null;
                         const statementDeltaAll = statementLast != null && values[0] != null ? round1(statementLast - values[0]) : null;
                         if (variant === "overview") {
@@ -746,7 +723,7 @@ export function EEHistoricalReport({
 
       {!embedded ? (
         <aside className="rail right">
-          <EEContextRail scale={scale} howToRead={hasComparison ? "Use the table and trend to compare score movement over time. Delta Last compares the latest survey to the prior survey; Delta All compares the first survey to the latest survey." : "Statement-level favorability for the current survey."} />
+          <EEContextRail scale={scale} howToRead={hasComparison ? "Use the table and trend to compare score movement over time. Delta Last compares the selected Current campaign to the Compared To campaign; Delta All compares the first survey to the selected Current campaign." : "Statement-level favorability for the current survey."} />
         </aside>
       ) : null}
     </div>

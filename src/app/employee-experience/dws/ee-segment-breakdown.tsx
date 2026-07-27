@@ -16,11 +16,13 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
 import {
   EEReportStyles,
   BasinSurfaceStyles,
   SectionWithVerticalLabel,
   EmbeddedFilterCard,
+  FilterStack,
   PillOptionRow,
   IndexRailTabs,
   isLightBand,
@@ -86,9 +88,23 @@ function SegmentFunnel({
   const min = Math.min(...ranked.map((row) => row.score));
   const max = Math.max(...ranked.map((row) => row.score));
 
+  // Density tiers: with many segments (e.g. every Department inside a Division)
+  // the default 42px rows make the funnel scroll off the page. Rows compress in
+  // steps as the count grows — bar height, gap, padding and type all shrink —
+  // while staying readable (the label + number stay legible at the tightest
+  // tier). Widest tier keeps the original spacious look for small sets.
+  const count = ranked.length;
+  const tier = count > 16 ? 3 : count > 11 ? 2 : count > 7 ? 1 : 0;
+  const rowGap = [14, 10, 7, 5][tier];
+  const rowMinHeight = [42, 34, 28, 24][tier];
+  const rowPad = ["12px 18px", "9px 16px", "7px 14px", "5px 12px"][tier];
+  const labelFont = [10, 10, 9.5, 9][tier];
+  const scoreFont = [14.5, 13.5, 12.5, 11.5][tier];
+  const bodyPadV = [30, 24, 20, 16][tier];
+
   return (
     <div className="card" style={{ position: "relative", flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "visible" }}>
-      <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14, padding: "30px 26px" }}>
+      <div className="card-body" style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: rowGap, padding: `${bodyPadV}px 26px` }}>
         {ranked.map((row) => {
           const t = max === min ? 1 : (row.score - min) / (max - min);
           const width = 46 + t * 52;
@@ -104,11 +120,11 @@ function SegmentFunnel({
                 alignItems: "center",
                 justifyContent: "space-between",
                 gap: 12,
-                padding: "12px 18px",
+                padding: rowPad,
                 borderRadius: 10,
                 background: bg,
                 color: ink,
-                minHeight: 42,
+                minHeight: rowMinHeight,
                 outline: "1px solid rgba(0,0,0,0.18)",
                 boxShadow: "0 2px 4px rgba(15,23,42,.14)",
               }}
@@ -116,19 +132,21 @@ function SegmentFunnel({
               <span style={{ display: "flex", alignItems: "baseline", gap: 7, minWidth: 0 }}>
                 <span
                   style={{
-                    fontSize: 10,
+                    fontSize: labelFont,
                     fontWeight: 700,
                     letterSpacing: ".14em",
                     textTransform: "uppercase",
                     whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                     color: "#1C252A",
                   }}
                 >
                   {row.label}
                 </span>
-                <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.6, color: "#1C252A" }}>n={row.n}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, opacity: 0.6, color: "#1C252A", flexShrink: 0 }}>n={row.n}</span>
               </span>
-              <span style={{ fontSize: 14.5, fontWeight: 800, flexShrink: 0 }}>{row.score.toFixed(1)}</span>
+              <span style={{ fontSize: scoreFont, fontWeight: 800, flexShrink: 0 }}>{row.score.toFixed(1)}</span>
             </div>
           );
         })}
@@ -181,12 +199,26 @@ function SegmentHeatmap({
   scoreColor: (value: number) => string;
   accent: string;
 }) {
-  // Every data column (segments + Overall) shares one capped width, sized off
-  // the longest label with room to wrap/hyphenate onto two lines — not
-  // stretched to fill the leftover table width. The statement column absorbs
-  // whatever space that frees up.
+  // With many columns (e.g. every Department in a Division) horizontal headers
+  // force wide columns and a scrollbar. Past a threshold the headers rotate to
+  // vertical text so columns can be narrow, the table fits without scrolling,
+  // and the header band grows to fit the tallest rotated label.
   const longestLabel = Math.max("Overall".length, ...segments.map((segment) => segment.label.length));
-  const dataColPx = Math.min(92, Math.max(64, longestLabel * 6.5 + 20));
+  const manyColumns = segments.length > 6;
+  // A touch more width per column than before (was 40) so vertical headers and
+  // chips aren't squished when a Division has many Departments.
+  const dataColPx = manyColumns
+    ? 48
+    : Math.min(92, Math.max(64, longestLabel * 6.5 + 20));
+  // Cap the statement (first) column. In a fixed-layout table it was the only
+  // column without an explicit width, so it absorbed all leftover space and
+  // blew the first column out huge next to the narrow data columns. Give it a
+  // bounded width so the extra room flows to the data columns instead.
+  const statementColPx = manyColumns ? 220 : 300;
+  // Sized for the longest label wrapped to ~2 vertical lines (rather than one
+  // very tall single line), which keeps the header band shorter and the
+  // columns compact. ~6.2px/char over two lines, with a floor/ceiling.
+  const verticalHeaderHeight = Math.min(150, Math.max(88, Math.ceil(longestLabel / 2) * 6.2 + 34));
 
   const headerWrapStyle: CSSProperties = {
     textAlign: "center",
@@ -198,6 +230,43 @@ function SegmentHeatmap({
     lineHeight: 1.2,
     padding: "12px 6px",
   };
+
+  const verticalHeaderCellStyle: CSSProperties = {
+    height: verticalHeaderHeight,
+    padding: "10px 0 12px",
+    verticalAlign: "bottom",
+    textAlign: "center",
+  };
+
+  // A rotated label: vertical text reading bottom→top, centered in a narrow
+  // column. Used only when `manyColumns` is true. `whiteSpace:normal` +
+  // `overflowWrap` lets multi-word labels (e.g. "Customer Service",
+  // "Production Control") wrap to a second vertical line inside the capped
+  // header height instead of forcing a very tall single line. Soft-hyphenated
+  // long single words can break too. Font is a hair smaller than before (11).
+  const VerticalLabel = ({ text, ink = "#3B4B63" }: { text: string; ink?: string }) => (
+    <div style={{ height: verticalHeaderHeight - 20, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <span
+        style={{
+          writingMode: "vertical-rl",
+          transform: "rotate(180deg)",
+          whiteSpace: "normal",
+          overflowWrap: "break-word",
+          wordBreak: "break-word",
+          height: "100%",
+          maxWidth: dataColPx - 6,
+          textAlign: "center",
+          fontWeight: 700,
+          fontSize: 10,
+          letterSpacing: "0.01em",
+          color: ink,
+          lineHeight: 1.12,
+        }}
+      >
+        {hyphenateLabel(text)}
+      </span>
+    </div>
+  );
 
   // Cells stay on a plain white grid; only a rounded chip behind the number
   // carries the score color, sized as a share of the (now capped) column
@@ -218,7 +287,7 @@ function SegmentHeatmap({
             borderRadius: 9,
             background: bg,
             color: textFor(bg),
-            fontSize: 13,
+            fontSize: manyColumns ? 12 : 13,
             fontWeight: 800,
           }}
         >
@@ -232,7 +301,7 @@ function SegmentHeatmap({
     <div className="stmt-wrap" style={{ marginTop: 14, borderTop: `3px solid ${accent}` }}>
       <table className="stmt-table" style={{ tableLayout: "fixed" }}>
         <colgroup>
-          <col />
+          <col style={{ width: statementColPx }} />
           {segments.map((segment) => (
             <col key={segment.key} style={{ width: dataColPx }} />
           ))}
@@ -240,13 +309,25 @@ function SegmentHeatmap({
         </colgroup>
         <thead>
           <tr>
-            <th style={{ textAlign: "left" }}>{indexName} statements</th>
-            {segments.map((segment) => (
-              <th key={segment.key} style={{ ...headerWrapStyle, borderLeft: "1px solid var(--border-subtle)" }}>
-                {hyphenateLabel(segment.label)}
+            <th style={{ textAlign: "left", verticalAlign: "bottom" }}>{indexName} statements</th>
+            {segments.map((segment) =>
+              manyColumns ? (
+                <th key={segment.key} style={{ ...verticalHeaderCellStyle, borderLeft: "1px solid var(--border-subtle)" }}>
+                  <VerticalLabel text={segment.label} />
+                </th>
+              ) : (
+                <th key={segment.key} style={{ ...headerWrapStyle, borderLeft: "1px solid var(--border-subtle)" }}>
+                  {hyphenateLabel(segment.label)}
+                </th>
+              )
+            )}
+            {manyColumns ? (
+              <th className="col-group-start" style={verticalHeaderCellStyle}>
+                <VerticalLabel text="Overall" ink="#152238" />
               </th>
-            ))}
-            <th className="col-group-start" style={{ ...headerWrapStyle, color: "#152238" }}>Overall</th>
+            ) : (
+              <th className="col-group-start" style={{ ...headerWrapStyle, color: "#152238" }}>Overall</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -369,14 +450,21 @@ function SegmentDimensionSection({
 export function EESegmentBreakdown({
   data,
   unitLabel = "Basin",
+  campaignValue,
+  campaignOptions,
+  onCampaignChange,
   filtersPortalId,
   titleSuffixPortalId,
   headerPortalId,
   chromeless = true,
   basinReportSurface = false,
+  filterPersistenceKey,
 }: {
   data: SegmentBreakdownProjection[];
   unitLabel?: string;
+  campaignValue?: string;
+  campaignOptions?: string[];
+  onCampaignChange?: (campaign: string) => void;
   filtersPortalId?: string;
   titleSuffixPortalId?: string;
   headerPortalId?: string;
@@ -385,24 +473,67 @@ export function EESegmentBreakdown({
    * borders/shadows, and vertical section labels used across the whole
    * Basin group (Basin Report / Basin Breakdown / Basin Comparison). */
   basinReportSurface?: boolean;
+  /** Cookie key so unit/dimension filters restore when revisiting this report. */
+  filterPersistenceKey?: string;
 }) {
   const exportRegistry = useVisualExportRegistry();
   const registryActive = useVisualRegistryActive();
   const registryOn = registryActive && Boolean(exportRegistry);
 
-  // The basin/location list is identical across every dimension projection
-  // (it never depends on the segment field), so one shared picker and one
-  // shared `deptId` drive all stacked sections below.
-  const departments = data[0]?.departments ?? [];
+  // Rule of two everywhere: never list a filter option the user can't open.
+  // - Unit picker: only units with ≥2 segments for the active dimension.
+  // - Dimension switcher: only dimensions with ≥2 segments for the selected unit.
+  const allUnits = data[0]?.departments ?? [];
 
-  const [deptId, setDeptId] = useState(departments[0]?.id ?? "");
+  const [activeDimension, setActiveDimension] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "activeDimension",
+    () => data[0]?.segmentLabel ?? ""
+  );
+  const [deptId, setDeptId] = usePersistedDashboardFilter(
+    filterPersistenceKey,
+    "deptId",
+    () => allUnits[0]?.id ?? ""
+  );
+
+  const unitsForActiveDimension = useMemo(() => {
+    const projection =
+      data.find((item) => item.segmentLabel === activeDimension) ?? data[0] ?? null;
+    if (!projection) return [];
+    return allUnits.filter((unit) => (projection.byUnit[unit.id]?.segments.length ?? 0) >= 2);
+  }, [data, allUnits, activeDimension]);
+
   useEffect(() => {
-    if (!departments.find((item) => item.id === deptId)) {
-      setDeptId(departments[0]?.id ?? "");
+    if (!unitsForActiveDimension.find((item) => item.id === deptId)) {
+      setDeptId(unitsForActiveDimension[0]?.id ?? "");
     }
-  }, [departments, deptId]);
+  }, [unitsForActiveDimension, deptId]);
 
-  const dept = departments.find((item) => item.id === deptId) ?? departments[0];
+  const dept =
+    unitsForActiveDimension.find((item) => item.id === deptId) ?? unitsForActiveDimension[0];
+
+  const visibleSections = useMemo(() => {
+    if (!dept) {
+      // Before a unit is resolved, keep dimensions that work for any unit so
+      // the first paint can still pick a valid starting dimension.
+      return data.filter((projection) =>
+        allUnits.some((unit) => (projection.byUnit[unit.id]?.segments.length ?? 0) >= 2)
+      );
+    }
+    return data.filter((projection) => (projection.byUnit[dept.id]?.segments.length ?? 0) >= 2);
+  }, [data, allUnits, dept]);
+
+  useEffect(() => {
+    if (!visibleSections.find((projection) => projection.segmentLabel === activeDimension)) {
+      setActiveDimension(visibleSections[0]?.segmentLabel ?? "");
+    }
+  }, [visibleSections, activeDimension]);
+
+  const activeProjection =
+    visibleSections.find((projection) => projection.segmentLabel === activeDimension) ??
+    visibleSections[0];
+
+  const departments = unitsForActiveDimension;
 
   const [filtersPortalNode, setFiltersPortalNode] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -431,26 +562,6 @@ export function EESegmentBreakdown({
     setHeaderPortalNode(document.getElementById(headerPortalId));
   }, [chromeless, headerPortalId]);
 
-  // A dimension only earns a section once the currently selected basin has
-  // at least two usable segments for it (e.g. Role can be sparse in some
-  // datasets) — otherwise the funnel/heatmap would be a broken single bar.
-  const visibleSections = dept
-    ? data.filter((projection) => (projection.byUnit[dept.id]?.segments.length ?? 0) >= 2)
-    : [];
-
-  // Only one dimension renders at a time — a full stack of Job
-  // Category/Department/Role/Tenure ate up too much of the page for
-  // something people only look at one of at a time.
-  const [activeDimension, setActiveDimension] = useState(visibleSections[0]?.segmentLabel ?? "");
-  useEffect(() => {
-    if (!visibleSections.find((projection) => projection.segmentLabel === activeDimension)) {
-      setActiveDimension(visibleSections[0]?.segmentLabel ?? "");
-    }
-  }, [visibleSections, activeDimension]);
-
-  const activeProjection =
-    visibleSections.find((projection) => projection.segmentLabel === activeDimension) ?? visibleSections[0];
-
   if (!departments.length || !dept || !visibleSections.length || !activeProjection) {
     return (
       <div className="canvas" style={chromeless ? { display: "block", background: "#fff" } : undefined}>
@@ -466,17 +577,30 @@ export function EESegmentBreakdown({
   // section on the page to one unit — so it lives in the Filters tab like
   // every other report's filter, not in the header.
   const railControls = (
-    <EmbeddedFilterCard title={unitLabel}>
-      <PillOptionRow
-        value={deptId}
-        onChange={setDeptId}
-        options={departments.map((item) => ({ id: item.id, label: item.name }))}
-      />
-      <p className="rs-hint" style={{ margin: "9px 2px 0" }}>
-        {dept.location ? `${dept.location} · ` : ""}
-        {dept.responses} responses
-      </p>
-    </EmbeddedFilterCard>
+    <FilterStack>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {campaignValue && campaignOptions && campaignOptions.length > 1 && onCampaignChange ? (
+          <EmbeddedFilterCard title="Campaign Selection">
+            <PillOptionRow
+              value={campaignValue}
+              onChange={onCampaignChange}
+              options={[...campaignOptions].reverse().map((campaign) => ({ id: campaign, label: campaign }))}
+            />
+          </EmbeddedFilterCard>
+        ) : null}
+        <EmbeddedFilterCard title={unitLabel}>
+          <PillOptionRow
+            value={deptId}
+            onChange={setDeptId}
+            options={departments.map((item) => ({ id: item.id, label: item.name }))}
+          />
+          <p className="rs-hint" style={{ margin: "9px 2px 0" }}>
+            {dept.location ? `${dept.location} · ` : ""}
+            {dept.responses} responses
+          </p>
+        </EmbeddedFilterCard>
+      </div>
+    </FilterStack>
   );
 
   // The dimension switcher is NOT a filter — it swaps in a different version

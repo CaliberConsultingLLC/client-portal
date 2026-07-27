@@ -63,15 +63,12 @@ export async function buildCampaignOverviewFavBarsChart(input: {
   const projection = projectCampaignResultsData(data, { campaignLabel });
   const comparison = projection.comparisons[0] ?? null;
 
+  // Index values and the overall average are the projection's person averages —
+  // never a mean of statement scores or a mean of the index values.
   const items = projection.indexes.map((index) => {
-    const statementScores = index.statements.map((statement) => statement.current);
-    const current = round1(mean(statementScores));
-    const priorScores = comparison
-      ? index.statements
-          .map((statement) => statement.comparisons[comparison.id])
-          .filter((value): value is number => typeof value === "number")
-      : [];
-    const delta = priorScores.length > 0 ? round1(current - round1(mean(priorScores))) : undefined;
+    const current = round1(index.score?.current ?? 0);
+    const prior = comparison ? index.score?.comparisons?.[comparison.id] : null;
+    const delta = typeof prior === "number" ? round1(current - round1(prior)) : undefined;
 
     return {
       label: index.name,
@@ -80,7 +77,7 @@ export async function buildCampaignOverviewFavBarsChart(input: {
     };
   });
 
-  const avg = items.length > 0 ? round1(mean(items.map((item) => item.value))) : 0;
+  const avg = round1(projection.overallScore?.current ?? 0);
   const values = items.map((item) => item.value);
   const min = values.length > 0 ? Math.floor(Math.min(...values) - 4) : 56;
   const max = values.length > 0 ? Math.ceil(Math.max(...values) + 4) : 80;

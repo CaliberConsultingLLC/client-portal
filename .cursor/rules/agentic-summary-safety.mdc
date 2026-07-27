@@ -1,0 +1,12 @@
+# Agentic Summary Safety
+
+- Agentic/generated narrative copy (org insights, brand insights, readout
+  summaries, priority sentences) must **never** take down a dashboard.
+- If a signal field is missing (`lowestDept`, spread, delta, statement, etc.),
+  omit that clause or fall back to a safe sentence. Do not dereference
+  undefined objects.
+- Prefer optional chaining and explicit null checks before interpolating
+  agentic fields into strings.
+- Isolate agentic generation per section/brand when practical so one bad
+  summary cannot crash the whole page.
+- Dashboards must still render tables/charts when narrative generation fails.

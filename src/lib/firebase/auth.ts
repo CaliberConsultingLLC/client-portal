@@ -19,6 +19,8 @@ export interface FirebaseAppUser {
   role: string;
   clientIds: string[];
   isActive: boolean;
+  /** When true, the signed-in user must set a new password before continuing. */
+  mustChangePassword: boolean;
   /** Present only while a super admin is previewing as a client; holds their real role. */
   actualRole?: string;
   /** The clientId being previewed, when in "view as client" mode. */
@@ -62,6 +64,7 @@ async function mapFirebaseUser(decodedToken: { uid: string; email?: string | nul
       userData.employeeExperienceAccess
     ),
     isActive: userData.isActive,
+    mustChangePassword: Boolean(userData.mustChangePassword),
   } satisfies FirebaseAppUser;
 }
 
@@ -82,7 +85,7 @@ export async function getOptionalFirebaseUser(): Promise<FirebaseAppUser | null>
     }
 
     const viewAsUserUid = cookieStore.get(PORTAL_VIEW_AS_COOKIE_NAME)?.value;
-    if (viewAsUserUid && user.role === "super_admin") {
+    if (viewAsUserUid && isInternalFirebaseRole(user.role)) {
       const previewUserDoc = await getFirebaseUserDoc(viewAsUserUid);
       if (!previewUserDoc || !previewUserDoc.isActive) {
         return user;
@@ -97,6 +100,8 @@ export async function getOptionalFirebaseUser(): Promise<FirebaseAppUser | null>
           previewUserDoc.employeeExperienceAccess
         ),
         isActive: previewUserDoc.isActive,
+        // Preview mode should never force the admin through a password reset.
+        mustChangePassword: false,
         actualRole: user.role,
         viewingAsClientId: null,
         viewingAsUserUid: previewUserDoc.uid,

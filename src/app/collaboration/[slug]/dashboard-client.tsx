@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
+import { buildDashboardFilterStoreKey } from "@/lib/portal/dashboard-filter-cookie";
+import { useSearchParams } from "next/navigation";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { ScoreTable } from "@/components/collaboration/score-table";
@@ -16,6 +19,16 @@ import { buildDashboardExportFilename } from "@/lib/dashboard/export-visual";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
 import { ReportSummaryHeader } from "@/components/collaboration/demo-report-tabs";
+import {
+  DashboardDesignShell,
+  type DashboardShellView,
+  EmbeddedFilterCard,
+} from "@/components/dashboard/design-shell";
+import {
+  CollabHeaderPortalContext,
+  COLLAB_HEADER_KPI_SLOT,
+} from "@/components/collaboration/report-header-portal";
+import { scoreScaleLegendGradient } from "@/components/collaboration/score-color-scale";
 
 import type { CollaborationData } from "@/types/collaboration";
 
@@ -35,6 +48,8 @@ interface DashboardProps {
   data: CollaborationData;
   campaignName: string;
   organizationName: string;
+  /** Client logo shown in the design-shell left rail. */
+  logoUrl?: string;
   tabRowAction?: ReactNode;
   tabRowActionModeId?: string;
   floatingPanel?: ReactNode;
@@ -54,11 +69,28 @@ interface DashboardProps {
   leftRailOverride?: ReactNode;
   /** When provided, replaces the built-in right rail. Pass null to remove it. */
   rightRailOverride?: ReactNode;
+  /**
+   * Filter controls slotted into the right rail beneath the report navigation
+   * (design-shell mode). Callers pass their active filters here.
+   */
+  rightRailFilters?: ReactNode;
+  /** Guidance/context slotted at the bottom of the right rail (design-shell mode). */
+  rightRailGuidance?: ReactNode;
+  /**
+   * Appended after the report title in the shell header as " — {suffix}".
+   * Used to surface the active department on department-scoped reports.
+   */
+  reportTitleSuffix?: string;
+  /**
+   * Design shell: tinted canvas, slim ribbon, and report navigation + filters
+   * relocated to the right rail. Defaults on for all collaboration surfaces.
+   */
+  designShell?: boolean;
   /** Hide the redundant per-tab title row above the canvas content. */
   hideTitleRow?: boolean;
   /** Hide the category/perspective selectors in the top ribbon (moved to a rail). */
   hideRibbonNav?: boolean;
-  /** Background of the center canvas column. Defaults to solid white. */
+  /** Background of the center canvas column. Defaults to solid white (tinted under design shell). */
   centerBackgroundClassName?: string;
   /** Controlled active perspective (tab) id. */
   activeTabId?: string;
@@ -80,6 +112,7 @@ export function CollaborationDashboardClient({
   data,
   campaignName,
   organizationName,
+  logoUrl,
   tabRowAction,
   tabRowActionModeId,
   floatingPanel,
@@ -89,6 +122,10 @@ export function CollaborationDashboardClient({
   tabOrder,
   leftRailOverride,
   rightRailOverride,
+  rightRailFilters,
+  rightRailGuidance,
+  reportTitleSuffix,
+  designShell = true,
   hideTitleRow = false,
   hideRibbonNav = false,
   centerBackgroundClassName,
@@ -109,9 +146,40 @@ export function CollaborationDashboardClient({
     onActiveModeChange?.(id);
     if (activeModeId === undefined) setInternalActiveMode(id);
   };
-  const [selectedDept, setSelectedDept] = useState(
-    data.departmentDetails[0]?.department ?? data.meta.departments[0] ?? ""
+  const filterStoreKey = buildDashboardFilterStoreKey([
+    "collab",
+    organizationName,
+    campaignName,
+  ]);
+  const [selectedDept, setSelectedDept] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "selectedDept",
+    () => data.departmentDetails[0]?.department ?? data.meta.departments[0] ?? ""
   );
+  const searchParams = useSearchParams();
+  const deepLinkAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || activeTabId !== undefined || !searchParams) return;
+    const perspectiveParam = searchParams.get("perspective");
+    const departmentParam = searchParams.get("department");
+    if (!perspectiveParam && !departmentParam) {
+      deepLinkAppliedRef.current = true;
+      return;
+    }
+
+    if (perspectiveParam) {
+      const mode = modeSections?.find((section) => section.tabIds.includes(perspectiveParam));
+      if (mode) setActiveMode(mode.id);
+      setActiveTab(perspectiveParam);
+    }
+    if (departmentParam) {
+      const departments = data.meta.departments ?? [];
+      if (departments.includes(departmentParam)) setSelectedDept(departmentParam);
+    }
+    deepLinkAppliedRef.current = true;
+  }, [activeTabId, data.meta.departments, modeSections, searchParams]);
+
   const [departmentFiltersOpen, setDepartmentFiltersOpen] = useState(false);
   const overrideMap = new Map(tabOverrides.map((tab) => [tab.id, tab]));
   const defaultTabs: DashboardTab[] = [
@@ -161,51 +229,49 @@ export function CollaborationDashboardClient({
     visibleTabs.find((tab) => tab.id === resolvedActiveTabId)?.content ?? null;
   const toolbarActionVisible =
     tabRowAction && (!tabRowActionModeId || activeModeSection?.id === tabRowActionModeId);
-  const builtInLeftRail =
-    resolvedActiveTabId === "dept" ? (
-      <div className="xl:sticky xl:top-6 xl:self-start">
-        <Card>
-          <button
-            type="button"
-            onClick={() => setDepartmentFiltersOpen((value) => !value)}
-            className="flex w-full items-center justify-between gap-3 text-left"
-          >
-            <span>
-              <span className="block text-sm font-bold uppercase tracking-wider text-text-primary">
-                Department Filters
-              </span>
-              {departmentFiltersOpen ? (
-                <span className="mt-0.5 block text-xs text-text-muted">
-                  Use the left rail for active report selections.
-                </span>
-              ) : null}
-            </span>
-            <span className="rounded-full border border-border-strong px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-              {departmentFiltersOpen ? "Hide" : "Show"}
-            </span>
-          </button>
+  const showDepartmentFilter = resolvedActiveTabId === "dept";
+  const departmentFilterCard = (
+    <Card>
+      <button
+        type="button"
+        onClick={() => setDepartmentFiltersOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <span>
+          <span className="block text-sm font-bold uppercase tracking-wider text-text-primary">
+            Department Filters
+          </span>
           {departmentFiltersOpen ? (
-            <div className="mt-4">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Select Department
-              </label>
-              <select
-                value={selectedDept}
-                onChange={(event) => setSelectedDept(event.target.value)}
-                className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-base font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:ring-2 focus:ring-nsp-blue-500/15 focus:outline-none"
-              >
-                {data.meta.departments.map((department) => (
-                  <option key={department} value={department}>
-                    {department}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <span className="mt-0.5 block text-xs text-text-muted">
+              Choose which department this report is built around.
+            </span>
           ) : null}
-        </Card>
-      </div>
-    ) : undefined;
-  const leftRail = leftRailOverride !== undefined ? leftRailOverride : builtInLeftRail;
+        </span>
+        <span className="rounded-full border border-border-strong px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
+          {departmentFiltersOpen ? "Hide" : "Show"}
+        </span>
+      </button>
+      {departmentFiltersOpen ? (
+        <div className="mt-4">
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Select Department
+          </label>
+          <select
+            value={selectedDept}
+            onChange={(event) => setSelectedDept(event.target.value)}
+            className="w-full rounded-2xl border border-border-strong bg-white px-4 py-2.5 text-base font-semibold text-text-primary shadow-sm focus:border-nsp-blue-300 focus:ring-2 focus:ring-nsp-blue-500/15 focus:outline-none"
+          >
+            {data.meta.departments.map((department) => (
+              <option key={department} value={department}>
+                {department}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+    </Card>
+  );
+
   const activeTabLabel =
     visibleTabs.find((tab) => tab.id === resolvedActiveTabId)?.label ?? "Dashboard";
   const exportFilename = buildDashboardExportFilename({
@@ -213,6 +279,169 @@ export function CollaborationDashboardClient({
     perspective: activeTabLabel,
     campaign: campaignName,
   });
+
+  const handleModeChange = (nextModeId: string) => {
+    const nextModeSection =
+      modeSections?.find((section) => section.id === nextModeId) ?? modeSections?.[0];
+    if (!nextModeSection) return;
+    setActiveMode(nextModeSection.id);
+    setActiveTab(nextModeSection.tabIds[0] ?? "");
+  };
+
+  // ── Universal design shell: left Views navigator, right Context/Filters ──
+  if (designShell) {
+    const shellViews: DashboardShellView[] =
+      modeSections && modeSections.length > 0
+        ? modeSections.map((section) => ({
+            id: section.id,
+            label: section.label,
+            perspectives: section.tabIds
+              .map((id) => tabs.find((tab) => tab.id === id))
+              .filter((tab): tab is DashboardTab => Boolean(tab))
+              .map((tab) => ({ id: tab.id, label: tab.label })),
+          }))
+        : [
+            {
+              id: "reports",
+              label: "Reports",
+              perspectives: tabs.map((tab) => ({ id: tab.id, label: tab.label })),
+            },
+          ];
+    const activeViewId = activeModeSection?.id ?? shellViews[0]?.id ?? "";
+
+    // Context slot: matches EE exactly — export-as-card, a "Score Scale" legend
+    // card, and a "How to Read" card, all using the shared EmbeddedFilterCard.
+    const shellContext = (
+      <div className="flex flex-col gap-3">
+        <CompositeVisualExportButton
+          filename={exportFilename}
+          logoUrl={logoUrl}
+          skipGeneratedHeader
+          asContextCard
+        />
+        <EmbeddedFilterCard title="Score Scale">
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>3</span>
+            <div
+              className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]"
+              style={{ background: scoreScaleLegendGradient }}
+            />
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>9</span>
+          </div>
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #EEF1EE" }}>
+            <p
+              style={{
+                fontSize: 9.5,
+                fontWeight: 700,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: "#8798AA",
+                marginBottom: 8,
+              }}
+            >
+              Delta
+            </p>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>Decline</span>
+              <div
+                className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]"
+                style={{
+                  background: "linear-gradient(90deg, #D46A6A 0%, #F5EFEF 50%, #59885D 100%)",
+                }}
+              />
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>Gain</span>
+            </div>
+          </div>
+        </EmbeddedFilterCard>
+        <EmbeddedFilterCard title="How to Read">
+          {rightRailGuidance ?? (
+            <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
+              {organizationName ? `${organizationName} — ` : ""}
+              Cross-department relational strength and collaboration analytics built to help leaders
+              understand connection quality, friction points, and where to focus action.
+            </p>
+          )}
+        </EmbeddedFilterCard>
+      </div>
+    );
+
+    // EE-styled fallback department filter for report routes that don't supply
+    // their own right-rail filters (keeps the same EmbeddedFilterCard chrome).
+    const departmentShellFilter = (
+      <EmbeddedFilterCard title="Department">
+        <select
+          value={selectedDept}
+          onChange={(event) => setSelectedDept(event.target.value)}
+          className="w-full rounded-xl border border-[#C8D2CF] bg-white px-3 py-2 text-sm font-semibold text-[#152238] focus:border-nsp-blue-300 focus:outline-none"
+        >
+          {data.meta.departments.map((department) => (
+            <option key={department} value={department}>
+              {department}
+            </option>
+          ))}
+        </select>
+      </EmbeddedFilterCard>
+    );
+
+    const hasFilterContent =
+      Boolean(rightRailFilters) || Boolean(toolbarActionVisible) || showDepartmentFilter;
+    const shellFilters = hasFilterContent ? (
+      <div className="flex flex-col gap-3">
+        {toolbarActionVisible ? <div>{tabRowAction}</div> : null}
+        {rightRailFilters ??
+          (showDepartmentFilter && !toolbarActionVisible ? departmentShellFilter : null)}
+      </div>
+    ) : (
+      <p style={{ fontSize: 12, color: "#8798AA" }}>No filters apply to this report.</p>
+    );
+
+    return (
+      <VisualExportProvider active client={organizationName}>
+        <VisualExportMetaSetter title={activeTabLabel} filters={[campaignName]} />
+        <DashboardDesignShell
+          clientName={organizationName || campaignName}
+          logoUrl={logoUrl}
+          clientSubline="Collaboration"
+          campaignLabel={campaignName}
+          eyebrow={activeModeSection?.label?.toUpperCase()}
+          reportTitle={reportTitleSuffix ? `${activeTabLabel} — ${reportTitleSuffix}` : activeTabLabel}
+          views={shellViews}
+          activeViewId={activeViewId}
+          activeReportId={resolvedActiveTabId}
+          onSelectReport={(viewId, reportId) => {
+            if (viewId !== activeViewId) setActiveMode(viewId);
+            setActiveTab(reportId);
+          }}
+          contextSlot={shellContext}
+          filtersSlot={shellFilters}
+          headerExtraSlotId={COLLAB_HEADER_KPI_SLOT}
+          thickerHeaderDivider
+          basinReportSurface
+        >
+          {/* Providing the header slot id makes every ReportSummaryHeader portal
+              its KPI tiles into the shell header and drop its inline title/box,
+              so there is exactly one header per perspective (mirrors EE). One
+              wrapper div keeps report grids deep enough to survive the shell's
+              `.fr-embed > div > div` display:block reset. */}
+          <CollabHeaderPortalContext.Provider value={COLLAB_HEADER_KPI_SLOT}>
+            <div className="space-y-6">
+              {floatingPanel}
+              {activeTabContent}
+            </div>
+          </CollabHeaderPortalContext.Provider>
+        </DashboardDesignShell>
+      </VisualExportProvider>
+    );
+  }
+
+  // ── Legacy chrome (ribbon + three-zone canvas) for non-shell consumers ──
+  const leftRail =
+    leftRailOverride !== undefined
+      ? leftRailOverride
+      : showDepartmentFilter
+        ? <div className="lg:sticky lg:top-6 lg:self-start">{departmentFilterCard}</div>
+        : undefined;
+
   return (
     <VisualExportProvider active client={organizationName}>
       <VisualExportMetaSetter title={activeTabLabel} filters={[campaignName]} />
@@ -224,17 +453,7 @@ export function CollaborationDashboardClient({
             : (modeSections ?? []).map((section) => ({ id: section.id, label: section.label }))
         }
         activeCategoryId={activeModeSection?.id}
-        onCategoryChange={(nextModeId) => {
-          const nextModeSection =
-            modeSections?.find((section) => section.id === nextModeId) ?? modeSections?.[0];
-
-          if (!nextModeSection) {
-            return;
-          }
-
-          setActiveMode(nextModeSection.id);
-          setActiveTab(nextModeSection.tabIds[0] ?? "");
-        }}
+        onCategoryChange={handleModeChange}
         perspectives={
           hideRibbonNav ? [] : visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))
         }
@@ -255,7 +474,7 @@ export function CollaborationDashboardClient({
           rightRailOverride !== undefined ? (
             rightRailOverride
           ) : (
-            <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+            <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
               <Card title="Report Context">
                 <p className="text-sm leading-relaxed text-text-secondary">
                   {organizationName ? `${organizationName} — ` : ""}
@@ -666,6 +885,7 @@ function CdrsHeatmapTab({ data }: { data: CollaborationData }) {
         subtitle="Each cell shows the average score that the row department received from the column department"
       >
       <HeatmapChart
+        variant="chip"
         rows={sortedDepts}
         columns={sortedDepts}
         data={data.heatmapMatrix}
@@ -721,6 +941,7 @@ function CiHeatmapTab({ data }: { data: CollaborationData }) {
       subtitle="Each row shows a department's average score on each CI statement"
     >
       <HeatmapChart
+        variant="chip"
         rows={departments}
         columns={ciQuestions}
         data={ciHeatmapMatrix}
