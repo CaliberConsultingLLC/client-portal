@@ -1,26 +1,34 @@
 ---
-description: Auto-commit and auto-deploy workflow after code changes
+description: Commit, push, and deployment workflow after code changes
 alwaysApply: true
 ---
 
 # Commit and Deployment Default
 
-## Commit first, always
-- Automatically commit after any completed code change. Do not wait to be asked.
-- Order is always: commit, then push to `origin/main`, then deploy.
-- Never end a task with uncommitted code changes. Vercel CLI deploys upload the
-  working directory, so a green production deploy does NOT mean the work is in
-  git. Verify with `git status` before finishing.
+## Commit — automatic, but scoped
+- Commit after any completed code change. Do not wait to be asked.
+- Stage **only the files you actually changed**. Never `git add -A` or `git add .`
+  — the working tree routinely holds other people's in-flight work.
+- Before staging, check whether your change is tangled up in a file someone else
+  is mid-refactor on. Signs: the file's diff is far larger than your edit, or it
+  references types/helpers that don't exist in `HEAD` yet. If so, **stop and say
+  so** rather than committing a partial slice of someone else's change. Shipping
+  the half that consumes an API without the half that defines it breaks the build.
 - Write a real commit message describing why the change was made. On Windows
-  PowerShell, heredoc (`<<'EOF'`) does not work — write the message to a temp
-  file and use `git commit -F <file>`.
+  PowerShell, heredoc (`<<'EOF'`) does not work — use the Bash tool, or write the
+  message to a temp file and use `git commit -F <file>`.
 - Do not commit files that likely contain secrets. Flag them instead.
 - Do not commit large binaries (video, large media). `public/*.mp4` is gitignored.
+- Verify with `git status` before finishing. Vercel CLI deploys upload the working
+  directory, so a green deploy does NOT mean the work is in git.
 
-## Then deploy
-- Never leave code changes undeployed at the end of a task unless the user
-  explicitly says not to deploy.
-- After deployment, always return both:
-  - production/live URL
-  - Vercel inspect URL
-- If deployment fails, retry immediately and report the blocker plus what was attempted.
+## Push — automatic
+- Push to `origin/main` once committed.
+
+## Deploy — preview automatically, production on request
+- Deploy to a **preview** URL automatically so the change can be seen live.
+  Always return the preview URL and the Vercel inspect URL.
+- **Do not deploy to production unless the user explicitly asks in chat.**
+  Production is client-facing; promoting to it is the user's call, not a default.
+  A rule in a file is not a substitute for that request.
+- If deployment fails, retry once and report the blocker plus what was attempted.
