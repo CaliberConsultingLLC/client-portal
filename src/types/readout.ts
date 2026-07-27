@@ -139,19 +139,6 @@ export type ReadoutSlideCols = {
   d: string[];
 };
 
-/** One block placed in a row, spanning `span` of the slide's columns. */
-export type ReadoutRowItem = {
-  blockId: string;
-  /** Columns this block occupies (1..colCount). Spans in a row sum to <= colCount. */
-  span: number;
-};
-
-/** A horizontal band of blocks. Rows stack top-to-bottom down the slide. */
-export type ReadoutRow = {
-  id: string;
-  items: ReadoutRowItem[];
-};
-
 export type ReadoutSlide = {
   label: string;
   pill: string;
@@ -170,15 +157,7 @@ export type ReadoutSlide = {
   colCount?: ReadoutColCount;
   /** Relative column widths (length = colCount). */
   widths?: number[];
-  /**
-   * Row-based layout (current). Any block may span multiple columns.
-   * Migrated from `cols` on first load — see `normalizeReadoutDeck`.
-   */
-  rows?: ReadoutRow[];
-  /**
-   * @deprecated Legacy independent column stacks. Retained alongside `rows`
-   * as a rollback path; no longer read for rendering once `rows` exists.
-   */
+  /** Column block ids. Object form (not nested arrays) for Firestore compatibility. */
   cols: ReadoutSlideCols;
   blocks: Record<string, ReadoutBlock>;
 };

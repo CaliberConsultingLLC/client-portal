@@ -13,6 +13,21 @@ alwaysApply: true
 - Raise a genuine blocker in one or two sentences and keep going. Do not stop
   the work to collect a preference you can reasonably infer.
 
+## But stop when the change outgrows the request
+- If delivering a request means restructuring something that already works —
+  replacing a data model, rewriting a layout engine, migrating stored data —
+  stop and say so before writing code. That is a different decision than the
+  one he made when he asked.
+- Before proposing a rewrite, list what the current implementation can do that
+  the replacement cannot. If that list is unknown, it has not been checked yet,
+  and the rewrite is not ready to propose. Never present a rewrite as a clean
+  upgrade without naming its cost.
+- Ask when the missing context is *his* to give — how the portal behaves, what
+  clients see, what he experienced, why something was built a certain way. He
+  answers that in a sentence. Do not infer it from code and proceed.
+- This is not licence to ask about everything. The bar is: would a wrong guess
+  here break or remove something that currently works?
+
 # Commit and Deployment Default
 
 ## Commit — automatic, but scoped
