@@ -1,13 +1,25 @@
 ---
-description: Auto-deploy workflow after code changes
+description: Auto-commit and auto-deploy workflow after code changes
 alwaysApply: true
 ---
 
-# Deployment Default
+# Commit and Deployment Default
 
-- For this project, automatically deploy after any completed code change without waiting for the user to ask.
-- Never leave code changes undeployed at the end of a task unless the user explicitly says not to deploy.
-- If a commit is requested, create the commit first, then deploy.
+## Commit first, always
+- Automatically commit after any completed code change. Do not wait to be asked.
+- Order is always: commit, then push to `origin/main`, then deploy.
+- Never end a task with uncommitted code changes. Vercel CLI deploys upload the
+  working directory, so a green production deploy does NOT mean the work is in
+  git. Verify with `git status` before finishing.
+- Write a real commit message describing why the change was made. On Windows
+  PowerShell, heredoc (`<<'EOF'`) does not work — write the message to a temp
+  file and use `git commit -F <file>`.
+- Do not commit files that likely contain secrets. Flag them instead.
+- Do not commit large binaries (video, large media). `public/*.mp4` is gitignored.
+
+## Then deploy
+- Never leave code changes undeployed at the end of a task unless the user
+  explicitly says not to deploy.
 - After deployment, always return both:
   - production/live URL
   - Vercel inspect URL
