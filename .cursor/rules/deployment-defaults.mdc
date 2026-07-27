@@ -1,7 +1,17 @@
 ---
-description: Commit, push, and deployment workflow after code changes
+description: How to act on requests, and the commit/push/deploy workflow after code changes
 alwaysApply: true
 ---
+
+# Working Default
+
+## Act on the request — don't stage it
+- When Dustin says to change something, change it. Do not open with a plan, a
+  design fork, or a menu of options.
+- He asks for planning or discussion explicitly ("let's talk through", "what do
+  you think", "plan this"). Absent those words, the request is the instruction.
+- Raise a genuine blocker in one or two sentences and keep going. Do not stop
+  the work to collect a preference you can reasonably infer.
 
 # Commit and Deployment Default
 
@@ -25,10 +35,18 @@ alwaysApply: true
 ## Push — automatic
 - Push to `origin/main` once committed.
 
-## Deploy — preview automatically, production on request
-- Deploy to a **preview** URL automatically so the change can be seen live.
-  Always return the preview URL and the Vercel inspect URL.
-- **Do not deploy to production unless the user explicitly asks in chat.**
-  Production is client-facing; promoting to it is the user's call, not a default.
-  A rule in a file is not a substitute for that request.
+## Deploy — production automatically
+- Deploy to **production** (`vercel deploy --prod --yes`) after pushing. Dustin
+  reviews on the live site, not on preview URLs; a change he cannot reload into
+  is a change he considers undone.
+- The client-facing domain is **https://portal.caliberconsultingllc.org**. Name
+  that URL when reporting, not the generated `*.vercel.app` deployment URL.
+- Readouts are hidden from clients today, so production is the working surface.
+  Revisit this default if client-visible readouts ship.
 - If deployment fails, retry once and report the blocker plus what was attempted.
+
+## "Verified" means live
+- Never call something verified because it typechecked, or because it rendered
+  in a scratch harness with fabricated data. Those are not verification.
+- Verified = pushed, deployed to production, and confirmed on the live URL.
+  Anything short of that is reported as unconfirmed, in plain words.
