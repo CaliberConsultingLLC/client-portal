@@ -269,6 +269,7 @@ export function EELocationComparison({
   onStatementId,
   benchmarkLabel = "CSG",
   fieldLayout = false,
+  allIndexesTab = false,
   chromeless = false,
   headerPortalId,
   basinReportSurface = false,
@@ -287,6 +288,10 @@ export function EELocationComparison({
   statementId?: string;
   onStatementId?: (value: string) => void;
   fieldLayout?: boolean;
+  /** DESIGN RULE (Deep Well Services): lead the inline index rail with an
+   * "All Indexes" tab — the same roll-up tab the breakdown funnels use — and
+   * open on it. CSG hasn't adopted this yet and keeps one index at a time. */
+  allIndexesTab?: boolean;
   chromeless?: boolean;
   headerPortalId?: string;
   /** Basin group surface treatment "1b" — shared canvas tint, soft blue
@@ -306,8 +311,10 @@ export function EELocationComparison({
   const [localCompId, setLocalCompId] = useState(() => defaultComparisonId(comparisons));
   const indexIdRaw = controlledIndexId ?? localIndexId;
   const setIndexId = onIndexId ?? setLocalIndexId;
-  // Field layout drives one index at a time via an inline toggle (no "All indexes").
-  const indexId = fieldLayout ? (indexIdRaw || indexes[0]?.id || "") : indexIdRaw;
+  // Field layout drives one index at a time via an inline toggle, unless the
+  // rail carries an All Indexes tab — then "" is a real, selectable state.
+  const railHasAllIndexes = allIndexesTab && indexes.length > 1;
+  const indexId = fieldLayout && !railHasAllIndexes ? (indexIdRaw || indexes[0]?.id || "") : indexIdRaw;
   const compId = controlledCompId ?? localCompId;
   const setCompId = onCompId ?? setLocalCompId;
   const [localStatementId, setLocalStatementId] = useState(ALL);
@@ -320,6 +327,10 @@ export function EELocationComparison({
     return selected ? [selected] : indexes;
   }, [indexes, indexId]);
   const idx = selectedIndexes[0] ?? indexes[0];
+  // Inline rail contents: the roll-up tab (id "") first, then every index.
+  const railTabs: Array<{ id: string; name: string }> = railHasAllIndexes
+    ? [{ id: "", name: "All Indexes" }, ...indexes.map((item) => ({ id: item.id, name: item.name }))]
+    : indexes.map((item) => ({ id: item.id, name: item.name }));
   const comp = comparisons.find(c => c.id === compId) ?? comparisons[0];
   const hasComparison = Boolean(comp);
   const comparedToText = comp ? ` · compared to ${comp.label}` : "";
@@ -414,7 +425,7 @@ export function EELocationComparison({
   if (registryOn && exportRegistry) {
     exportRegistry.setMeta({
       title,
-      filters: [idx?.name, current.labelLong || current.label].filter(
+      filters: [indexId ? idx?.name : "All Indexes", current.labelLong || current.label].filter(
         (value): value is string => Boolean(value)
       ),
     });
@@ -486,8 +497,9 @@ export function EELocationComparison({
                 const comparisonRow = (
               <div style={{ display: "flex", gap: 0, alignItems: "stretch" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0, width: 168, flexShrink: 0, paddingTop: 16, paddingBottom: 16 }}>
-                  {indexes.map((index, indexIndex) => {
+                  {railTabs.map((index, indexIndex) => {
                     const active = indexId === index.id;
+                    const isSummary = railHasAllIndexes && index.id === "";
                     return (
                       <button
                         key={index.id}
@@ -510,7 +522,10 @@ export function EELocationComparison({
                           lineHeight: 1.2,
                           transition: "all .16s",
                           position: "relative",
-                          marginBottom: indexIndex === indexes.length - 1 ? 0 : -1,
+                          marginBottom: indexIndex === railTabs.length - 1 ? 0 : isSummary ? 7 : -1,
+                          ...(isSummary
+                            ? { letterSpacing: ".1em", textTransform: "uppercase", fontSize: 11.5 }
+                            : null),
                           ...(active
                             ? {
                                 background: "#fff",
@@ -539,7 +554,7 @@ export function EELocationComparison({
                 <RegisteredVisualExportFrame order={10} label="Download chart" filename={exportFile("current-chart")} style={{ flex: 1, minWidth: 0 }}>
                 <div className="card relative" style={{ flex: 1, minWidth: 0 }}>
                   <div className="card-head flex items-center justify-between gap-4">
-                    <h3 className="card-title">Current Campaign{idx ? ` · ${idx.name}` : ""}</h3>
+                    <h3 className="card-title">Current Campaign{indexId && idx ? ` · ${idx.name}` : " · All Indexes"}</h3>
                   </div>
                   <div className="card-body">
                     <BrandComparisonChart rows={rowsByValueDesc.map((row) => ({ id: row.id, name: row.name, value: row.value, org: overallAvg, delta: r1(row.value - overallAvg) }))} axis={barAxis} scoreColor={sc} uniform showOrgLine={false} benchmarkLabel={benchmarkLabel} />
@@ -574,7 +589,7 @@ export function EELocationComparison({
               </RegisteredVisualExportFrame>
             )}
 
-            {fieldLayout && idx ? (
+            {fieldLayout && indexId && idx ? (
               (() => {
                 const heatmapPanel = (
               <RegisteredVisualExportFrame order={20} label="Download heat map" filename={exportFile("statement-heatmap")}>

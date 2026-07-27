@@ -2319,23 +2319,30 @@ export function DwsEmployeeExperienceDashboardClient({
         : clientScope.key === "csg"
           ? CSG_BREAKDOWN_DIMENSIONS
           : undefined;
+    // DESIGN RULE (Deep Well Services — office and field): every funnel page
+    // leads its index rail with an "All Indexes" roll-up tab and can switch
+    // the funnel and heatmap between the current score and the change since
+    // the comparison campaign. CSG hasn't adopted this yet, so its Brand
+    // Breakdown keeps the original index-only rail and score-only visuals.
+    const features =
+      clientScope.key === "csg" ? undefined : { allIndexesTab: true, priorCampaigns: true };
     switch (activePersp) {
       case "ee-segment-breakdown":
-        return projectBreakdownSet(data, options, "basin", dims);
+        return projectBreakdownSet(data, options, "basin", dims, features);
       case "ee-division-breakdown":
-        // Pilot surface for the All Indexes rail tab + score/delta toggle.
-        // Every other breakdown page stays on the original projection until
-        // these are rolled out more widely.
-        return projectBreakdownSet(data, options, "division", dims, {
-          allIndexesTab: true,
-          priorCampaigns: true,
-        });
+        return projectBreakdownSet(data, options, "division", dims, features);
       case "ee-department-breakdown":
-        return projectBreakdownSet(data, options, "department", dims);
+        return projectBreakdownSet(data, options, "department", dims, features);
       case "ee-role-breakdown":
-        return projectBreakdownSet(data, options, clientScope.key === "dws" ? "leadership" : "jobCategory", dims);
+        return projectBreakdownSet(
+          data,
+          options,
+          clientScope.key === "dws" ? "leadership" : "jobCategory",
+          dims,
+          features
+        );
       case "ee-supervisor-breakdown":
-        return projectBreakdownSet(data, options, "supervisor", dims);
+        return projectBreakdownSet(data, options, "supervisor", dims, features);
       case "ee-autosep-breakdown":
         return projectBreakdownSet(
           {
@@ -2344,12 +2351,25 @@ export function DwsEmployeeExperienceDashboardClient({
             settings: { ...data.settings, minimumSegmentSize: 1 },
           },
           options,
-          "autosep"
+          "autosep",
+          undefined,
+          features
         );
       default:
         return null;
     }
   }, [activePersp, data, logoUrl, current, reportScaleOption, clientScope.key]);
+  // Breakdown pages aren't on the executive rail, so campaign selection lives
+  // in each page's own Filters tab — next to the Compared To picker the delta
+  // toggle reads from.
+  // DESIGN RULE (Deep Well Services): every inline index rail — funnel pages
+  // and comparison bar charts alike — leads with an "All Indexes" tab.
+  const comparisonAllIndexesTab = clientScope.key !== "csg";
+  const breakdownCampaignProps = {
+    campaignValue: current,
+    campaignOptions: data.meta.campaigns,
+    onCampaignChange: setCurrent,
+  };
   const execBrandFilteredData = useMemo(
     () => ({
       ...data,
@@ -2851,12 +2871,12 @@ export function DwsEmployeeExperienceDashboardClient({
     "dept-scorecard": "Scorecards summarize department performance, statement strengths, and focus areas with demographic cuts.",
     "ee-brand-report": `This report compares each ${clientScope.brandLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
     "ee-brand-open-text": `Open text responses are grouped by question type and can be filtered by ${clientScope.brandLabel.toLowerCase()} to isolate themes and language patterns.`,
-    "ee-segment-breakdown": `Select an index on the rail to re-score the funnel and heatmap below for every ${clientScope.jobCategoryLabel.toLowerCase()} in the selected ${clientScope.brandLabel.toLowerCase()}.`,
-    "ee-division-breakdown": "Pick a division, then select an index — or All Indexes — to re-score the sub-segment funnel and heatmap within it. Use the toggle under the funnel to switch between the current score and the change since the Compared To campaign.",
-    "ee-department-breakdown": "Pick a department, then select an index to re-score the sub-segment funnel and statement heatmap within it.",
-    "ee-role-breakdown": `Pick a ${clientScope.jobCategoryLabel.toLowerCase()}, then select an index to re-score the sub-segment funnel and statement heatmap within it.`,
-    "ee-supervisor-breakdown": "Pick a supervisor, then select an index to re-score the sub-segment funnel and statement heatmap within their team.",
-    "ee-autosep-breakdown": "Select an index to re-score the sub-segment funnel and statement heatmap for the AutoSEP population.",
+    "ee-segment-breakdown": `Select an index on the rail — or All Indexes — to re-score the funnel and heatmap below for every ${clientScope.jobCategoryLabel.toLowerCase()} in the selected ${clientScope.brandLabel.toLowerCase()}. The toggle under the funnel switches between the current score and the change since the Compared To campaign.`,
+    "ee-division-breakdown": "Pick a division, then select an index — or All Indexes — to re-score the sub-segment funnel and heatmap within it. The toggle under the funnel switches between the current score and the change since the Compared To campaign.",
+    "ee-department-breakdown": "Pick a department, then select an index — or All Indexes — to re-score the sub-segment funnel and heatmap within it. The toggle under the funnel switches between the current score and the change since the Compared To campaign.",
+    "ee-role-breakdown": `Pick a ${clientScope.jobCategoryLabel.toLowerCase()}, then select an index — or All Indexes — to re-score the sub-segment funnel and heatmap within it. The toggle under the funnel switches between the current score and the change since the Compared To campaign.`,
+    "ee-supervisor-breakdown": "Pick a supervisor, then select an index — or All Indexes — to re-score the sub-segment funnel and heatmap within their team. The toggle under the funnel switches between the current score and the change since the Compared To campaign.",
+    "ee-autosep-breakdown": "Select an index — or All Indexes — to re-score the sub-segment funnel and heatmap for the AutoSEP population. The toggle under the funnel switches between the current score and the change since the Compared To campaign.",
     "ee-department-report": `This report compares each ${clientScope.jobCategoryLabel.toLowerCase()} to organization averages by statement and index across selected campaigns.`,
     "ee-unit-department-report": "This report compares each department to organization averages by statement and index across selected campaigns.",
     "ee-autosep-report": "This report covers the AutoSEP partner designation only. AutoSEP is excluded from all other reports and organization-wide scores.",
@@ -3127,6 +3147,7 @@ export function DwsEmployeeExperienceDashboardClient({
             statementId={execDeptStatementId}
             onStatementId={setExecDeptStatementId}
             fieldLayout
+            allIndexesTab={comparisonAllIndexesTab}
             compact
             showStatementHeatmap={false}
             chromeless={redesignActive}
@@ -3152,6 +3173,7 @@ export function DwsEmployeeExperienceDashboardClient({
             statementId={execDeptStatementId}
             onStatementId={setExecDeptStatementId}
             fieldLayout={useIndexRailLayout}
+            allIndexesTab={comparisonAllIndexesTab}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             // Basin surface treatment "1b" is now applied dashboard-wide
@@ -3177,6 +3199,7 @@ export function DwsEmployeeExperienceDashboardClient({
             statementId={execDeptStatementId}
             onStatementId={setExecDeptStatementId}
             fieldLayout={useIndexRailLayout}
+            allIndexesTab={comparisonAllIndexesTab}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             // Basin surface treatment "1b" is now applied dashboard-wide
@@ -3202,6 +3225,7 @@ export function DwsEmployeeExperienceDashboardClient({
             statementId={execBrandStatementId}
             onStatementId={setExecBrandStatementId}
             fieldLayout={useIndexRailLayout}
+            allIndexesTab={comparisonAllIndexesTab}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             // Basin group surface treatment "1b" — this is Basin Comparison
@@ -3227,6 +3251,7 @@ export function DwsEmployeeExperienceDashboardClient({
             statementId={execBrandStatementId}
             onStatementId={setExecBrandStatementId}
             fieldLayout={useIndexRailLayout}
+            allIndexesTab={comparisonAllIndexesTab}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             basinReportSurface={useRedesignSurfaceTint}
@@ -3249,6 +3274,7 @@ export function DwsEmployeeExperienceDashboardClient({
             statementId={execDeptStatementId}
             onStatementId={setExecDeptStatementId}
             fieldLayout
+            allIndexesTab={comparisonAllIndexesTab}
             chromeless={redesignActive}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
             basinReportSurface={useRedesignSurfaceTint}
@@ -3460,9 +3486,7 @@ export function DwsEmployeeExperienceDashboardClient({
             key="segment-breakdown"
             data={activeBreakdown ?? []}
             unitLabel={clientScope.brandLabel}
-            campaignValue={clientScope.key === "csg" ? current : undefined}
-            campaignOptions={clientScope.key === "csg" ? data.meta.campaigns : undefined}
-            onCampaignChange={clientScope.key === "csg" ? setCurrent : undefined}
+            {...breakdownCampaignProps}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
@@ -3479,12 +3503,7 @@ export function DwsEmployeeExperienceDashboardClient({
             key="division-breakdown"
             data={activeBreakdown ?? []}
             unitLabel="Division"
-            // Campaign lives in the page's own Filters tab here (this report
-            // isn't on the executive rail), alongside the Compared To picker
-            // the delta toggle reads from.
-            campaignValue={current}
-            campaignOptions={data.meta.campaigns}
-            onCampaignChange={setCurrent}
+            {...breakdownCampaignProps}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
@@ -3499,6 +3518,7 @@ export function DwsEmployeeExperienceDashboardClient({
             key="department-breakdown"
             data={activeBreakdown ?? []}
             unitLabel="Department"
+            {...breakdownCampaignProps}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
@@ -3515,6 +3535,7 @@ export function DwsEmployeeExperienceDashboardClient({
             // in the `activeBreakdown` memo.
             data={activeBreakdown ?? []}
             unitLabel={clientScope.jobCategoryLabel}
+            {...breakdownCampaignProps}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
@@ -3529,6 +3550,7 @@ export function DwsEmployeeExperienceDashboardClient({
             key="supervisor-breakdown"
             data={activeBreakdown ?? []}
             unitLabel="Supervisor"
+            {...breakdownCampaignProps}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
@@ -3543,6 +3565,7 @@ export function DwsEmployeeExperienceDashboardClient({
             key="autosep-breakdown"
             data={activeBreakdown ?? []}
             unitLabel="AutoSEP"
+            {...breakdownCampaignProps}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             titleSuffixPortalId={redesignActive ? FR_TITLE_SUFFIX_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}

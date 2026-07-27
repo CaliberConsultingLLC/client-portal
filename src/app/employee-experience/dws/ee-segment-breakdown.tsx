@@ -13,7 +13,7 @@
  * sharing the single basin/department picker at the top of the page.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
@@ -663,14 +663,21 @@ export function EESegmentBreakdown({
     "comparisonId",
     () => data[0]?.previousId ?? comparisons[comparisons.length - 1]?.id ?? ""
   );
-  // Switching the current campaign can invalidate the comparison (it may now be
-  // the current one, or newer than it) — fall back to the previous survey.
+  // The baseline always re-defaults to the survey immediately before whatever
+  // campaign is current — picking a new current campaign resets it, and a
+  // stored selection that is no longer a valid comparison is replaced. The
+  // user can still choose any other campaign from the Compared To filter.
+  const currentCampaignId = data[0]?.current.id ?? "";
+  const defaultComparison = data[0]?.previousId ?? comparisons[comparisons.length - 1]?.id ?? "";
+  const lastCurrentRef = useRef(currentCampaignId);
   useEffect(() => {
     if (comparisons.length === 0) return;
-    if (!comparisons.find((item) => item.id === comparisonId)) {
-      setComparisonId(data[0]?.previousId ?? comparisons[comparisons.length - 1]?.id ?? "");
+    const currentChanged = lastCurrentRef.current !== currentCampaignId;
+    lastCurrentRef.current = currentCampaignId;
+    if (currentChanged || !comparisons.find((item) => item.id === comparisonId)) {
+      setComparisonId(defaultComparison);
     }
-  }, [comparisons, comparisonId, data]);
+  }, [comparisons, comparisonId, currentCampaignId, defaultComparison]);
 
   const deltaAvailable = comparisons.length > 0;
   const mode: ScoreMode = deltaAvailable ? scoreMode : "score";
