@@ -228,7 +228,12 @@ function ReadoutDeckViewerInner({
     return null;
   }
 
-  function dropOn(slideKey: string, targetId: string | null, colIdx: number | null) {
+  function dropOn(
+    slideKey: string,
+    targetId: string | null,
+    colIdx: number | null,
+    after = false
+  ) {
     const drag = dragRef.current;
     dragRef.current = null;
     if (!drag || drag.slideKey !== slideKey) return;
@@ -244,12 +249,39 @@ function ReadoutDeckViewerInner({
       if (targetId) {
         const side = findColForBlock(cols, targetId) ?? keys[0];
         const idx = cols[side].indexOf(targetId);
-        cols[side].splice(Math.max(0, idx), 0, drag.blockId);
+        const insertAt = idx < 0 ? cols[side].length : after ? idx + 1 : idx;
+        cols[side].splice(insertAt, 0, drag.blockId);
       } else if (colIdx !== null) {
         const side = keys[Math.min(colIdx, keys.length - 1)] ?? "a";
         cols[side].push(drag.blockId);
       }
-      return { ...d, slides: { ...d.slides, [slideKey]: { ...sl, cols } } };
+      // Landing beside another data point means "share the row" — shrink the
+      // dragged card (or both) so the pair actually fits instead of wrapping
+      // to its own line, which read as the drop being ignored.
+      let blocks = sl.blocks;
+      const dragBlock = sl.blocks[drag.blockId];
+      const targetBlock = targetId ? sl.blocks[targetId] : null;
+      if (
+        dragBlock?.type === "datapoint" &&
+        targetBlock?.type === "datapoint" &&
+        targetId
+      ) {
+        const dragW = dragBlock.w ?? 1;
+        const targetW = targetBlock.w ?? 1;
+        if (targetW < 0.999 && dragW + targetW > 1) {
+          const fitted = Math.round((1 - targetW) * 1000) / 1000;
+          if (fitted >= 0.22) {
+            blocks = { ...blocks, [drag.blockId]: { ...dragBlock, w: fitted } };
+          } else {
+            blocks = {
+              ...blocks,
+              [drag.blockId]: { ...dragBlock, w: 0.5 },
+              [targetId]: { ...targetBlock, w: 0.5 },
+            };
+          }
+        }
+      }
+      return { ...d, slides: { ...d.slides, [slideKey]: { ...sl, cols, blocks } } };
     });
   }
 
@@ -793,7 +825,15 @@ function ReadoutDeckViewerInner({
                             onDrop={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              dropOn(key, blockId, null);
+                              const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                              // Data points sit side by side, so the cursor's
+                              // horizontal half picks before/after; full-width
+                              // blocks stack, so use the vertical half.
+                              const after =
+                                block.type === "datapoint"
+                                  ? e.clientX > r.left + r.width / 2
+                                  : e.clientY > r.top + r.height / 2;
+                              dropOn(key, blockId, null, after);
                             }}
                             onUpdate={(patch) => updateBlock(key, blockId, patch)}
                             onRemove={() => removeBlock(key, blockId)}
@@ -815,6 +855,47 @@ function ReadoutDeckViewerInner({
                             <div
                               key={`dp-row-${colKey}-${rowIdx}`}
                               className="flex w-full flex-wrap content-start items-start gap-3"
+                              onDragOver={(e) => e.preventDefault()}
+                              // Dropping in the open space beside a narrowed
+                              // card used to bubble to the column and append
+                              // at the bottom. Place it within this row based
+                              // on where the cursor actually is.
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const cards = Array.from(
+                                  (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+                                    "[data-block-id]"
+                                  )
+                                );
+                                let targetId: string | null = null;
+                                let after = false;
+                                for (const card of cards) {
+                                  const id = card.dataset.blockId;
+                                  if (!id) continue;
+                                  const r = card.getBoundingClientRect();
+                                  if (e.clientY < r.top) {
+                                    targetId = id;
+                                    after = false;
+                                    break;
+                                  }
+                                  if (e.clientY <= r.bottom) {
+                                    if (e.clientX < r.left + r.width / 2) {
+                                      targetId = id;
+                                      after = false;
+                                      break;
+                                    }
+                                    targetId = id;
+                                    after = true;
+                                  }
+                                }
+                                if (!targetId) {
+                                  targetId = row.ids[row.ids.length - 1] ?? null;
+                                  after = true;
+                                }
+                                if (targetId) dropOn(key, targetId, null, after);
+                                else dropOn(key, null, colIdx);
+                              }}
                             >
                               {row.ids.map((blockId) => renderCard(blockId))}
                             </div>
@@ -1493,6 +1574,7 @@ function DashboardLinkEditor({
 
 function DeckCard({
   readoutId,
+  blockId,
   block,
   editing,
   chromeVisible,
@@ -1542,10 +1624,14 @@ function DeckCard({
         : `calc(${widthPct}% - 6px)`;
   const dragEnabled = isVisual && editing;
   const bodyRef = useRef<HTMLElement | null>(null);
+  // Which edge a dragged card would be inserted on: data points split
+  // left/right, stacked blocks split top/bottom.
+  const [dropEdge, setDropEdge] = useState<"start" | "end" | null>(null);
 
   return (
     <div
       data-card="1"
+      data-block-id={blockId}
       draggable={dragEnabled}
       onDragStart={dragEnabled ? onDragStart : undefined}
       className={`relative flex min-h-0 flex-col overflow-hidden${dragEnabled ? " cursor-grab active:cursor-grabbing" : ""}`}
@@ -1571,9 +1657,41 @@ function DeckCard({
           ? "7px 9px 20px rgba(15,23,42,0.07),2px 3px 6px rgba(15,23,42,0.04)"
           : "none",
       }}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={onDrop}
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!editing) return;
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const after = isDataPoint
+          ? e.clientX > r.left + r.width / 2
+          : e.clientY > r.top + r.height / 2;
+        setDropEdge(after ? "end" : "start");
+      }}
+      onDragLeave={() => setDropEdge(null)}
+      onDrop={(e) => {
+        setDropEdge(null);
+        onDrop(e);
+      }}
     >
+      {dropEdge ? (
+        <div
+          className="pointer-events-none absolute z-20 rounded-full bg-[#C99A3C]"
+          style={
+            isDataPoint
+              ? {
+                  top: 6,
+                  bottom: 6,
+                  width: 3,
+                  ...(dropEdge === "start" ? { left: 2 } : { right: 2 }),
+                }
+              : {
+                  left: 6,
+                  right: 6,
+                  height: 3,
+                  ...(dropEdge === "start" ? { top: 2 } : { bottom: 2 }),
+                }
+          }
+        />
+      ) : null}
       {isVisual && visualBlock ? (
         <>
           <div className="px-3 pt-2.5">
