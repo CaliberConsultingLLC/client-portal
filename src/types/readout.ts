@@ -83,7 +83,8 @@ export type ReadoutVisualBlock = {
 export type ReadoutTextBlock = {
   type: "text";
   color: number;
-  size?: 0 | 1 | 2;
+  size?: ReadoutTextSize;
+  align?: "left" | "center" | "right";
   subtitle: string;
   body: string;
 };

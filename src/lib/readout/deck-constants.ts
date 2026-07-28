@@ -1,3 +1,5 @@
+// Index 6 (transparent) is special-cased in the viewer — only append new
+// presets after it so persisted decks keep their colors.
 export const READOUT_COLOR_PRESETS = [
   { bg: "#FFFFFF", border: "#DCE3DD", label: "#6E7E96", text: "#3B4B63" },
   { bg: "#F1F8F3", border: "#CDE6D5", label: "#2F9151", text: "#3B4B63" },
@@ -6,6 +8,14 @@ export const READOUT_COLOR_PRESETS = [
   { bg: "#242424", border: "#3A3A3A", label: "#E8CC70", text: "rgba(255,255,255,0.82)" },
   { bg: "#3B4B63", border: "#4C5F7C", label: "#AFC4DC", text: "rgba(255,255,255,0.85)" },
   { bg: "transparent", border: "transparent", label: "#6E7E96", text: "#3B4B63" },
+  // Portal-palette additions — toned-down shades of the collaboration red,
+  // Caliber emerald, steel blue, gold, and a warm sand neutral.
+  { bg: "#F8ECEA", border: "#E8CFC9", label: "#A2483A", text: "#5C3B34" },
+  { bg: "#8E4237", border: "#7C382E", label: "#EFCEC7", text: "rgba(255,255,255,0.88)" },
+  { bg: "#386B45", border: "#2F5A38", label: "#CBE4D1", text: "rgba(255,255,255,0.88)" },
+  { bg: "#5E7898", border: "#526986", label: "#D7E2EE", text: "rgba(255,255,255,0.9)" },
+  { bg: "#C9A24B", border: "#B48D38", label: "#5C4715", text: "#3A2E12" },
+  { bg: "#F4F1EA", border: "#E0D9C8", label: "#8A7B5E", text: "#4A4436" },
 ] as const;
 
 /** Cover focus-card accents (Roman numeral + border only). */
@@ -30,6 +40,7 @@ export const READOUT_TEXT_SIZES = [
   { body: "13px", lineHeight: "1.55", subtitle: "10px" },
   { body: "19px", lineHeight: "1.45", subtitle: "12px" },
   { body: "31px", lineHeight: "1.25", subtitle: "14px" },
+  { body: "40px", lineHeight: "1.18", subtitle: "15px" },
 ] as const;
 
 /** Data-point value sizes — includes one step larger than text cards. */

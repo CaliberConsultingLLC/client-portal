@@ -1776,7 +1776,7 @@ function DeckCard({
               }}
             />
             {editing ? (
-              <div className="mt-3 flex w-full items-center justify-center gap-[7px]">
+              <div className="mt-3 flex w-full flex-wrap items-center justify-center gap-[7px]">
                 {[0, 1, 2, 3].map((sz) => (
                   <button
                     key={sz}
@@ -1876,6 +1876,7 @@ function DeckCard({
                 fontSize: size.subtitle,
                 minHeight: editing ? 12 : 0,
                 color: preset.label,
+                textAlign: textBlock.align ?? "left",
               }}
             />
             <ReadoutEditableText
@@ -1890,10 +1891,11 @@ function DeckCard({
                 fontSize: size.body,
                 lineHeight: size.lineHeight,
                 color: preset.text,
+                textAlign: textBlock.align ?? "left",
               }}
             />
             {editing ? (
-              <div className="mt-[11px] flex items-center gap-[7px]">
+              <div className="mt-[11px] flex flex-wrap items-center gap-[7px]">
                 <button
                   type="button"
                   title="Bullet list"
@@ -1918,16 +1920,40 @@ function DeckCard({
                 >
                   ☰
                 </button>
+                {(() => {
+                  const align = textBlock.align ?? "left";
+                  const next =
+                    align === "left" ? "center" : align === "center" ? "right" : "left";
+                  return (
+                    <button
+                      type="button"
+                      title={`Text alignment: ${align} · click to switch`}
+                      onClick={() => onUpdate({ align: next })}
+                      className="border-none bg-transparent px-0.5 text-[13px] leading-none text-[#9AA7B4] hover:text-[#C99A3C]"
+                      style={{ color: align === "left" ? "#9AA7B4" : "#C99A3C" }}
+                    >
+                      {align === "left" ? "⯇" : align === "center" ? "⯀" : "⯈"}
+                    </button>
+                  );
+                })()}
                 <span className="mx-0.5 h-4 w-px bg-[#D8DEE2]" />
-                {[0, 1, 2].map((sz) => (
+                {[0, 1, 2, 3].map((sz) => (
                   <button
                     key={sz}
                     type="button"
-                    onClick={() => onUpdate({ size: sz as 0 | 1 | 2 })}
-                    title={sz === 0 ? "Small text" : sz === 1 ? "Medium text" : "Large text (title size)"}
+                    onClick={() => onUpdate({ size: sz as 0 | 1 | 2 | 3 })}
+                    title={
+                      sz === 0
+                        ? "Small text"
+                        : sz === 1
+                          ? "Medium text"
+                          : sz === 2
+                            ? "Large text (title size)"
+                            : "Extra-large text"
+                    }
                     className="border-none bg-transparent px-0.5 font-extrabold leading-none"
                     style={{
-                      fontSize: sz === 0 ? 11 : sz === 1 ? 14 : 17,
+                      fontSize: sz === 0 ? 11 : sz === 1 ? 14 : sz === 2 ? 17 : 20,
                       color: sizeIdx === sz ? "#C99A3C" : "#9AA7B4",
                     }}
                   >
