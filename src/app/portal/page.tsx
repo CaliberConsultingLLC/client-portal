@@ -3,16 +3,32 @@ import type { ResponseRateSummary } from "@/components/portal/response-rate-card
 import { requireFirebasePortalUser } from "@/lib/firebase/auth";
 import { listFirebaseUsersByClientId } from "@/lib/firebase/user-store";
 import { listCampaignsForClientIds } from "@/lib/firebase/campaign-store";
-import { getAccessibleDashboardAssignments, getAccessiblePortalClients } from "@/lib/firebase/portal-access";
+import {
+  getAccessibleDashboardAssignments,
+  getAccessiblePortalClients,
+  getAccessiblePublishedReadouts,
+} from "@/lib/firebase/portal-access";
 
 const ACTIVE_CAMPAIGN_STATUSES = ["launched", "active", "closing"];
 
 export default async function PortalHomePage() {
   const user = await requireFirebasePortalUser();
-  const [clients, assignments] = await Promise.all([
+  const [clients, assignments, readouts] = await Promise.all([
     getAccessiblePortalClients(user),
     getAccessibleDashboardAssignments(user),
+    getAccessiblePublishedReadouts(user),
   ]);
+
+  // Newest published readout per client (list is already newest-first).
+  const readoutHrefByClientId = new Map<string, string>();
+  for (const readout of readouts) {
+    if (!readoutHrefByClientId.has(readout.clientId)) {
+      readoutHrefByClientId.set(
+        readout.clientId,
+        `/portal/insights/${encodeURIComponent(readout.id)}`
+      );
+    }
+  }
 
   const campaigns = await listCampaignsForClientIds(clients.map((client) => client.id));
   const activeCampaigns = campaigns.filter((campaign) =>
@@ -66,8 +82,8 @@ export default async function PortalHomePage() {
         title: assignment.title,
         description: assignment.description,
         href: assignment.href,
-        statusLabel: assignment.status === "active" ? "Active" : "Draft",
-        actionLabel: "Open",
+        readoutHref:
+          readoutHrefByClientId.get(assignment.clientId) ?? "/portal/insights",
       }))}
       welcomeTitle="Your assigned dashboards and materials, all in one place."
       welcomeBody={
