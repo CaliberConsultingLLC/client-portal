@@ -54,6 +54,12 @@ import {
   buildSegmentSummary,
 } from "@/lib/collaboration/demo-insights";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
+import {
+  filterCollaborationModeSections,
+  filterCollaborationTabIds,
+  filterCollaborationTabs,
+} from "@/lib/collaboration/perspective-access";
+import type { EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
 
 interface SegmentCardProps {
   title: string;
@@ -100,7 +106,11 @@ function buildCounts(
   }));
 }
 
-export function CollaborationDemoEnvironment() {
+export function CollaborationDemoEnvironment({
+  portalAccess,
+}: {
+  portalAccess?: EmployeeExperienceUserAccess;
+} = {}) {
   const searchParams = useSearchParams();
   const [scenarioId, setScenarioId] = useState(DEMO_SCENARIOS[0].id);
   const [seed, setSeed] = useState("northstar-demo-01");
@@ -364,6 +374,60 @@ export function CollaborationDemoEnvironment() {
     { key: "tenure", header: "Tenure" },
   ];
   const showDemoLab = searchParams.get("demoLab") === "open";
+  const demoModeSections = useMemo(
+    () =>
+      filterCollaborationModeSections(
+        [
+          {
+            id: "executive",
+            label: "Executive",
+            tabIds: [
+              "overview",
+              "executive-summary",
+              "critical-relationships",
+              "cdrs-heatmap",
+              "cdrs",
+              "ci",
+              "ci-hotspots",
+              "segment-signals",
+            ],
+          },
+          {
+            id: "department",
+            label: "Department",
+            tabIds: [
+              "department-360",
+              "dept",
+              "department-ci-report",
+              "action-priorities",
+            ],
+          },
+        ],
+        portalAccess
+      ),
+    [portalAccess]
+  );
+  const demoTabOrder = useMemo(
+    () =>
+      filterCollaborationTabIds(
+        [
+          "overview",
+          "executive-summary",
+          "critical-relationships",
+          "cdrs-heatmap",
+          "cdrs",
+          "ci",
+          "ci-hotspots",
+          "segment-signals",
+          "department-360",
+          "dept",
+          "department-ci-report",
+          "action-priorities",
+        ],
+        portalAccess
+      ),
+    [portalAccess]
+  );
 
   const updateExecutiveRelationshipRanking = (slot: number, value: string) => {
     setExecutiveRelationshipRanking((current) => {
@@ -668,7 +732,15 @@ export function CollaborationDemoEnvironment() {
     </div>
   );
 
-  return (
+  return demoModeSections.length === 0 ? (
+    <div className="mx-auto max-w-[1320px] px-6 py-8">
+      <Card className="border-border-strong">
+        <CardContent className="px-6 py-8 text-sm text-text-secondary">
+          No Collaboration perspectives are assigned to this user.
+        </CardContent>
+      </Card>
+    </div>
+  ) : (
     <CollaborationDashboardClient
       data={data}
       campaignName={scenario.campaignName}
@@ -685,32 +757,7 @@ export function CollaborationDemoEnvironment() {
       }
       tabRowActionModeId="department"
       floatingPanel={showDemoLab ? demoControls : null}
-      modeSections={[
-        {
-          id: "executive",
-          label: "Executive",
-          tabIds: [
-            "overview",
-            "executive-summary",
-            "critical-relationships",
-            "cdrs-heatmap",
-            "cdrs",
-            "ci",
-            "ci-hotspots",
-            "segment-signals",
-          ],
-        },
-        {
-          id: "department",
-          label: "Department",
-          tabIds: [
-            "department-360",
-            "dept",
-            "department-ci-report",
-            "action-priorities",
-          ],
-        },
-      ]}
+      modeSections={demoModeSections}
       tabOverrides={[
         {
           id: "cdrs-heatmap",
@@ -758,21 +805,8 @@ export function CollaborationDemoEnvironment() {
           ),
         },
       ]}
-      tabOrder={[
-        "overview",
-        "executive-summary",
-        "critical-relationships",
-        "cdrs-heatmap",
-        "cdrs",
-        "ci",
-        "ci-hotspots",
-        "segment-signals",
-        "department-360",
-        "dept",
-        "department-ci-report",
-        "action-priorities",
-      ]}
-      extraTabs={[
+      tabOrder={demoTabOrder}
+      extraTabs={filterCollaborationTabs([
         {
           id: "executive-summary",
           label: "Executive Summary",
@@ -850,7 +884,7 @@ export function CollaborationDemoEnvironment() {
             />
           ),
         },
-      ]}
+      ], portalAccess)}
     />
   );
 }

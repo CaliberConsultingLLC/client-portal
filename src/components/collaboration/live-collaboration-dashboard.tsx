@@ -45,6 +45,12 @@ import {
   type CollaborationDataset,
 } from "@/lib/collaboration/collaboration-dataset";
 import { succinctCiStatementLabel } from "@/lib/collaboration/display-format";
+import {
+  filterCollaborationModeSections,
+  filterCollaborationTabIds,
+  filterCollaborationTabs,
+} from "@/lib/collaboration/perspective-access";
+import type { EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
 
 interface LiveFilters {
   department: string;
@@ -79,6 +85,7 @@ interface LiveCollaborationDashboardProps {
   organizationName: string;
   campaignName: string;
   logoUrl?: string;
+  portalAccess?: EmployeeExperienceUserAccess;
 }
 
 const PERSPECTIVE_GUIDANCE: Record<string, { title: string; paragraphs: string[] }> = {
@@ -254,9 +261,36 @@ export function LiveCollaborationDashboard({
   organizationName,
   campaignName,
   logoUrl = "/top-flight-logo.png",
+  portalAccess,
 }: LiveCollaborationDashboardProps) {
   const { departments, respondents, comments, data, ciQuestions, roles, generations, tenures } =
     dataset;
+  const visibleModeSections = useMemo(
+    () => filterCollaborationModeSections(MODE_SECTIONS, portalAccess),
+    [portalAccess]
+  );
+  const allowedTabOrder = useMemo(
+    () =>
+      filterCollaborationTabIds(
+        [
+          "overview",
+          "executive-summary",
+          "critical-relationships",
+          "cdrs-heatmap",
+          "cdrs",
+          "ci",
+          "ci-hotspots",
+          "segment-signals",
+          "department-360",
+          "dept",
+          "department-ci-report",
+          "comments",
+          "action-priorities",
+        ],
+        portalAccess
+      ),
+    [portalAccess]
+  );
 
   const filterStoreKey = buildDashboardFilterStoreKey(["collab", organizationName, campaignName]);
   const [selectedDepartment, setSelectedDepartment] = usePersistedDashboardFilter(
@@ -289,7 +323,7 @@ export function LiveCollaborationDashboard({
     }
 
     if (perspectiveParam) {
-      const mode = MODE_SECTIONS.find((section) =>
+      const mode = visibleModeSections.find((section) =>
         section.tabIds.includes(perspectiveParam)
       );
       if (mode) {
@@ -301,7 +335,19 @@ export function LiveCollaborationDashboard({
       setSelectedDepartment(departmentParam);
     }
     deepLinkAppliedRef.current = true;
-  }, [departments, searchParams]);
+  }, [departments, searchParams, visibleModeSections]);
+
+  useEffect(() => {
+    if (visibleModeSections.length === 0) return;
+    const nextMode =
+      visibleModeSections.find((section) => section.id === activeMode) ?? visibleModeSections[0];
+    if (nextMode.id !== activeMode) {
+      setActiveMode(nextMode.id);
+    }
+    if (!nextMode.tabIds.includes(activeTab)) {
+      setActiveTab(nextMode.tabIds[0] ?? "");
+    }
+  }, [visibleModeSections, activeMode, activeTab]);
 
   const effectiveSelectedDepartment = departments.includes(selectedDepartment)
     ? selectedDepartment
@@ -563,6 +609,18 @@ export function LiveCollaborationDashboard({
 
   // Report navigation is rendered by the shared design shell in
   // CollaborationDashboardClient; we only feed it filters + guidance slots.
+  if (visibleModeSections.length === 0) {
+    return (
+      <div className="mx-auto max-w-[1320px] px-6 py-8">
+        <Card className="border-border-strong">
+          <CardContent className="px-6 py-8 text-sm text-text-secondary">
+            No Collaboration perspectives are assigned to this user.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <CollaborationDashboardClient
       data={data}
@@ -585,7 +643,7 @@ export function LiveCollaborationDashboard({
       onActiveModeChange={setActiveMode}
       activeTabId={activeTab}
       onActiveTabChange={setActiveTab}
-      modeSections={MODE_SECTIONS}
+      modeSections={visibleModeSections}
       tabOverrides={[
         { id: "cdrs-heatmap", label: "Heatmap" },
         {
@@ -633,22 +691,8 @@ export function LiveCollaborationDashboard({
           ),
         },
       ]}
-      tabOrder={[
-        "overview",
-        "executive-summary",
-        "critical-relationships",
-        "cdrs-heatmap",
-        "cdrs",
-        "ci",
-        "ci-hotspots",
-        "segment-signals",
-        "department-360",
-        "dept",
-        "department-ci-report",
-        "comments",
-        "action-priorities",
-      ]}
-      extraTabs={[
+      tabOrder={allowedTabOrder}
+      extraTabs={filterCollaborationTabs([
         {
           id: "executive-summary",
           label: "Executive Summary",
@@ -736,7 +780,7 @@ export function LiveCollaborationDashboard({
             />
           ),
         },
-      ]}
+      ], portalAccess)}
     />
   );
 }

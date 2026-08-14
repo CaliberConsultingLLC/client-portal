@@ -70,12 +70,20 @@ const INTEGRATION_DASHBOARD_BASE_IDS = new Set([
   "integration-dashboard",
   "csg-integration-dashboard",
 ]);
+const COLLABORATION_DASHBOARD_BASE_IDS = new Set([
+  "collaboration-dashboard",
+  "tf-collaboration",
+]);
 const EMPLOYEE_EXPERIENCE_DASHBOARD_BASE_IDS = new Set([
   "dws-employee-experience",
   "employee-experience",
 ]);
 function isIntegrationDashboardId(assetId: string) {
   return INTEGRATION_DASHBOARD_BASE_IDS.has(normalizeDashboardAssetId(assetId));
+}
+
+function isCollaborationDashboardId(assetId: string) {
+  return COLLABORATION_DASHBOARD_BASE_IDS.has(normalizeDashboardAssetId(assetId));
 }
 
 function isEmployeeExperienceDashboardId(assetId: string) {
@@ -89,11 +97,20 @@ function isEmployeeExperienceDashboardId(assetId: string) {
 
 function resolvePerspectiveOptionsForDashboards(selectedDashboardIds: string[]) {
   const selected = new Set(selectedDashboardIds);
+  const collaborationById = new Map<string, { id: string; label: string }>();
   const integrationById = new Map<string, { id: string; label: string }>();
   const employeeExperienceById = new Map<string, { id: string; label: string }>();
 
   selectedDashboardIds.forEach((dashboardId) => {
     const options = listPerspectiveAccessOptionsForDashboardAsset(dashboardId);
+    if (isCollaborationDashboardId(dashboardId)) {
+      options.forEach((option) => {
+        if (!collaborationById.has(option.id)) {
+          collaborationById.set(option.id, option);
+        }
+      });
+      return;
+    }
     if (isIntegrationDashboardId(dashboardId)) {
       options.forEach((option) => {
         if (!integrationById.has(option.id)) {
@@ -111,13 +128,19 @@ function resolvePerspectiveOptionsForDashboards(selectedDashboardIds: string[]) 
     }
   });
 
+  const collaborationOptions = Array.from(collaborationById.values());
   const integrationOptions = Array.from(integrationById.values());
   const employeeExperienceOptions = Array.from(employeeExperienceById.values());
-  const allOptions = [...integrationOptions, ...employeeExperienceOptions];
+  const allOptions = [
+    ...collaborationOptions,
+    ...integrationOptions,
+    ...employeeExperienceOptions,
+  ];
   const allIds = new Set<string>(allOptions.map((option) => option.id));
 
   return {
     selected,
+    collaborationOptions,
     integrationOptions,
     employeeExperienceOptions,
     allOptions,
@@ -946,112 +969,86 @@ export function AdminUserManagement({
                       workspace.
                     </p>
                     <div className="mt-4 space-y-4">
-                      {availablePerspectiveGroups.integrationOptions.length > 0 ? (
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#60727D]">
-                            Integration
-                          </p>
-                          <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                            {availablePerspectiveGroups.integrationOptions.map((option) => {
-                              const checked = form.employeeExperienceAccess.allowedPerspectiveIds.includes(
-                                option.id
-                              );
-                              return (
-                                <label
-                                  key={option.id}
-                                  className="flex items-start gap-3 rounded-2xl border border-[#D6DEE3] bg-white px-4 py-3 text-sm text-[#355365]"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(event) =>
-                                      setForm((current) => {
-                                        if (!current) return current;
-                                        const next = event.target.checked
-                                          ? Array.from(
-                                              new Set([
-                                                ...current.employeeExperienceAccess.allowedPerspectiveIds,
-                                                option.id,
-                                              ])
-                                            )
-                                          : current.employeeExperienceAccess.allowedPerspectiveIds.filter(
-                                              (value) => value !== option.id
-                                            );
-                                        return {
-                                          ...current,
-                                          employeeExperienceAccess: {
-                                            ...current.employeeExperienceAccess,
-                                            allowedPerspectiveIds: next,
-                                          },
-                                        };
-                                      })
-                                    }
-                                    className="mt-0.5 h-4 w-4 rounded border-[#C9D2D8]"
-                                  />
-                                  <span className="block font-medium text-[#102533]">
-                                    {trimIntegrationPrefix(option.label)}
-                                  </span>
-                                </label>
-                              );
-                            })}
+                      {(
+                        [
+                          {
+                            title: "Collaboration",
+                            options: availablePerspectiveGroups.collaborationOptions,
+                            prefix: null,
+                          },
+                          {
+                            title: "Integration",
+                            options: availablePerspectiveGroups.integrationOptions,
+                            prefix: "integration" as const,
+                          },
+                          {
+                            title: "Employee Experience",
+                            options: availablePerspectiveGroups.employeeExperienceOptions,
+                            prefix: null,
+                          },
+                        ] as const
+                      ).map((group) =>
+                        group.options.length > 0 ? (
+                          <div key={group.title}>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#60727D]">
+                              {group.title}
+                            </p>
+                            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                              {group.options.map((option) => {
+                                const checked =
+                                  form.employeeExperienceAccess.allowedPerspectiveIds.includes(
+                                    option.id
+                                  );
+                                return (
+                                  <label
+                                    key={option.id}
+                                    className="flex items-start gap-3 rounded-2xl border border-[#D6DEE3] bg-white px-4 py-3 text-sm text-[#355365]"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(event) =>
+                                        setForm((current) => {
+                                          if (!current) return current;
+                                          const next = event.target.checked
+                                            ? Array.from(
+                                                new Set([
+                                                  ...current.employeeExperienceAccess
+                                                    .allowedPerspectiveIds,
+                                                  option.id,
+                                                ])
+                                              )
+                                            : current.employeeExperienceAccess.allowedPerspectiveIds.filter(
+                                                (value) => value !== option.id
+                                              );
+                                          return {
+                                            ...current,
+                                            employeeExperienceAccess: {
+                                              ...current.employeeExperienceAccess,
+                                              allowedPerspectiveIds: next,
+                                            },
+                                          };
+                                        })
+                                      }
+                                      className="mt-0.5 h-4 w-4 rounded border-[#C9D2D8]"
+                                    />
+                                    <span className="block font-medium text-[#102533]">
+                                      {group.prefix === "integration"
+                                        ? trimIntegrationPrefix(option.label)
+                                        : option.label}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
-                      ) : null}
-
-                      {availablePerspectiveGroups.employeeExperienceOptions.length > 0 ? (
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#60727D]">
-                            Employee Experience
-                          </p>
-                          <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                            {availablePerspectiveGroups.employeeExperienceOptions.map((option) => {
-                              const checked = form.employeeExperienceAccess.allowedPerspectiveIds.includes(
-                                option.id
-                              );
-                              return (
-                                <label
-                                  key={option.id}
-                                  className="flex items-start gap-3 rounded-2xl border border-[#D6DEE3] bg-white px-4 py-3 text-sm text-[#355365]"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(event) =>
-                                      setForm((current) => {
-                                        if (!current) return current;
-                                        const next = event.target.checked
-                                          ? Array.from(
-                                              new Set([
-                                                ...current.employeeExperienceAccess.allowedPerspectiveIds,
-                                                option.id,
-                                              ])
-                                            )
-                                          : current.employeeExperienceAccess.allowedPerspectiveIds.filter(
-                                              (value) => value !== option.id
-                                            );
-                                        return {
-                                          ...current,
-                                          employeeExperienceAccess: {
-                                            ...current.employeeExperienceAccess,
-                                            allowedPerspectiveIds: next,
-                                          },
-                                        };
-                                      })
-                                    }
-                                    className="mt-0.5 h-4 w-4 rounded border-[#C9D2D8]"
-                                  />
-                                  <span className="block font-medium text-[#102533]">{option.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
+                        ) : null
+                      )}
 
                       {availablePerspectiveGroups.allOptions.length === 0 ? (
                         <p className="rounded-2xl border border-[#D6DEE3] bg-[#F5F8FA] px-4 py-3 text-sm text-[#60727D]">
-                          Select at least one Integration or Employee Experience dashboard to configure
-                          perspective visibility.
+                          Select at least one Collaboration, Integration, or Employee Experience
+                          dashboard to configure perspective visibility.
                         </p>
                       ) : null}
                     </div>

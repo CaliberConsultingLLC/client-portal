@@ -92,13 +92,15 @@ const dashboardRegistry: Record<string, PortalDashboardRendererDefinition> = {
     assetId: "collaboration-dashboard",
     title: "Collaboration",
     family: "collaboration",
-    render: async () => <CollaborationDemoEnvironment />,
+    render: async ({ employeeExperienceAccess } = {}) => (
+      <CollaborationDemoEnvironment portalAccess={employeeExperienceAccess} />
+    ),
   },
   "tf-collaboration": {
     assetId: "tf-collaboration",
     title: "Top Flight Collaboration",
     family: "collaboration",
-    render: async () => {
+    render: async ({ employeeExperienceAccess } = {}) => {
       const { dataset, organizationName, campaignName } =
         await loadTopFlightCollaborationDashboardData();
       return (
@@ -107,6 +109,7 @@ const dashboardRegistry: Record<string, PortalDashboardRendererDefinition> = {
           campaignName={campaignName}
           organizationName={organizationName}
           logoUrl="/top-flight-logo.png"
+          portalAccess={employeeExperienceAccess}
         />
       );
     },

@@ -1,4 +1,9 @@
 import {
+  COLLABORATION_PERSPECTIVE_ACCESS_OPTIONS,
+  expandCollaborationPerspectiveAccessId,
+  listCollaborationPerspectiveOptionsForAsset,
+} from "@/lib/collaboration/perspective-access";
+import {
   ALL_EMPLOYEE_EXPERIENCE_PERSPECTIVE_ACCESS_OPTIONS,
   listEmployeeExperiencePerspectiveOptionsForAsset,
 } from "@/lib/employee-experience/perspective-access";
@@ -45,6 +50,7 @@ export const EE_PERSPECTIVE_ACCESS_OPTIONS = [
   { id: "integration.brandReport", label: "Integration - Brand Report" },
   { id: "integration.employeeVoice", label: "Integration - Employee Voice" },
   ...ALL_EMPLOYEE_EXPERIENCE_PERSPECTIVE_ACCESS_OPTIONS,
+  ...COLLABORATION_PERSPECTIVE_ACCESS_OPTIONS,
 ] as const;
 
 export function listPerspectiveAccessOptionsForDashboardAsset(assetId: string) {
@@ -53,6 +59,10 @@ export function listPerspectiveAccessOptionsForDashboardAsset(assetId: string) {
     return EE_PERSPECTIVE_ACCESS_OPTIONS.filter((option) =>
       option.id.startsWith("integration.")
     );
+  }
+  const collaborationOptions = listCollaborationPerspectiveOptionsForAsset(assetId);
+  if (collaborationOptions.length > 0) {
+    return collaborationOptions;
   }
   return listEmployeeExperiencePerspectiveOptionsForAsset(assetId);
 }
@@ -144,6 +154,11 @@ function normalizePerspectiveIdAlias(value: string) {
   );
   if (exactMatch) {
     return [exactMatch];
+  }
+
+  const collaborationMatches = expandCollaborationPerspectiveAccessId(trimmed);
+  if (collaborationMatches.length > 0) {
+    return collaborationMatches;
   }
 
   const aliases = EE_PERSPECTIVE_ID_ALIASES[normalized] ?? [];
