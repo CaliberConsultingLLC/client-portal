@@ -51,10 +51,8 @@ import {
   filterCollaborationTabs,
 } from "@/lib/collaboration/perspective-access";
 import {
-  filterCollaborationCommentsByUserAccess,
-  filterRecordsBySharedFilter,
-  mapFilterFieldToRespondentKey,
-  valueMatchesAllowedFilterValues,
+  isCollaborationDepartmentLens,
+  resolveCollaborationDepartmentOptions,
   type EmployeeExperienceUserAccess,
 } from "@/lib/firebase/user-access";
 
@@ -270,39 +268,19 @@ export function LiveCollaborationDashboard({
   portalAccess,
 }: LiveCollaborationDashboardProps) {
   const {
-    departments: allDepartments,
-    respondents: allRespondents,
-    comments: allComments,
-    data: sourceData,
+    departments,
+    respondents,
+    comments,
+    data,
     ciQuestions,
     roles,
     generations,
     tenures,
   } = dataset;
-  const respondents = useMemo(
-    () => filterRecordsBySharedFilter(allRespondents, portalAccess),
-    [allRespondents, portalAccess]
-  );
-  const comments = useMemo(
-    () => filterCollaborationCommentsByUserAccess(allComments, portalAccess),
-    [allComments, portalAccess]
-  );
-  const departments = useMemo(() => {
-    const shared = portalAccess?.sharedFilterRule;
-    const key = shared ? mapFilterFieldToRespondentKey(shared.field) : null;
-    if (key !== "department" || !shared || shared.allowedValues.length === 0) {
-      return allDepartments;
-    }
-    return allDepartments.filter((department) =>
-      valueMatchesAllowedFilterValues(department, shared.allowedValues)
-    );
-  }, [allDepartments, portalAccess]);
-  const data = useMemo(
-    () =>
-      portalAccess?.sharedFilterRule?.allowedValues.length
-        ? buildCollaborationDataFromRespondents(respondents, allDepartments, ciQuestions)
-        : sourceData,
-    [allDepartments, ciQuestions, portalAccess, respondents, sourceData]
+  const departmentLens = isCollaborationDepartmentLens(portalAccess);
+  const selectableDepartments = useMemo(
+    () => resolveCollaborationDepartmentOptions(departments, portalAccess),
+    [departments, portalAccess]
   );
   const visibleModeSections = useMemo(
     () => filterCollaborationModeSections(MODE_SECTIONS, portalAccess),
@@ -335,7 +313,7 @@ export function LiveCollaborationDashboard({
   const [selectedDepartment, setSelectedDepartment] = usePersistedDashboardFilter(
     filterStoreKey,
     "selectedDepartment",
-    () => departments[0] ?? ""
+    () => selectableDepartments[0] ?? ""
   );
   const [reportFilters, setReportFilters] = usePersistedDashboardFilter<LiveFilters>(
     filterStoreKey,
@@ -370,11 +348,11 @@ export function LiveCollaborationDashboard({
         setActiveTab(perspectiveParam);
       }
     }
-    if (departmentParam && departments.includes(departmentParam)) {
+    if (departmentParam && selectableDepartments.includes(departmentParam)) {
       setSelectedDepartment(departmentParam);
     }
     deepLinkAppliedRef.current = true;
-  }, [departments, searchParams, visibleModeSections]);
+  }, [selectableDepartments, searchParams, visibleModeSections]);
 
   useEffect(() => {
     if (visibleModeSections.length === 0) return;
@@ -388,9 +366,15 @@ export function LiveCollaborationDashboard({
     }
   }, [visibleModeSections, activeMode, activeTab]);
 
-  const effectiveSelectedDepartment = departments.includes(selectedDepartment)
+  const effectiveSelectedDepartment = selectableDepartments.includes(selectedDepartment)
     ? selectedDepartment
-    : departments[0] ?? "";
+    : selectableDepartments[0] ?? "";
+
+  useEffect(() => {
+    if (departmentLens && reportFilters.department !== "all") {
+      setReportFilters((prev) => ({ ...prev, department: "all" }));
+    }
+  }, [departmentLens, reportFilters.department]);
 
   useEffect(() => {
     setSelectedCiStatement("all");
@@ -558,7 +542,7 @@ export function LiveCollaborationDashboard({
           <PillOptionRow
             value={effectiveSelectedDepartment}
             onChange={setSelectedDepartment}
-            options={departments.map((department) => ({ id: department, label: department }))}
+            options={selectableDepartments.map((department) => ({ id: department, label: department }))}
           />
         </EmbeddedFilterCard>
       ) : null}
@@ -584,6 +568,7 @@ export function LiveCollaborationDashboard({
       ) : null}
       {showSegmentSection ? (
         <>
+          {departmentLens ? null : (
           <EmbeddedFilterCard title="Department">
             <PillOptionRow
               value={reportFilters.department}
@@ -594,6 +579,7 @@ export function LiveCollaborationDashboard({
               ]}
             />
           </EmbeddedFilterCard>
+          )}
           <EmbeddedFilterCard title="Role">
             <PillOptionRow
               value={reportFilters.role}

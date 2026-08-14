@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RefreshCw, Users, Layers, SlidersHorizontal } from "lucide-react";
 import { CollaborationDashboardClient } from "@/app/collaboration/[slug]/dashboard-client";
@@ -60,7 +60,8 @@ import {
   filterCollaborationTabs,
 } from "@/lib/collaboration/perspective-access";
 import {
-  filterRecordsBySharedFilter,
+  isCollaborationDepartmentLens,
+  resolveCollaborationDepartmentOptions,
   type EmployeeExperienceUserAccess,
 } from "@/lib/firebase/user-access";
 
@@ -153,19 +154,33 @@ export function CollaborationDemoEnvironment({
     () => deriveScenarioWithDepartmentCount(baseScenario, departmentCount),
     [baseScenario, departmentCount]
   );
-  const effectiveSelectedDepartment = scenario.departments.includes(selectedDepartment)
+  const selectableDepartments = useMemo(
+    () => resolveCollaborationDepartmentOptions(scenario.departments, portalAccess),
+    [scenario.departments, portalAccess]
+  );
+  const departmentLens = isCollaborationDepartmentLens(portalAccess);
+  const effectiveSelectedDepartment = selectableDepartments.includes(selectedDepartment)
     ? selectedDepartment
-    : scenario.departments[0];
+    : selectableDepartments[0] ?? scenario.departments[0];
   const respondentTargetValue = respondentTargetInput || String(scenario.respondentTarget);
   const respondentTarget = Math.max(
     scenario.departments.length,
     Number.parseInt(respondentTargetValue, 10) || scenario.respondentTarget
   );
 
-  const allRespondents = useMemo(() => {
-    const generated = buildDemoRespondents(scenario, seed, { respondentTarget });
-    return filterRecordsBySharedFilter(generated, portalAccess);
-  }, [scenario, seed, respondentTarget, portalAccess]);
+  const allRespondents = useMemo(
+    () => buildDemoRespondents(scenario, seed, { respondentTarget }),
+    [scenario, seed, respondentTarget]
+  );
+
+  useEffect(() => {
+    if (departmentLens && reportFilters.department !== "all") {
+      setReportFilters((prev) => ({ ...prev, department: "all" }));
+    }
+    if (departmentLens && filters.department !== "all") {
+      setFilters((prev) => ({ ...prev, department: "all" }));
+    }
+  }, [departmentLens, filters.department, reportFilters.department]);
   const filteredRespondents = useMemo(
     () => filterDemoRespondents(allRespondents, filters),
     [allRespondents, filters]
@@ -750,7 +765,7 @@ export function CollaborationDemoEnvironment({
       organizationName={scenario.organizationName}
       tabRowAction={
         <DepartmentSelector
-          departments={scenario.departments}
+          departments={selectableDepartments}
           value={effectiveSelectedDepartment}
           onChange={setSelectedDepartment}
           label=""

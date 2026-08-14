@@ -353,6 +353,41 @@ export function filterRecordsBySharedFilter<T extends object>(
   );
 }
 
+export function isCollaborationDepartmentLens(
+  access: EmployeeExperienceUserAccess | undefined
+) {
+  const shared = access?.sharedFilterRule;
+  if (!shared || shared.allowedValues.length === 0) {
+    return false;
+  }
+  return mapFilterFieldToRespondentKey(shared.field) === "department";
+}
+
+export function filterCollaborationRespondentsByUserAccess<T extends object>(
+  respondents: T[],
+  access: EmployeeExperienceUserAccess | undefined
+): T[] {
+  // Department is a view lens (which team this leader owns). Incoming CDRS is
+  // rated BY other departments, so stripping those respondents zeros the data.
+  if (isCollaborationDepartmentLens(access)) {
+    return respondents;
+  }
+  return filterRecordsBySharedFilter(respondents, access);
+}
+
+export function resolveCollaborationDepartmentOptions(
+  departments: string[],
+  access: EmployeeExperienceUserAccess | undefined
+) {
+  const shared = access?.sharedFilterRule;
+  if (!isCollaborationDepartmentLens(access) || !shared) {
+    return departments;
+  }
+  return departments.filter((department) =>
+    valueMatchesAllowedFilterValues(department, shared.allowedValues)
+  );
+}
+
 export function filterCollaborationCommentsByUserAccess<
   T extends {
     aboutDepartment: string;
@@ -373,10 +408,8 @@ export function filterCollaborationCommentsByUserAccess<
   }
 
   if (key === "department") {
-    return comments.filter(
-      (comment) =>
-        valueMatchesAllowedFilterValues(comment.aboutDepartment, shared.allowedValues) ||
-        valueMatchesAllowedFilterValues(comment.fromDepartment, shared.allowedValues)
+    return comments.filter((comment) =>
+      valueMatchesAllowedFilterValues(comment.aboutDepartment, shared.allowedValues)
     );
   }
 
