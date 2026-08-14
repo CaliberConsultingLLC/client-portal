@@ -59,7 +59,10 @@ import {
   filterCollaborationTabIds,
   filterCollaborationTabs,
 } from "@/lib/collaboration/perspective-access";
-import type { EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
+import {
+  filterRecordsBySharedFilter,
+  type EmployeeExperienceUserAccess,
+} from "@/lib/firebase/user-access";
 
 interface SegmentCardProps {
   title: string;
@@ -159,10 +162,10 @@ export function CollaborationDemoEnvironment({
     Number.parseInt(respondentTargetValue, 10) || scenario.respondentTarget
   );
 
-  const allRespondents = useMemo(
-    () => buildDemoRespondents(scenario, seed, { respondentTarget }),
-    [scenario, seed, respondentTarget]
-  );
+  const allRespondents = useMemo(() => {
+    const generated = buildDemoRespondents(scenario, seed, { respondentTarget });
+    return filterRecordsBySharedFilter(generated, portalAccess);
+  }, [scenario, seed, respondentTarget, portalAccess]);
   const filteredRespondents = useMemo(
     () => filterDemoRespondents(allRespondents, filters),
     [allRespondents, filters]

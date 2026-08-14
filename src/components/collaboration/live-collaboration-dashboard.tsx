@@ -50,7 +50,13 @@ import {
   filterCollaborationTabIds,
   filterCollaborationTabs,
 } from "@/lib/collaboration/perspective-access";
-import type { EmployeeExperienceUserAccess } from "@/lib/firebase/user-access";
+import {
+  filterCollaborationCommentsByUserAccess,
+  filterRecordsBySharedFilter,
+  mapFilterFieldToRespondentKey,
+  valueMatchesAllowedFilterValues,
+  type EmployeeExperienceUserAccess,
+} from "@/lib/firebase/user-access";
 
 interface LiveFilters {
   department: string;
@@ -263,8 +269,41 @@ export function LiveCollaborationDashboard({
   logoUrl = "/top-flight-logo.png",
   portalAccess,
 }: LiveCollaborationDashboardProps) {
-  const { departments, respondents, comments, data, ciQuestions, roles, generations, tenures } =
-    dataset;
+  const {
+    departments: allDepartments,
+    respondents: allRespondents,
+    comments: allComments,
+    data: sourceData,
+    ciQuestions,
+    roles,
+    generations,
+    tenures,
+  } = dataset;
+  const respondents = useMemo(
+    () => filterRecordsBySharedFilter(allRespondents, portalAccess),
+    [allRespondents, portalAccess]
+  );
+  const comments = useMemo(
+    () => filterCollaborationCommentsByUserAccess(allComments, portalAccess),
+    [allComments, portalAccess]
+  );
+  const departments = useMemo(() => {
+    const shared = portalAccess?.sharedFilterRule;
+    const key = shared ? mapFilterFieldToRespondentKey(shared.field) : null;
+    if (key !== "department" || !shared || shared.allowedValues.length === 0) {
+      return allDepartments;
+    }
+    return allDepartments.filter((department) =>
+      valueMatchesAllowedFilterValues(department, shared.allowedValues)
+    );
+  }, [allDepartments, portalAccess]);
+  const data = useMemo(
+    () =>
+      portalAccess?.sharedFilterRule?.allowedValues.length
+        ? buildCollaborationDataFromRespondents(respondents, allDepartments, ciQuestions)
+        : sourceData,
+    [allDepartments, ciQuestions, portalAccess, respondents, sourceData]
+  );
   const visibleModeSections = useMemo(
     () => filterCollaborationModeSections(MODE_SECTIONS, portalAccess),
     [portalAccess]

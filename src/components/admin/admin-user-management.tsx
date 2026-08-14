@@ -21,10 +21,10 @@ import {
 import type { FirebaseUserDoc } from "@/lib/firebase/user-store";
 import {
   DASHBOARD_ACCESS_OPTIONS,
-  FILTER_RULE_FIELD_OPTIONS,
   isDashboardAssetAllowed,
   listPerspectiveAccessOptionsForDashboardAsset,
   normalizeDashboardAssetId,
+  resolveFilterFieldOptionsForDashboards,
   type EmployeeExperienceUserAccess,
   type SharedFilterRule,
   sanitizeEmployeeExperienceUserAccess,
@@ -192,12 +192,24 @@ function pruneAccessForDashboards(
   dashboardIds: string[]
 ): EmployeeExperienceUserAccess {
   const perspectiveGroups = resolvePerspectiveOptionsForDashboards(dashboardIds);
+  const filterFields = resolveFilterFieldOptionsForDashboards(dashboardIds);
+  const filterFieldIds = new Set(filterFields.map((option) => option.id));
   const allowedDashboardAssetIds = access.allowedDashboardAssetIds.filter((id) =>
     dashboardIds.some(
       (dashboardId) =>
         dashboardId === id || isDashboardAssetAllowed(dashboardId, [id]) || isDashboardAssetAllowed(id, [dashboardId])
     )
   );
+  const sharedFilterRule = access.sharedFilterRule
+    ? filterFieldIds.has(access.sharedFilterRule.field)
+      ? access.sharedFilterRule
+      : filterFields[0]
+        ? {
+            field: filterFields[0].id,
+            allowedValues: access.sharedFilterRule.allowedValues,
+          }
+        : null
+    : null;
 
   return {
     ...access,
@@ -205,14 +217,20 @@ function pruneAccessForDashboards(
     allowedPerspectiveIds: access.allowedPerspectiveIds.filter((value) =>
       perspectiveGroups.allIds.has(value)
     ),
+    sharedFilterRule,
     perspectiveFilterRules: access.perspectiveFilterRules.filter((rule) =>
       perspectiveGroups.allIds.has(rule.perspectiveId)
+    ).map((rule) =>
+      filterFieldIds.has(rule.field) || filterFields.length === 0
+        ? rule
+        : { ...rule, field: filterFields[0].id }
     ),
   };
 }
 
 function getSharedFilterDraft(
-  access: EmployeeExperienceUserAccess
+  access: EmployeeExperienceUserAccess,
+  fallbackField = "department"
 ): SharedFilterRule {
   if (access.sharedFilterRule) {
     return {
@@ -229,7 +247,7 @@ function getSharedFilterDraft(
     };
   }
 
-  return { field: "company", allowedValues: [] };
+  return { field: fallbackField, allowedValues: [] };
 }
 
 function trimIntegrationPrefix(label: string) {
@@ -279,6 +297,8 @@ export function AdminUserManagement({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [bannerMessage, setBannerMessage] = useState("");
+  const [sharedFilterText, setSharedFilterText] = useState("");
+  const [guidelineFilterTexts, setGuidelineFilterTexts] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [roleFilter, setRoleFilter] = useState<"all" | FirebasePortalRole>("all");
   const [selectedClientId, setSelectedClientId] = useState<string>(
@@ -383,13 +403,37 @@ export function AdminUserManagement({
     setError("");
     setBannerMessage("");
 
+    const sharedFilterRule = form.employeeExperienceAccess.sharedFilterRule
+      ? {
+          field: filterFieldOptions.some(
+            (option) => option.id === form.employeeExperienceAccess.sharedFilterRule?.field
+          )
+            ? form.employeeExperienceAccess.sharedFilterRule.field
+            : defaultFilterField,
+          allowedValues: parseAllowedValuesInput(sharedFilterText),
+        }
+      : null;
+    const perspectiveFilterRules = form.employeeExperienceAccess.perspectiveFilterRules.map(
+      (rule, ruleIndex) => ({
+        ...rule,
+        allowedValues: parseAllowedValuesInput(guidelineFilterTexts[ruleIndex] ?? rule.allowedValues.join("\n")),
+      })
+    );
+
     try {
       const response = await fetch(savePath, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          employeeExperienceAccess: {
+            ...form.employeeExperienceAccess,
+            sharedFilterRule,
+            perspectiveFilterRules,
+          },
+        }),
       });
 
       const payload = (await response.json()) as { error?: string; user?: FirebaseUserDoc };
@@ -450,13 +494,24 @@ export function AdminUserManagement({
     () => resolvePerspectiveOptionsForDashboards(effectiveDashboardIds),
     [effectiveDashboardIds]
   );
+  const filterFieldOptions = useMemo(
+    () => resolveFilterFieldOptionsForDashboards(effectiveDashboardIds),
+    [effectiveDashboardIds]
+  );
+  const defaultFilterField = filterFieldOptions[0]?.id ?? "department";
   const filterRulesConfigured =
     Boolean(form?.employeeExperienceAccess.sharedFilterRule) ||
     (form?.employeeExperienceAccess.perspectiveFilterRules.length ?? 0) > 0;
-  const sharedFilterDraft = form ? getSharedFilterDraft(form.employeeExperienceAccess) : null;
+  const sharedFilterDraft = form
+    ? getSharedFilterDraft(form.employeeExperienceAccess, defaultFilterField)
+    : null;
+  const sharedFilterField =
+    sharedFilterDraft &&
+    filterFieldOptions.some((option) => option.id === sharedFilterDraft.field)
+      ? sharedFilterDraft.field
+      : defaultFilterField;
   const hasLegacyPerspectiveFilterRules =
     (form?.employeeExperienceAccess.perspectiveFilterRules.length ?? 0) > 0;
-  const filterRuleFieldOptions = FILTER_RULE_FIELD_OPTIONS;
 
   return (
     <div className="space-y-6">
@@ -597,6 +652,9 @@ export function AdminUserManagement({
                             type="button"
                             className="text-[#386B45]"
                             onClick={() => {
+                              const access = sanitizeEmployeeExperienceUserAccess(
+                                user.employeeExperienceAccess
+                              );
                               setForm({
                                 uid: user.uid,
                                 fullName: user.fullName,
@@ -605,10 +663,16 @@ export function AdminUserManagement({
                                 isActive: user.isActive,
                                 password: "",
                                 clientIds: user.clientIds,
-                                employeeExperienceAccess: sanitizeEmployeeExperienceUserAccess(
-                                  user.employeeExperienceAccess
-                                ),
+                                employeeExperienceAccess: access,
                               });
+                              setSharedFilterText(
+                                (access.sharedFilterRule?.allowedValues ?? []).join("\n")
+                              );
+                              setGuidelineFilterTexts(
+                                access.perspectiveFilterRules.map((rule) =>
+                                  rule.allowedValues.join("\n")
+                                )
+                              );
                               setError("");
                               setDialogOpen(true);
                             }}
@@ -842,6 +906,8 @@ export function AdminUserManagement({
                         if (!current) return current;
                         const mode = event.target.value as "configured" | "none";
                         if (mode === "none") {
+                          setSharedFilterText("");
+                          setGuidelineFilterTexts([]);
                           return {
                             ...current,
                             employeeExperienceAccess: {
@@ -853,13 +919,22 @@ export function AdminUserManagement({
                           };
                         }
 
-                        const draft = getSharedFilterDraft(current.employeeExperienceAccess);
+                        const draft = getSharedFilterDraft(
+                          current.employeeExperienceAccess,
+                          defaultFilterField
+                        );
+                        const nextField = filterFieldOptions.some(
+                          (option) => option.id === draft.field
+                        )
+                          ? draft.field
+                          : defaultFilterField;
+                        setSharedFilterText(draft.allowedValues.join("\n"));
                         return {
                           ...current,
                           employeeExperienceAccess: {
                             ...current.employeeExperienceAccess,
                             sharedFilterRule: {
-                              field: draft.field || "company",
+                              field: nextField,
                               allowedValues: draft.allowedValues,
                             },
                           },
@@ -1061,8 +1136,8 @@ export function AdminUserManagement({
                       Shared Filter
                     </p>
                     <p className="mt-2 text-xs text-[#60727D]">
-                      Choose one field and the allowed value(s). This applies across every perspective
-                      this user can open.
+                      Choose a segment from the selected dashboard(s), then list the allowed values.
+                      This applies across every perspective this user can open.
                     </p>
                     {hasLegacyPerspectiveFilterRules ? (
                       <p className="mt-2 rounded-2xl border border-[#E8CC70]/50 bg-[#FFF8E8] px-3 py-2 text-xs text-[#7A5A12]">
@@ -1070,11 +1145,17 @@ export function AdminUserManagement({
                         filter covers everything else.
                       </p>
                     ) : null}
+                    {filterFieldOptions.length === 0 ? (
+                      <p className="mt-3 rounded-2xl border border-[#D6DEE3] bg-[#F5F8FA] px-4 py-3 text-sm text-[#60727D]">
+                        Select a dashboard first so filter fields can be loaded from that dashboard&apos;s
+                        segments.
+                      </p>
+                    ) : (
                     <div className="mt-3 grid gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:items-start">
                       <div>
                         <Select
                           label="Filter field"
-                          value={sharedFilterDraft.field}
+                          value={sharedFilterField}
                           onChange={(event) =>
                             setForm((current) => {
                               if (!current) return current;
@@ -1093,20 +1174,21 @@ export function AdminUserManagement({
                             })
                           }
                         >
-                          {filterRuleFieldOptions.map((value) => (
-                            <option key={value} value={value}>
-                              {value}
+                          {filterFieldOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
                             </option>
                           ))}
                         </Select>
                       </div>
                       <Textarea
-                        label="Allowed values (comma or one per line)"
-                        value={sharedFilterDraft.allowedValues.join("\n")}
-                        onChange={(event) =>
+                        label="Allowed values (one per line)"
+                        value={sharedFilterText}
+                        onChange={(event) => {
+                          const nextText = event.target.value;
+                          setSharedFilterText(nextText);
                           setForm((current) => {
                             if (!current) return current;
-                            const values = parseAllowedValuesInput(event.target.value);
                             return {
                               ...current,
                               employeeExperienceAccess: {
@@ -1114,18 +1196,21 @@ export function AdminUserManagement({
                                 sharedFilterRule: {
                                   field:
                                     current.employeeExperienceAccess.sharedFilterRule?.field ||
-                                    sharedFilterDraft.field ||
-                                    "company",
-                                  allowedValues: values,
+                                    sharedFilterField,
+                                  allowedValues: parseAllowedValuesInput(nextText),
                                 },
                               },
                             };
-                          })
-                        }
-                        placeholder={"CNC"}
+                          });
+                        }}
+                        placeholder={"Shipping and Receiving"}
                         className="min-h-[88px]"
                       />
                     </div>
+                    )}
+                    <p className="mt-2 text-xs text-[#60727D]">
+                      One value per line. Spaces are kept, so Shipping and Receiving is a single value.
+                    </p>
                     <div className="mt-4 rounded-2xl border border-[#E1E7EB] bg-[#F9FBFC] p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#60727D]">
@@ -1143,6 +1228,7 @@ export function AdminUserManagement({
                               if (!fallbackPerspective) {
                                 return current;
                               }
+                              setGuidelineFilterTexts((texts) => [...texts, ""]);
                               return {
                                 ...current,
                                 employeeExperienceAccess: {
@@ -1151,7 +1237,7 @@ export function AdminUserManagement({
                                     ...current.employeeExperienceAccess.perspectiveFilterRules,
                                     {
                                       perspectiveId: fallbackPerspective,
-                                      field: sharedFilterDraft.field || "company",
+                                      field: sharedFilterField,
                                       allowedValues: [],
                                     },
                                   ],
@@ -1225,9 +1311,9 @@ export function AdminUserManagement({
                                     })
                                   }
                                 >
-                                  {filterRuleFieldOptions.map((value) => (
-                                    <option key={value} value={value}>
-                                      {value}
+                                  {filterFieldOptions.map((option) => (
+                                    <option key={option.id} value={option.id}>
+                                      {option.label}
                                     </option>
                                   ))}
                                 </Select>
@@ -1235,7 +1321,10 @@ export function AdminUserManagement({
                                   type="button"
                                   variant="outline"
                                   className="rounded-full border-[#C9D2D8]"
-                                  onClick={() =>
+                                  onClick={() => {
+                                    setGuidelineFilterTexts((texts) =>
+                                      texts.filter((_, index) => index !== ruleIndex)
+                                    );
                                     setForm((current) => {
                                       if (!current) return current;
                                       return {
@@ -1248,23 +1337,29 @@ export function AdminUserManagement({
                                             ),
                                         },
                                       };
-                                    })
-                                  }
+                                    });
+                                  }}
                                 >
                                   Remove
                                 </Button>
                               </div>
                               <div className="mt-3">
                                 <Textarea
-                                  label="Allowed values (comma or one per line)"
-                                  value={rule.allowedValues.join("\n")}
-                                  onChange={(event) =>
+                                  label="Allowed values (one per line)"
+                                  value={guidelineFilterTexts[ruleIndex] ?? rule.allowedValues.join("\n")}
+                                  onChange={(event) => {
+                                    const nextText = event.target.value;
+                                    setGuidelineFilterTexts((texts) => {
+                                      const next = [...texts];
+                                      next[ruleIndex] = nextText;
+                                      return next;
+                                    });
                                     setForm((current) => {
                                       if (!current) return current;
                                       const nextRules = [...current.employeeExperienceAccess.perspectiveFilterRules];
                                       nextRules[ruleIndex] = {
                                         ...nextRules[ruleIndex],
-                                        allowedValues: parseAllowedValuesInput(event.target.value),
+                                        allowedValues: parseAllowedValuesInput(nextText),
                                       };
                                       return {
                                         ...current,
@@ -1273,8 +1368,9 @@ export function AdminUserManagement({
                                           perspectiveFilterRules: nextRules,
                                         },
                                       };
-                                    })
-                                  }
+                                    });
+                                  }}
+                                  placeholder="Shipping and Receiving"
                                   className="min-h-[72px]"
                                 />
                               </div>

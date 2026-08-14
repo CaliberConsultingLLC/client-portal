@@ -67,16 +67,80 @@ export function listPerspectiveAccessOptionsForDashboardAsset(assetId: string) {
   return listEmployeeExperiencePerspectiveOptionsForAsset(assetId);
 }
 
+export type FilterFieldOption = {
+  id: string;
+  label: string;
+};
+
+const COLLABORATION_FILTER_FIELD_OPTIONS: FilterFieldOption[] = [
+  { id: "department", label: "Department" },
+  { id: "role", label: "Role" },
+  { id: "generation", label: "Generation" },
+  { id: "tenure", label: "Tenure" },
+];
+
+const INTEGRATION_FILTER_FIELD_OPTIONS: FilterFieldOption[] = [
+  { id: "brand", label: "Brand" },
+];
+
+const DWS_FILTER_FIELD_OPTIONS: FilterFieldOption[] = [
+  { id: "location", label: "Basin / Location" },
+  { id: "department", label: "Department" },
+  { id: "division", label: "Division" },
+  { id: "supervisor", label: "Supervisor" },
+  { id: "leadership", label: "Leadership Role" },
+  { id: "fieldCategory", label: "Job Category" },
+  { id: "jobTitle", label: "Job Title" },
+  { id: "tenure", label: "Tenure" },
+];
+
+const CSG_FILTER_FIELD_OPTIONS: FilterFieldOption[] = [
+  { id: "brand", label: "Brand" },
+  { id: "department", label: "Department" },
+  { id: "supervisor", label: "Supervisor" },
+  { id: "jobTitle", label: "Job Title" },
+  { id: "fieldCategory", label: "Job Category" },
+];
+
 export const FILTER_RULE_FIELD_OPTIONS = [
-  "company",
-  "brand",
-  "location",
-  "department",
-  "division",
-  "fieldCategory",
-  "jobTitle",
-  "supervisor",
+  ...new Set(
+    [
+      ...COLLABORATION_FILTER_FIELD_OPTIONS,
+      ...INTEGRATION_FILTER_FIELD_OPTIONS,
+      ...DWS_FILTER_FIELD_OPTIONS,
+      ...CSG_FILTER_FIELD_OPTIONS,
+    ].map((option) => option.id)
+  ),
 ] as const;
+
+export function listFilterFieldOptionsForDashboardAsset(assetId: string): FilterFieldOption[] {
+  const base = normalizeDashboardAssetId(assetId);
+  if (base === "collaboration-dashboard" || base === "tf-collaboration") {
+    return COLLABORATION_FILTER_FIELD_OPTIONS;
+  }
+  if (base === "integration-dashboard" || base === "csg-integration-dashboard") {
+    return INTEGRATION_FILTER_FIELD_OPTIONS;
+  }
+  if (base === "dws-employee-experience") {
+    return DWS_FILTER_FIELD_OPTIONS;
+  }
+  if (base === "employee-experience") {
+    return CSG_FILTER_FIELD_OPTIONS;
+  }
+  return [];
+}
+
+export function resolveFilterFieldOptionsForDashboards(dashboardIds: string[]) {
+  const byId = new Map<string, FilterFieldOption>();
+  dashboardIds.forEach((dashboardId) => {
+    listFilterFieldOptionsForDashboardAsset(dashboardId).forEach((option) => {
+      if (!byId.has(option.id)) {
+        byId.set(option.id, option);
+      }
+    });
+  });
+  return Array.from(byId.values());
+}
 
 const DASHBOARD_ACCESS_IDS: Set<string> = new Set(
   DASHBOARD_ACCESS_OPTIONS.map((option) => option.id)
@@ -98,7 +162,7 @@ const EE_PERSPECTIVE_ID_ALIASES: Record<string, string[]> = {
   "employeeexperience.opentext": ["hr-open-text", "ee-brand-open-text"],
 };
 
-/** Map admin filter field names onto EE respondent properties. */
+/** Map admin filter field names onto respondent properties. */
 const FILTER_FIELD_TO_RESPONDENT_KEY: Record<string, string> = {
   company: "location",
   brand: "location",
@@ -109,6 +173,11 @@ const FILTER_FIELD_TO_RESPONDENT_KEY: Record<string, string> = {
   supervisor: "supervisor",
   jobtitle: "jobTitle",
   fieldcategory: "fieldCategory",
+  leadership: "leadership",
+  role: "role",
+  generation: "generation",
+  tenure: "tenure",
+  ratetype: "rateType",
 };
 
 function sanitizeList(values: unknown) {
@@ -134,7 +203,7 @@ function sanitizeDelimitedValues(values: unknown) {
     new Set(
       values
         .flatMap((value) =>
-          typeof value === "string" ? value.split(/[\r\n,]+/) : []
+          typeof value === "string" ? value.split(/\r?\n/) : []
         )
         .map((value) => value.trim())
         .filter(Boolean)
@@ -244,6 +313,81 @@ export function mapFilterFieldToRespondentKey(field: string) {
   return FILTER_FIELD_TO_RESPONDENT_KEY[field.trim().toLowerCase()] ?? null;
 }
 
+export function valueMatchesAllowedFilterValues(
+  value: string,
+  allowedValues: Iterable<string>
+) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const allowed = Array.from(allowedValues);
+  if (allowed.some((entry) => entry === trimmed)) {
+    return true;
+  }
+
+  const lower = trimmed.toLowerCase();
+  return allowed.some((entry) => entry.trim().toLowerCase() === lower);
+}
+
+export function filterRecordsBySharedFilter<T extends object>(
+  records: T[],
+  access: EmployeeExperienceUserAccess | undefined
+): T[] {
+  const shared = access?.sharedFilterRule;
+  if (!shared || shared.allowedValues.length === 0) {
+    return records;
+  }
+
+  const key = mapFilterFieldToRespondentKey(shared.field);
+  if (!key) {
+    return records;
+  }
+
+  return records.filter((record) =>
+    valueMatchesAllowedFilterValues(
+      String((record as Record<string, unknown>)[key] ?? ""),
+      shared.allowedValues
+    )
+  );
+}
+
+export function filterCollaborationCommentsByUserAccess<
+  T extends {
+    aboutDepartment: string;
+    fromDepartment: string;
+    role: string;
+    generation: string;
+    tenure: string;
+  },
+>(comments: T[], access: EmployeeExperienceUserAccess | undefined): T[] {
+  const shared = access?.sharedFilterRule;
+  if (!shared || shared.allowedValues.length === 0) {
+    return comments;
+  }
+
+  const key = mapFilterFieldToRespondentKey(shared.field);
+  if (!key) {
+    return comments;
+  }
+
+  if (key === "department") {
+    return comments.filter(
+      (comment) =>
+        valueMatchesAllowedFilterValues(comment.aboutDepartment, shared.allowedValues) ||
+        valueMatchesAllowedFilterValues(comment.fromDepartment, shared.allowedValues)
+    );
+  }
+
+  return comments.filter((comment) =>
+    valueMatchesAllowedFilterValues(
+      String((comment as Record<string, unknown>)[key] ?? ""),
+      shared.allowedValues
+    )
+  );
+}
+
 /**
  * Resolve allowed filter values for a perspective.
  * Perspective-specific rules win when present; otherwise the shared rule applies.
@@ -295,16 +439,11 @@ export function filterRespondentsByUserAccess<T extends { location: string }>(
 
   let next = respondents;
 
-  const shared = access.sharedFilterRule;
-  if (shared && shared.allowedValues.length > 0) {
-    const key = mapFilterFieldToRespondentKey(shared.field);
-    if (key) {
-      const allowed = new Set(shared.allowedValues);
-      next = next.filter((respondent) =>
-        allowed.has(String((respondent as Record<string, unknown>)[key] ?? ""))
-      );
-    }
-  }
+  const sharedFiltered = filterRecordsBySharedFilter(
+    next as object[],
+    access
+  ) as T[];
+  next = sharedFiltered;
 
   const ruleBasedAllowedBrands = resolveAllowedValuesForPerspective(
     access,
