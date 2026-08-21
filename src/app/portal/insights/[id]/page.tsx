@@ -17,6 +17,8 @@ function clientLogoFor(clientId: string) {
       return "/canopy-services-logo.png";
     case "tf":
       return "/top-flight-logo.png";
+    case "tsi":
+      return "/tsi-logo.svg";
     default:
       return "/CClogo3.png";
   }

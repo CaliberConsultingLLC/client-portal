@@ -73,6 +73,7 @@ const INTEGRATION_DASHBOARD_BASE_IDS = new Set([
 const COLLABORATION_DASHBOARD_BASE_IDS = new Set([
   "collaboration-dashboard",
   "tf-collaboration",
+  "tsi-collaboration",
 ]);
 const EMPLOYEE_EXPERIENCE_DASHBOARD_BASE_IDS = new Set([
   "dws-employee-experience",

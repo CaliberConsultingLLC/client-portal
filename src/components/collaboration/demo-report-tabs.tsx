@@ -1542,12 +1542,14 @@ export function DepartmentCiReportTab({
   respondents,
   departments,
   selectedStatementIndex = "all",
+  organizationName,
 }: {
   data: CollaborationData;
   selectedDepartment: string;
   respondents: DemoRespondent[];
   departments: string[];
   selectedStatementIndex?: number | "all";
+  organizationName?: string;
 }) {
   const detail = data.departmentDetails.find(
     (department) => department.department === selectedDepartment
@@ -1648,7 +1650,9 @@ export function DepartmentCiReportTab({
           {
             label: "Organization Average",
             value: formatScoreForDisplay(orgAverageCi),
-            sublabel: "Top Flight average CI",
+            sublabel: organizationName
+              ? `${organizationName} average CI`
+              : "Organization average CI",
           },
         ]}
       />

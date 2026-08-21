@@ -87,6 +87,20 @@ const clientSpecificAssets: Record<string, PortalAsset[]> = {
       tags: ["Dashboard", "Collaboration"],
     },
   ],
+  tsi: [
+    {
+      id: "tsi-collaboration",
+      title: "Tech Systems Collaboration",
+      description:
+        "Collaboration reporting for Tech Systems, Inc. with department relationship scores, heatmaps, and action priorities.",
+      type: "dashboard",
+      status: "active",
+      href: "/portal/dashboards/tsi-collaboration",
+      previewHref: "/portal/dashboards/tsi-collaboration",
+      updatedLabel: "Updated today",
+      tags: ["Dashboard", "Collaboration"],
+    },
+  ],
   dws: [
     {
       id: "dws-employee-experience",

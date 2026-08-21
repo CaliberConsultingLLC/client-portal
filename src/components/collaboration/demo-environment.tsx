@@ -877,6 +877,7 @@ export function CollaborationDemoEnvironment({
               selectedDepartment={effectiveSelectedDepartment}
               respondents={filteredRespondents}
               departments={data.meta.departments}
+              organizationName={scenario.organizationName}
             />
           ),
         },

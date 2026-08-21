@@ -19,6 +19,7 @@ export const PROTECTED_CLIENT_ASSET_IDS = new Set([
   "integration-dashboard",
   "collaboration-dashboard--tsi",
   "tf-collaboration",
+  "tsi-collaboration",
 ]);
 
 const LEGACY_ALIAS_ASSET_IDS = new Set(["dws-employee-experience", "employee-experience--csg"]);

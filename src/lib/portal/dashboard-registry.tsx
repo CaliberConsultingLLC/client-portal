@@ -4,6 +4,7 @@ import { DwsEmployeeExperienceDashboardClient } from "@/app/employee-experience/
 import { IntegrationEffectivenessDashboardClient } from "@/app/integration-effectiveness/demo/dashboard-client";
 import { LiveCollaborationDashboard } from "@/components/collaboration/live-collaboration-dashboard";
 import { loadTopFlightCollaborationDashboardData } from "@/lib/collaboration/tf-collaboration";
+import { loadTechSystemsCollaborationDashboardData } from "@/lib/collaboration/tsi-collaboration";
 import { getFirebaseDashboardInstanceById } from "@/lib/firebase/dashboard-store";
 import {
   loadDwsEmployeeExperienceDashboardData,
@@ -109,6 +110,24 @@ const dashboardRegistry: Record<string, PortalDashboardRendererDefinition> = {
           campaignName={campaignName}
           organizationName={organizationName}
           logoUrl="/top-flight-logo.png"
+          portalAccess={employeeExperienceAccess}
+        />
+      );
+    },
+  },
+  "tsi-collaboration": {
+    assetId: "tsi-collaboration",
+    title: "Tech Systems Collaboration",
+    family: "collaboration",
+    render: async ({ employeeExperienceAccess } = {}) => {
+      const { dataset, organizationName, campaignName } =
+        await loadTechSystemsCollaborationDashboardData();
+      return (
+        <LiveCollaborationDashboard
+          dataset={dataset}
+          campaignName={campaignName}
+          organizationName={organizationName}
+          logoUrl="/tsi-logo.svg"
           portalAccess={employeeExperienceAccess}
         />
       );

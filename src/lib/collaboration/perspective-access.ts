@@ -11,6 +11,7 @@ type CollaborationPerspectiveAccess = {
 export const COLLABORATION_DASHBOARD_BASE_IDS = new Set([
   "collaboration-dashboard",
   "tf-collaboration",
+  "tsi-collaboration",
 ]);
 
 /** Runtime tab IDs used by the collaboration dashboard (demo + live). */

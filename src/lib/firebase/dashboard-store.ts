@@ -369,6 +369,34 @@ export function buildDefaultDashboardInstances(): PortalDashboardInstance[] {
       createdAt: timestamp,
       updatedAt: timestamp,
     },
+    {
+      id: "tsi-collaboration-instance",
+      dashboardId: "collaboration-v1",
+      assetId: "tsi-collaboration",
+      family: "collaboration",
+      title: "Tech Systems Collaboration",
+      description:
+        "Collaboration reporting for Tech Systems, Inc. using a preview dataset across TSI departments.",
+      previewHref: "/portal/dashboards/tsi-collaboration",
+      internalNotes: null,
+      dataSource: {
+        kind: "synthetic_demo",
+        label: "Tech Systems collaboration preview dataset",
+        sourceClientId: "tsi",
+        notes: "Synthetic department-level collaboration data for the TSI workspace preview.",
+      },
+      dataMapping: buildDefaultDataMapping("collaboration"),
+      settings: {
+        status: "active",
+        visibilityThreshold: null,
+        hiddenDimensionIds: [],
+      },
+      perspectiveCount: 0,
+      reportCount: 0,
+      lastUsedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
   ];
 }
 
@@ -434,6 +462,15 @@ export function buildDefaultDashboardAccessGrants(): PortalDashboardAccessGrant[
       id: "tf-collaboration-access",
       clientId: "tf",
       dashboardInstanceId: "tf-collaboration-instance",
+      status: "active",
+      published: true,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+    {
+      id: "tsi-collaboration-access",
+      clientId: "tsi",
+      dashboardInstanceId: "tsi-collaboration-instance",
       status: "active",
       published: true,
       createdAt: timestamp,

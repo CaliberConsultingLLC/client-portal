@@ -38,6 +38,7 @@ export const DASHBOARD_ACCESS_OPTIONS = [
   { id: "csg-integration-dashboard", label: "CSG Integration Effectiveness" },
   { id: "collaboration-dashboard", label: "Collaboration" },
   { id: "tf-collaboration", label: "Top Flight Collaboration" },
+  { id: "tsi-collaboration", label: "Tech Systems Collaboration" },
   { id: "dws-employee-experience", label: "DWS Employee Experience" },
   { id: "employee-experience", label: "Employee Experience" },
 ] as const;
@@ -115,7 +116,11 @@ export const FILTER_RULE_FIELD_OPTIONS = [
 
 export function listFilterFieldOptionsForDashboardAsset(assetId: string): FilterFieldOption[] {
   const base = normalizeDashboardAssetId(assetId);
-  if (base === "collaboration-dashboard" || base === "tf-collaboration") {
+  if (
+    base === "collaboration-dashboard" ||
+    base === "tf-collaboration" ||
+    base === "tsi-collaboration"
+  ) {
     return COLLABORATION_FILTER_FIELD_OPTIONS;
   }
   if (base === "integration-dashboard" || base === "csg-integration-dashboard") {

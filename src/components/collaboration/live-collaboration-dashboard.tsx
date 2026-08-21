@@ -769,6 +769,7 @@ export function LiveCollaborationDashboard({
               respondents={respondents}
               departments={departments}
               selectedStatementIndex={selectedCiStatement}
+              organizationName={organizationName}
             />
           ),
         },
