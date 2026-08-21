@@ -17,7 +17,6 @@ export const PROTECTED_CLIENT_ASSET_IDS = new Set([
   "csg-integration-dashboard",
   "collaboration-dashboard",
   "integration-dashboard",
-  "collaboration-dashboard--tsi",
   "tf-collaboration",
   "tsi-collaboration",
 ]);

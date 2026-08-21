@@ -286,12 +286,6 @@ export function buildDefaultDashboardPerspectiveInstances(): DashboardPerspectiv
     buildDashboardPerspectiveInstance("collaboration-demo-instance", byId("collaboration-ci"), 4),
     buildDashboardPerspectiveInstance("collaboration-demo-instance", byId("collaboration-department-report"), 5),
 
-    buildDashboardPerspectiveInstance("collaboration-tsi-demo-instance", byId("collaboration-overview"), 1),
-    buildDashboardPerspectiveInstance("collaboration-tsi-demo-instance", byId("collaboration-cdrs-heatmap"), 2),
-    buildDashboardPerspectiveInstance("collaboration-tsi-demo-instance", byId("collaboration-cdrs"), 3),
-    buildDashboardPerspectiveInstance("collaboration-tsi-demo-instance", byId("collaboration-ci"), 4),
-    buildDashboardPerspectiveInstance("collaboration-tsi-demo-instance", byId("collaboration-department-report"), 5),
-
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-overview"), 1),
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-longitudinal-trends"), 2),
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-statement-trends"), 3),
