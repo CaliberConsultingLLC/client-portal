@@ -2173,6 +2173,8 @@ export function DwsEmployeeExperienceDashboardClient({
   const [execSupervisorDepartment, setExecSupervisorDepartment] = useState("");
   const [execSupervisorJobCategory, setExecSupervisorJobCategory] = useState("");
   const [execComparisonJobCategory, setExecComparisonJobCategory] = useState("");
+  // TSI Department Comparison filters by Role (the Role column) instead of Job Category.
+  const [execComparisonRole, setExecComparisonRole] = useState("");
   const [execComparisonDepartment, setExecComparisonDepartment] = useState("");
   const [execDeptStatementId, setExecDeptStatementId] = useState(COMPARISON_ALL);
   const [execBrandStatementId, setExecBrandStatementId] = useState(COMPARISON_ALL);
@@ -2446,6 +2448,21 @@ export function DwsEmployeeExperienceDashboardClient({
   const execBrandFilteredBundle = useMemo(
     () => buildEmployeeExperienceReportBundle(execBrandFilteredData, { logoUrl, campaignLabel: current, scale: reportScaleOption }),
     [execBrandFilteredData, logoUrl, current, reportScaleOption]
+  );
+  const departmentComparisonBundle = useMemo(
+    () =>
+      clientScope.key === "tsi" && execComparisonRole
+        ? buildEmployeeExperienceReportBundle(
+            {
+              ...execBrandFilteredData,
+              respondents: execBrandFilteredData.respondents.filter(
+                (respondent) => respondent.role === execComparisonRole
+              ),
+            },
+            { logoUrl, campaignLabel: current, scale: reportScaleOption }
+          )
+        : execBrandFilteredBundle,
+    [clientScope.key, execComparisonRole, execBrandFilteredData, execBrandFilteredBundle, logoUrl, current, reportScaleOption]
   );
   const historyFilteredBundle = useMemo(
     () =>
@@ -2797,7 +2814,11 @@ export function DwsEmployeeExperienceDashboardClient({
       <>
         {activePersp === "ee-department-comparison" ? (
           <>
-            <FilterField embedded={embedded} title="Job Category" value={execComparisonJobCategory} onChange={setExecComparisonJobCategory} options={jobCategoryOpts} allLabel="All job categories" />
+            {clientScope.key === "tsi" ? (
+              <FilterField embedded={embedded} title="Role" value={execComparisonRole} onChange={setExecComparisonRole} options={roleOpts} allLabel="All roles" />
+            ) : (
+              <FilterField embedded={embedded} title="Job Category" value={execComparisonJobCategory} onChange={setExecComparisonJobCategory} options={jobCategoryOpts} allLabel="All job categories" />
+            )}
             <FilterField embedded={embedded} title="Department" value={execComparisonDepartment} onChange={setExecComparisonDepartment} options={deptOpts} allLabel="All departments" />
           </>
         ) : null}
@@ -3197,7 +3218,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-department-comparison":
         return clientScope.layout === "dws" ? (
           <EEDepartmentComparison
-            data={execBrandFilteredBundle.departmentComparisonByDepartment}
+            data={departmentComparisonBundle.departmentComparisonByDepartment}
             benchmarkLabel={clientScope.benchmarkLabel}
             title="Department Comparison"
             primaryLabel="Department"
@@ -3734,7 +3755,7 @@ export function DwsEmployeeExperienceDashboardClient({
         );
       default: return null;
     }
-  }, [activePersp, activeGroup, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, openTextFields, selectedDept, deptOpts, jobCategoryOpts, reportBundle, autosepBundle, activeBreakdown, execBrandFilteredBundle, campaignResultsBundle, historyFilteredBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDivision, execDeptStatementId, execBrandStatementId, execComparisonJobCategory, execComparisonDepartment, supervisorComparisonReport, hrSupervisorReport, brandEnpsReport, availableGroups.length, clientScope, enpsDescriptorText, redesignActive, departmentReportBrand, brandReportUnitOptions, departmentReportBrandOptions, brandLocations]);
+  }, [activePersp, activeGroup, data, current, prior, hrRankFilters, selectedDim, idxFilters, supFilters, selectedSup, supOpts, openTextBrand, openTextField, openTextFields, selectedDept, deptOpts, jobCategoryOpts, reportBundle, autosepBundle, activeBreakdown, execBrandFilteredBundle, campaignResultsBundle, historyFilteredBundle, dashboardInstanceId, canEditGuidance, executiveRail, activeExecIndexId, activeExecCompId, execLocation, execDivision, execDeptStatementId, execBrandStatementId, execComparisonJobCategory, execComparisonDepartment, departmentComparisonBundle, supervisorComparisonReport, hrSupervisorReport, brandEnpsReport, availableGroups.length, clientScope, enpsDescriptorText, redesignActive, departmentReportBrand, brandReportUnitOptions, departmentReportBrandOptions, brandLocations]);
 
   const exportFilename = buildDashboardExportFilename({
     client: clientScope.key,

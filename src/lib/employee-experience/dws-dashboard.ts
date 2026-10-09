@@ -1031,7 +1031,7 @@ function resolveJobCategoryConfig(sourceClientId?: string): {
   fallbackIndex: number | null;
 } {
   const id = (sourceClientId ?? "").trim();
-  if (id === "dws" || id === "dws-field") {
+  if (id === "dws" || id === "dws-field" || id === "tsi") {
     return { aliases: ["Job Category", "Job Title", "Job Family", "Title"], fallbackIndex: null };
   }
   // CSG / default contract (unchanged).
