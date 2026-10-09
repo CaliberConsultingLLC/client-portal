@@ -54,8 +54,8 @@ const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string
   // Tech Systems (TSI) EE — cloned from the DWS office dashboard. Upload both
   // files to clients/tsi/data/ in Firebase Storage; names must match exactly.
   tsi: {
-    database: "TSI EE Database.csv",
-    statements: "TSI EE Statements.csv",
+    database: "TSi EE Database.csv",
+    statements: "TSi EE Statements.csv",
   },
 };
 // Maps a logical sourceClientId to the Firebase Storage client folder when
@@ -503,6 +503,16 @@ function parseCampaignDate(rawValue: string) {
   if (yearMonth) {
     const year = 2000 + Number.parseInt(yearMonth[1], 10);
     const month = MONTH_INDEX[yearMonth[2].slice(0, 3).toLowerCase()];
+    if (month !== undefined) {
+      return { time: new Date(year, month, 1).getTime(), label: `${MONTHS_3[month]} ${year}` };
+    }
+  }
+
+  // "Sep 2026" / "July 2024" (TSi campaign labels).
+  const monthNameYear = trimmed.match(/^([A-Za-z]+)\.?\s+(\d{4})$/);
+  if (monthNameYear) {
+    const month = MONTH_INDEX[monthNameYear[1].slice(0, 3).toLowerCase()];
+    const year = Number.parseInt(monthNameYear[2], 10);
     if (month !== undefined) {
       return { time: new Date(year, month, 1).getTime(), label: `${MONTHS_3[month]} ${year}` };
     }
@@ -992,6 +1002,24 @@ function parseStatements(statementsCsvText: string): {
   }
 
   return { scoring, commentMap };
+}
+
+function mapTsiCommentItems(statementsCsvText: string): CommentIdMap | null {
+  const rows = parseCSV(statementsCsvText);
+  const commentIds = rows
+    .slice(1)
+    .filter((row) => (row[1] ?? "").trim().toLowerCase() === "comment")
+    .map((row) => Number.parseInt(row[0] ?? "", 10))
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
+  if (commentIds.length === 0) return null;
+  const [improvement, strengths, supervisor] = commentIds;
+  return {
+    strengths: strengths !== undefined ? [strengths] : [],
+    improvement: improvement !== undefined ? [improvement] : [],
+    supervisor: supervisor !== undefined ? [supervisor] : [],
+    acquisition: [],
+  };
 }
 
 // Job Category ("field category") lives in a different column per client data
@@ -1689,7 +1717,14 @@ async function computeDwsEmployeeExperienceDashboardData({
       readCsvFromStorage(statementsStoragePath),
     ]);
 
-  const { scoring: definitions, commentMap } = parseStatements(statementsCsvText);
+  const { scoring: definitions, commentMap: parsedCommentMap } = parseStatements(statementsCsvText);
+  // TSi's three open-text questions don't match the DWS keyword buckets, so map
+  // them by item order instead: challenges -> improvement, most engaged ->
+  // strengths, three words -> supervisor slot (relabeled in the TSI scope).
+  const commentMap =
+    safeSourceClientId === "tsi"
+      ? mapTsiCommentItems(statementsCsvText) ?? parsedCommentMap
+      : parsedCommentMap;
   const respondents = parseRespondents(definitions, databaseCsvText, commentMap, safeSourceClientId);
   return buildEmployeeExperienceDashboardData({
     organizationName,

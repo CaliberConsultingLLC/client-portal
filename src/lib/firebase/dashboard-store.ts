@@ -328,7 +328,7 @@ export function buildDefaultDashboardInstances(): PortalDashboardInstance[] {
         kind: "firebase_csv_workspace",
         label: "Tech Systems employee experience workspace",
         sourceClientId: "tsi",
-        notes: "Reads TSI EE Database.csv and TSI EE Statements.csv from clients/tsi/data in Firebase Storage.",
+        notes: "Reads TSi EE Database.csv and TSi EE Statements.csv from clients/tsi/data in Firebase Storage.",
       },
       dataMapping: buildDefaultDataMapping("employee_experience"),
       settings: {

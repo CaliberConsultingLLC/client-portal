@@ -47,7 +47,7 @@ function EmployeeExperienceAwaitingData({ title }: { title: string }) {
       <h1 className="text-3xl font-semibold tracking-tight text-[#2B2B2B]">{title}</h1>
       <p className="text-sm leading-relaxed text-[#60727D]">
         This dashboard is set up and will populate as soon as the first campaign is loaded. Upload{" "}
-        <code>TSI EE Database.csv</code> and <code>TSI EE Statements.csv</code> to{" "}
+        <code>TSi EE Database.csv</code> and <code>TSi EE Statements.csv</code> to{" "}
         <code>clients/tsi/data/</code> in Firebase Storage.
       </p>
     </div>

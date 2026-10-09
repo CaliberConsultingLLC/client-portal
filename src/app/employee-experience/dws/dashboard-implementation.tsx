@@ -458,6 +458,11 @@ const TSI_SCOPE: EmployeeExperienceClientScope = {
     "ee-supervisor-comparison",
     "ee-historical-report",
   ]),
+  openTextFields: [
+    { id: "improvement", label: "Challenges & Support" },
+    { id: "strengths", label: "Most Engaged" },
+    { id: "supervisor", label: "Three Words" },
+  ],
 };
 
 function resolveEmployeeExperienceClientScope(organizationName: string) {
