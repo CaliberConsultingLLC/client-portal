@@ -30,7 +30,7 @@ const DATABASE_FILE_NAME = "DWSDatabase.csv";
 const STATEMENTS_FILE_NAME = "DWS 2024 Campaign Statements.csv";
 // Bump when the projection/parse logic changes shape so persistent caches recompute
 // even when the underlying source CSVs are unchanged.
-const DASHBOARD_SCHEMA_VERSION = "2026-06-30-field-segments";
+const DASHBOARD_SCHEMA_VERSION = "2026-10-09-tsi-campaign-dates";
 const DEFAULT_SOURCE_CLIENT_ID = "dws";
 const SOURCE_CLIENT_LABELS: Record<string, string> = {
   csg: "Canopy Services Group",
@@ -469,10 +469,23 @@ const MONTH_INDEX: Record<string, number> = {
 };
 const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
-function parseCampaignDate(rawValue: string) {
+function parseCampaignDate(rawValue: string, sourceClientId?: string) {
   const trimmed = rawValue.trim();
   if (!trimmed) {
     return { time: 0, label: "Unknown Campaign" };
+  }
+
+  // TSi: Excel saves campaign dates as day-Mon-YY ("24-Feb-26"). The leading
+  // day is meaningless; month + two-digit year identify the campaign.
+  if ((sourceClientId ?? "").trim() === "tsi") {
+    const dayMonYear = trimmed.match(/^\d{1,2}-([A-Za-z]+)-(\d{2}|\d{4})$/);
+    if (dayMonYear) {
+      const month = MONTH_INDEX[dayMonYear[1].slice(0, 3).toLowerCase()];
+      const year = dayMonYear[2].length === 2 ? 2000 + Number.parseInt(dayMonYear[2], 10) : Number.parseInt(dayMonYear[2], 10);
+      if (month !== undefined) {
+        return { time: new Date(year, month, 1).getTime(), label: `${MONTHS_3[month]} ${year}` };
+      }
+    }
   }
 
   if (trimmed.includes("/")) {
@@ -1109,7 +1122,7 @@ function parseRespondents(
     })
     .map((row) => {
       const campaignRaw = normalizeLabel(getAliasedValue(row, ["Campaign"]), "Unknown Campaign");
-      const campaign = parseCampaignDate(campaignRaw);
+      const campaign = parseCampaignDate(campaignRaw, sourceClientId);
       const scores = Object.fromEntries(
         questionIds.map((itemId) => [itemId, getRespondentScore(row, itemId, getValue)])
       ) as Record<number, number | null>;

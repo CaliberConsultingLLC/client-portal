@@ -92,14 +92,19 @@ function niceTickStep(range: number) {
   return [0.5, 1, 2, 2.5, 5, 10, 20].find((step) => range / step <= 5) ?? 25;
 }
 
+const STATEMENT_LINE_COLOR = "#4A90D9";
+
 function HistoryChart({
   campaigns,
   values,
   compact = false,
+  overlayValues,
 }: {
   campaigns: any[];
   values: number[];
   compact?: boolean;
+  /** One statement's scores per campaign (null = no data), drawn as a thinner blue line. */
+  overlayValues?: Array<number | null> | null;
 }) {
   const width = compact ? 640 : 940;
   const height = compact ? 238 : 292;
@@ -108,7 +113,10 @@ function HistoryChart({
   const maxMonth = Math.max(...months);
   // The axis frames only what is actually plotted, so real movement fills the
   // chart instead of flattening against a wide fixed window.
-  const domain = values;
+  const domain = [
+    ...values,
+    ...(overlayValues ?? []).filter((value): value is number => typeof value === "number"),
+  ];
   const domainMin = Math.min(...domain);
   const domainMax = Math.max(...domain);
   const domainPad = Math.max(0.5, (domainMax - domainMin) * 0.2);
@@ -120,6 +128,14 @@ function HistoryChart({
   const yFor = (value) => pad.top + (1 - (value - min) / (max - min)) * (height - pad.top - pad.bottom);
   const points = campaigns.map((campaign, index) => ({ x: xFor(campaign.month), y: yFor(values[index]), value: values[index] }));
   const line = buildSmoothPath(points);
+  const overlayPoints = (overlayValues ?? [])
+    .map((value, index) =>
+      typeof value === "number" && campaigns[index]
+        ? { x: xFor(campaigns[index].month), y: yFor(value), value, id: campaigns[index].id }
+        : null
+    )
+    .filter(Boolean);
+  const overlayLine = overlayPoints.length > 1 ? buildSmoothPath(overlayPoints) : "";
   const area = `${buildSmoothPath(points)} L${points.at(-1).x},${height - pad.bottom} L${points[0].x},${height - pad.bottom} Z`;
   const yTicks = Array.from(
     { length: Math.round((max - min) / step) + 1 },
@@ -142,6 +158,15 @@ function HistoryChart({
       ))}
       <path d={area} fill="rgba(129,153,180,.22)" />
       <path d={line} fill="none" stroke="#3F5F86" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+      {overlayLine ? (
+        <path d={overlayLine} fill="none" stroke={STATEMENT_LINE_COLOR} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      ) : null}
+      {overlayPoints.map((point) => (
+        <g key={`overlay-${point.id}`}>
+          <circle cx={point.x} cy={point.y} r="3" fill="#fff" stroke={STATEMENT_LINE_COLOR} strokeWidth="1.5" />
+          <text x={point.x + 7} y={point.y + 4} fill={STATEMENT_LINE_COLOR} fontSize="10" fontWeight="800">{point.value.toFixed(1)}</text>
+        </g>
+      ))}
       {points.map((point, index) => (
         <g key={campaigns[index].id}>
           <rect x={point.x - 20} y={point.y - 31} width="40" height="22" rx="6" fill="#3B4B63" />
@@ -165,6 +190,7 @@ export function EEHistoricalReport({
   headerPortalId,
   basinReportSurface = false,
   filterPersistenceKey,
+  statementOverlay = false,
 }: {
   data: any;
   embedded?: boolean;
@@ -182,6 +208,9 @@ export function EEHistoricalReport({
    * caller leaves this unset and keeps the hard-edged default look. */
   basinReportSurface?: boolean;
   filterPersistenceKey?: string;
+  /** Detailed History only: lets a viewer pick one statement (circle beside it)
+   * to draw as a thin blue line on Score Over Time. Enabled for TSI. */
+  statementOverlay?: boolean;
 }) {
   const { client, scale, departments, campaigns, indexes, orgResponsesByCampaign, overallSeries } = data;
   const exportRegistry = useVisualExportRegistry();
@@ -198,6 +227,7 @@ export function EEHistoricalReport({
     () => selectedIndexId ?? ALL
   );
   const isAll = deptId === ALL;
+  const [overlayStatementId, setOverlayStatementId] = useState<string | null>(null);
   const dept = departments.find((item) => item.id === deptId) ?? departments[0];
   const first = campaigns[0];
   const last = campaigns[campaigns.length - 1];
@@ -516,6 +546,19 @@ export function EEHistoricalReport({
     }
   }, [selectedIndexId, focus]);
 
+  // The statement line only shows statements from the open index; switching
+  // index clears it.
+  const overlayStatement =
+    statementOverlay && overlayStatementId && focusIndex
+      ? focusIndex.statements.find((statement) => statement.id === overlayStatementId) ?? null
+      : null;
+  useEffect(() => {
+    if (overlayStatementId && !overlayStatement) setOverlayStatementId(null);
+  }, [overlayStatementId, overlayStatement]);
+  const overlayValues = overlayStatement
+    ? campaigns.map((campaign) => statementValue(overlayStatement, campaign.id))
+    : null;
+
   const exportFile = (section: string) =>
     buildDashboardExportFilename({ client: "dws", perspective: `${title}-${section}`, campaign: activeCampaign?.label ?? activeCampaign?.short });
   // Keep the composite export header in sync with the active perspective/filters.
@@ -643,7 +686,33 @@ export function EEHistoricalReport({
             <RegisteredVisualExportFrame order={10} label="Download chart" filename={exportFile("score-over-time")}>
             <div className="card" style={{ marginBottom: basinReportSurface ? 36 : 18 }}>
               <div className="card-head"><h3 className="card-title">Score Over Time</h3></div>
-              <div className="card-body"><HistoryChart campaigns={campaigns} values={series} /></div>
+              <div className="card-body">
+                <HistoryChart campaigns={campaigns} values={series} overlayValues={overlayValues} />
+                {overlayStatement ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 8, fontSize: 12, color: "#3B4B63" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 18, height: 2.5, background: "#3F5F86", borderRadius: 2 }} />
+                      {scopeLabel}
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <span style={{ width: 18, height: 1.5, background: STATEMENT_LINE_COLOR, borderRadius: 2, flexShrink: 0 }} />
+                      <span style={{ color: STATEMENT_LINE_COLOR, fontWeight: 600 }}>{overlayStatement.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => setOverlayStatementId(null)}
+                        style={{ marginLeft: 4, color: "#6E7E96", fontWeight: 700, background: "none", border: 0, cursor: "pointer" }}
+                        aria-label="Remove statement line"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                ) : statementOverlay && focusIndex ? (
+                  <p style={{ marginTop: 8, fontSize: 12, color: "#6E7E96" }}>
+                    Select the circle beside a statement below to add its line to this chart.
+                  </p>
+                ) : null}
+              </div>
             </div>
             </RegisteredVisualExportFrame>
           ) : null}
@@ -707,7 +776,35 @@ export function EEHistoricalReport({
                           const currentColor = currentValue != null ? scoreColor(currentValue) : "#F8FAFC";
                           return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td><td className="cell col-group-end" style={{ background: currentColor, color: currentValue != null ? textFor(currentColor) : "#6E7E96" }}>{currentValue != null ? currentValue.toFixed(1) : "—"}</td><td className="cell col-group-start" style={statementDeltaLast == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(statementDeltaLast).bg, color: dwsDeltaStyle(statementDeltaLast).text }}>{statementDeltaLast == null ? "—" : f1(statementDeltaLast)}</td></tr>;
                         }
-                        return <tr key={statement.id} className="stmt-row"><td className="stmt-sub">{statement.text}</td>{values.map((value, idx) => { const color = value != null ? scoreColor(value) : "#F8FAFC"; return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: value != null ? textFor(color) : "#6E7E96" }}>{value != null ? value.toFixed(1) : "—"}</td>; })}{hasComparison ? <td className="cell col-group-start" style={statementDeltaLast == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(statementDeltaLast).bg, color: dwsDeltaStyle(statementDeltaLast).text }}>{statementDeltaLast == null ? "—" : f1(statementDeltaLast)}</td> : null}{hasComparison ? <td className="cell" style={statementDeltaAll == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(statementDeltaAll).bg, color: dwsDeltaStyle(statementDeltaAll).text }}>{statementDeltaAll == null ? "—" : f1(statementDeltaAll)}</td> : null}</tr>;
+                        const overlaySelected = overlayStatementId === statement.id;
+                        const statementCell = statementOverlay ? (
+                          <td className="stmt-sub">
+                            <button
+                              type="button"
+                              onClick={() => setOverlayStatementId(overlaySelected ? null : statement.id)}
+                              aria-pressed={overlaySelected}
+                              title={overlaySelected ? "Remove this statement's line" : "Show this statement on the chart"}
+                              style={{ display: "inline-flex", alignItems: "flex-start", gap: 8, textAlign: "left", background: "none", border: 0, padding: 0, cursor: "pointer", color: "inherit", font: "inherit" }}
+                            >
+                              <span
+                                style={{
+                                  flexShrink: 0,
+                                  marginTop: 2,
+                                  width: 12,
+                                  height: 12,
+                                  borderRadius: "50%",
+                                  border: `1.5px solid ${overlaySelected ? STATEMENT_LINE_COLOR : "#8798AA"}`,
+                                  background: overlaySelected ? STATEMENT_LINE_COLOR : "#fff",
+                                  boxShadow: overlaySelected ? "inset 0 0 0 2px #fff" : "none",
+                                }}
+                              />
+                              <span>{statement.text}</span>
+                            </button>
+                          </td>
+                        ) : (
+                          <td className="stmt-sub">{statement.text}</td>
+                        );
+                        return <tr key={statement.id} className="stmt-row">{statementCell}{values.map((value, idx) => { const color = value != null ? scoreColor(value) : "#F8FAFC"; return <td key={campaigns[idx].id} className={`cell${idx === campaigns.length - 1 ? " col-group-end" : ""}`} style={{ background: color, color: value != null ? textFor(color) : "#6E7E96" }}>{value != null ? value.toFixed(1) : "—"}</td>; })}{hasComparison ? <td className="cell col-group-start" style={statementDeltaLast == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(statementDeltaLast).bg, color: dwsDeltaStyle(statementDeltaLast).text }}>{statementDeltaLast == null ? "—" : f1(statementDeltaLast)}</td> : null}{hasComparison ? <td className="cell" style={statementDeltaAll == null ? { color: "#6E7E96" } : { background: dwsDeltaStyle(statementDeltaAll).bg, color: dwsDeltaStyle(statementDeltaAll).text }}>{statementDeltaAll == null ? "—" : f1(statementDeltaAll)}</td> : null}</tr>;
                       })}
                     </>
                   );

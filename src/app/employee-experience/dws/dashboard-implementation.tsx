@@ -3456,6 +3456,7 @@ export function DwsEmployeeExperienceDashboardClient({
                 chromeless={redesignActive}
                 headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}
                 basinReportSurface={useRedesignSurfaceTint}
+                statementOverlay={clientScope.key === "tsi"}
               />
             </div>
             {fixedInfoRail}
