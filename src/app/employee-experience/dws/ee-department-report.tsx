@@ -117,6 +117,7 @@ export function EEDepartmentReport({
   fieldLayout = false,
   compact = false,
   chromeless = false,
+  separateCampaignCards = false,
   filtersPortalId,
   headerPortalId,
   titleSuffixPortalId,
@@ -149,6 +150,8 @@ export function EEDepartmentReport({
    * `filtersPortalId`. Defaults to false — every other dashboard is unaffected.
    */
   chromeless?: boolean;
+  /** Chromeless only: Current and Compared To as two separate filter cards. */
+  separateCampaignCards?: boolean;
   filtersPortalId?: string;
   /**
    * Basin Report only (redesign pilot): when set and chromeless, the KPI strip
@@ -516,7 +519,27 @@ export function EEDepartmentReport({
         </RailSection>
       )}
       {hasComparison ? (
-        chromeless ? (
+        chromeless && separateCampaignCards ? (
+          <>
+            <EmbeddedFilterCard title="Campaign Selection">
+              <PillOptionRow
+                value={curCamp.id}
+                onChange={setCurrentCampaignId}
+                options={timelineRecentFirst.map((campaign) => ({ id: campaign.id, label: campaign.labelLong || campaign.label }))}
+              />
+            </EmbeddedFilterCard>
+            <EmbeddedFilterCard title="Compared To">
+              <PillOptionRow
+                value={previous?.id ?? ""}
+                onChange={setPriorCampaignId}
+                options={[
+                  { id: "", label: "No comparison" },
+                  ...timelineRecentFirst.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => ({ id: campaign.id, label: campaign.labelLong || campaign.label })),
+                ]}
+              />
+            </EmbeddedFilterCard>
+          </>
+        ) : chromeless ? (
           <EmbeddedFilterCard title="Campaign">
             <div className="flex flex-col gap-3">
               <div>

@@ -59,6 +59,7 @@ export function EEExecutiveRail({
   brandLabel = "Brand",
   extraSections,
   embedded = false,
+  separateCampaignCards = false,
 }: {
   logoUrl?: string;
   clientName: string;
@@ -90,6 +91,9 @@ export function EEExecutiveRail({
    * false — every existing dashboard renders identically.
    */
   embedded?: boolean;
+  /** Embedded only: render Current and Compared To as two separate filter
+   * cards (the Breakdown-page treatment) instead of one combined card. */
+  separateCampaignCards?: boolean;
 }) {
   const comp = comparisons.find((item) => item.id === compId) ?? comparisons[0];
   // Hide the campaign selection control entirely when there is no prior campaign to compare.
@@ -98,7 +102,27 @@ export function EEExecutiveRail({
   const sections = (
     <>
       {hasComparison ? (
-        embedded ? (
+        embedded && separateCampaignCards ? (
+          <>
+            <EmbeddedFilterCard title="Campaign Selection">
+              <PillOptionRow
+                value={current}
+                onChange={onCurrent}
+                options={[...campaigns].reverse().map((campaign) => ({ id: campaign, label: campaign }))}
+              />
+            </EmbeddedFilterCard>
+            <EmbeddedFilterCard title="Compared To">
+              <PillOptionRow
+                value={prior}
+                onChange={onPrior}
+                options={[
+                  { id: "", label: "No comparison" },
+                  ...[...campaigns].reverse().filter((campaign) => campaign !== current).map((campaign) => ({ id: campaign, label: campaign })),
+                ]}
+              />
+            </EmbeddedFilterCard>
+          </>
+        ) : embedded ? (
           <EmbeddedFilterCard title="Campaign">
             <div className="flex flex-col gap-3">
               <div>

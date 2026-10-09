@@ -2896,6 +2896,7 @@ export function DwsEmployeeExperienceDashboardClient({
 
   const renderExecutiveRail = (embedded = false) => clientScope.executivePerspectives.has(activePersp) ? (
     <EEExecutiveRail
+      separateCampaignCards={clientScope.key === "tsi"}
       embedded={embedded}
       logoUrl={logoUrl}
       clientName={data.meta.organizationName}
@@ -3487,6 +3488,7 @@ export function DwsEmployeeExperienceDashboardClient({
         // breakdown. CSG keeps the classic supervisor report.
         return isFieldScope || clientScope.layout === "dws" ? (
           <EEDepartmentReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="supervisor-segment-report"
             chromeless={redesignActive}
@@ -3505,6 +3507,7 @@ export function DwsEmployeeExperienceDashboardClient({
           />
         ) : (
           <EESupervisorReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             data={hrSupervisorReport}
             benchmarkLabel={clientScope.benchmarkLabel}
@@ -3531,6 +3534,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-brand-report":
         return (
           <EEDepartmentReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key={`${clientScope.key}-brand-report`}
             chromeless={redesignActive}
@@ -3664,6 +3668,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-department-report":
         return (
           <EEDepartmentReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key={`${clientScope.key}-job-category-report`}
             chromeless={redesignActive}
@@ -3686,6 +3691,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-division-report":
         return (
           <EEDepartmentReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="division-report"
             chromeless={redesignActive}
@@ -3708,6 +3714,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-unit-department-report":
         return (
           <EEDepartmentReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="department-report"
             chromeless={redesignActive}
@@ -3737,6 +3744,7 @@ export function DwsEmployeeExperienceDashboardClient({
       case "ee-autosep-report":
         return (
           <EEDepartmentReport
+            separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="autosep-report"
             chromeless={redesignActive}

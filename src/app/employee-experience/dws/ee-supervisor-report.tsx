@@ -100,6 +100,7 @@ export function EESupervisorReport({
   benchmarkLabel = "CSG",
   fieldLayout = false,
   chromeless = false,
+  separateCampaignCards = false,
   basinReportSurface = false,
   filtersPortalId,
   filterPersistenceKey,
@@ -108,6 +109,8 @@ export function EESupervisorReport({
   benchmarkLabel?: string;
   fieldLayout?: boolean;
   chromeless?: boolean;
+  /** Chromeless only: Current and Compared To as two separate filter cards. */
+  separateCampaignCards?: boolean;
   basinReportSurface?: boolean;
   filtersPortalId?: string;
   filterPersistenceKey?: string;
@@ -247,7 +250,24 @@ export function EESupervisorReport({
         </RailSection>
       )}
       {hasComparison ? (
-        chromeless ? (
+        chromeless && separateCampaignCards ? (
+          <>
+            <EmbeddedFilterCard title="Campaign Selection">
+              <PillOptionRow
+                value={curCamp.id}
+                onChange={setCurrentCampaignId}
+                options={timelineRecentFirst.map((campaign) => ({ id: campaign.id, label: campaign.labelLong || campaign.label }))}
+              />
+            </EmbeddedFilterCard>
+            <EmbeddedFilterCard title="Compared To">
+              <PillOptionRow
+                value={previous?.id ?? ""}
+                onChange={setPriorCampaignId}
+                options={timelineRecentFirst.filter((campaign) => campaign.id !== curCamp.id).map((campaign) => ({ id: campaign.id, label: campaign.labelLong || campaign.label }))}
+              />
+            </EmbeddedFilterCard>
+          </>
+        ) : chromeless ? (
           <EmbeddedFilterCard title="Campaign Selection">
             <div className="flex flex-col gap-3">
               <div>
