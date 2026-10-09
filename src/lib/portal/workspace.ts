@@ -100,6 +100,18 @@ const clientSpecificAssets: Record<string, PortalAsset[]> = {
       updatedLabel: "Updated today",
       tags: ["Dashboard", "Collaboration"],
     },
+    {
+      id: "employee-experience--tsi",
+      title: "Tech Systems Employee Experience",
+      description:
+        "Employee experience reporting for Tech Systems, Inc. with executive results, department/region, role, and supervisor views.",
+      type: "dashboard",
+      status: "active",
+      href: "/portal/dashboards/employee-experience--tsi",
+      previewHref: "/portal/dashboards/employee-experience--tsi",
+      updatedLabel: "Awaiting data",
+      tags: ["Dashboard", "Employee Experience"],
+    },
   ],
   dws: [
     {

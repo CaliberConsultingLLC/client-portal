@@ -40,6 +40,20 @@ function eeDashboardProps(options?: PortalDashboardRenderOptions) {
   };
 }
 
+function EmployeeExperienceAwaitingData({ title }: { title: string }) {
+  return (
+    <div className="mx-auto max-w-3xl space-y-4 py-16">
+      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#60727D]">Awaiting survey data</p>
+      <h1 className="text-3xl font-semibold tracking-tight text-[#2B2B2B]">{title}</h1>
+      <p className="text-sm leading-relaxed text-[#60727D]">
+        This dashboard is set up and will populate as soon as the first campaign is loaded. Upload{" "}
+        <code>TSI EE Database.csv</code> and <code>TSI EE Statements.csv</code> to{" "}
+        <code>clients/tsi/data/</code> in Firebase Storage.
+      </p>
+    </div>
+  );
+}
+
 async function renderEmployeeExperienceDashboard(options?: PortalDashboardRenderOptions) {
   const sharedProps = eeDashboardProps(options);
 
@@ -70,9 +84,35 @@ async function renderEmployeeExperienceDashboard(options?: PortalDashboardRender
       );
     }
 
+    const sourceClientId = instance?.dataSource.sourceClientId ?? undefined;
+    // TSI is scaffolded ahead of its first survey upload. Until both CSVs are in
+    // clients/tsi/data, show where the data goes instead of an error page.
+    if (sourceClientId === "tsi") {
+      try {
+        const data = await loadDwsEmployeeExperienceDashboardData({
+          hiddenDimensionIds: instance?.settings.hiddenDimensionIds ?? [],
+          sourceClientId,
+        });
+        if (data.meta.campaigns.length === 0) {
+          return <EmployeeExperienceAwaitingData title={instance?.title ?? "Employee Experience"} />;
+        }
+        return (
+          <DwsEmployeeExperienceDashboardClient
+            data={data}
+            logoUrl={instance?.logoUrl ?? "/tsi-logo.svg"}
+            redesignLayout={instance?.settings.redesignEnabled ?? false}
+            {...sharedProps}
+          />
+        );
+      } catch (error) {
+        console.error("TSI employee experience data is not available yet.", error);
+        return <EmployeeExperienceAwaitingData title={instance?.title ?? "Employee Experience"} />;
+      }
+    }
+
     const data = await loadDwsEmployeeExperienceDashboardData({
       hiddenDimensionIds: instance?.settings.hiddenDimensionIds ?? [],
-      sourceClientId: instance?.dataSource.sourceClientId ?? undefined,
+      sourceClientId,
     });
     return (
       <DwsEmployeeExperienceDashboardClient

@@ -1,6 +1,6 @@
 import { loadDwsEEDataMap } from "@/lib/employee-experience/dws-dashboard";
 
-const EE_SOURCE_CLIENT_IDS = new Set(["csg", "dws", "dws-field"]);
+const EE_SOURCE_CLIENT_IDS = new Set(["csg", "dws", "dws-field", "tsi"]);
 
 export interface SurveyWaveSource {
   sourceClientId: string;

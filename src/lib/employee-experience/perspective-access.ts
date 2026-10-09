@@ -15,7 +15,7 @@ type EEGroupDef = {
   perspectives: EEPerspectiveDef[];
 };
 
-type EEClientScopeKey = "csg" | "dws" | "dws-field";
+type EEClientScopeKey = "csg" | "dws" | "dws-field" | "tsi";
 
 export const CSG_EMPLOYEE_EXPERIENCE_GROUPS: EEGroupDef[] = [
   {
@@ -161,6 +161,12 @@ export const DWS_FIELD_EMPLOYEE_EXPERIENCE_GROUPS: EEGroupDef[] = [
   },
 ];
 
+// Tech Systems (TSI) — cloned from the DWS office groups with Division and
+// Basin removed. Department reads the DEPT/REG column; Role reads Role.
+export const TSI_EMPLOYEE_EXPERIENCE_GROUPS: EEGroupDef[] = DWS_EMPLOYEE_EXPERIENCE_GROUPS.filter(
+  (group) => group.id !== "division" && group.id !== "basin"
+);
+
 const BREAKDOWN_INSERTIONS: Record<
   EEClientScopeKey,
   Partial<Record<string, { id: string; label: string; afterReportId: string }>>
@@ -169,6 +175,10 @@ const BREAKDOWN_INSERTIONS: Record<
   dws: {
     division: { id: "ee-division-breakdown", label: "Division Breakdown", afterReportId: "ee-division-report" },
     basin: { id: "ee-segment-breakdown", label: "Basin Breakdown", afterReportId: "ee-brand-report" },
+    "dept-group": { id: "ee-department-breakdown", label: "Department Breakdown", afterReportId: "ee-unit-department-report" },
+    "role-group": { id: "ee-role-breakdown", label: "Role Breakdown", afterReportId: "ee-department-report" },
+  },
+  tsi: {
     "dept-group": { id: "ee-department-breakdown", label: "Department Breakdown", afterReportId: "ee-unit-department-report" },
     "role-group": { id: "ee-role-breakdown", label: "Role Breakdown", afterReportId: "ee-department-report" },
   },
@@ -183,6 +193,7 @@ const BREAKDOWN_INSERTIONS: Record<
 function baseGroupsForScope(scope: EEClientScopeKey): EEGroupDef[] {
   if (scope === "csg") return CSG_EMPLOYEE_EXPERIENCE_GROUPS;
   if (scope === "dws") return DWS_EMPLOYEE_EXPERIENCE_GROUPS;
+  if (scope === "tsi") return TSI_EMPLOYEE_EXPERIENCE_GROUPS;
   return DWS_FIELD_EMPLOYEE_EXPERIENCE_GROUPS;
 }
 

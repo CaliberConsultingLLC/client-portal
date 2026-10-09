@@ -36,6 +36,7 @@ const SOURCE_CLIENT_LABELS: Record<string, string> = {
   csg: "Canopy Services Group",
   dws: "Deep Well Services",
   "dws-field": "Deep Well Services — Field",
+  tsi: "Tech Systems, Inc.",
 };
 const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string }> = {
   csg: {
@@ -49,6 +50,12 @@ const SOURCE_CLIENT_FILES: Record<string, { database: string; statements: string
   "dws-field": {
     database: "Field Database.csv",
     statements: "EE Field Statements.csv",
+  },
+  // Tech Systems (TSI) EE — cloned from the DWS office dashboard. Upload both
+  // files to clients/tsi/data/ in Firebase Storage; names must match exactly.
+  tsi: {
+    database: "TSI EE Database.csv",
+    statements: "TSI EE Statements.csv",
   },
 };
 // Maps a logical sourceClientId to the Firebase Storage client folder when
@@ -1047,6 +1054,14 @@ function parseRespondents(
   };
 
   const jobCategoryConfig = resolveJobCategoryConfig(sourceClientId);
+  // TSI's database names its unit column "DEPT/REG" (department/region), and its
+  // Role views read the "Role" column. The DWS office layout drives Role
+  // Report/Comparison/Breakdown off `leadership`, so TSI fills that from Role.
+  const isTsi = (sourceClientId ?? "").trim() === "tsi";
+  const departmentAliases = isTsi
+    ? ["DEPT/REG", "Dept/Reg", "DEPT / REG", "Department", "Dept"]
+    : ["Department", "Dept"];
+  const leadershipAliases = isTsi ? ["Role"] : ["Leadership", "Leadership Level"];
   const getJobCategoryValue = (row: string[]) => {
     for (const name of jobCategoryConfig.aliases) {
       const value = getAliasedValue(row, [name]);
@@ -1077,13 +1092,13 @@ function parseRespondents(
         campaignLabel: campaign.label,
         campaignTime: campaign.time,
         location: normalizeLabel(getAliasedValue(row, [...BRAND_SEGMENT_COLUMN_ALIASES]), UNKNOWN_BRAND_LABEL),
-        department: normalizeLabel(getAliasedValue(row, ["Department", "Dept"]), "Unknown Department"),
+        department: normalizeLabel(getAliasedValue(row, departmentAliases), "Unknown Department"),
         division: normalizeLabel(getAliasedValue(row, ["Division", "Division Name"]), "Unknown Division"),
         supervisor: normalizeLabel(getAliasedValue(row, ["Supervisor", "Manager"]), "Unknown Supervisor"),
         jobTitle: normalizeLabel(getAliasedValue(row, ["Job Title", "Job Family", "Title"]), "Unknown Job Title"),
         fieldCategory: normalizeLabel(getJobCategoryValue(row), "Unspecified"),
         role: normalizeLabel(getAliasedValue(row, ["Role"]), "Unspecified"),
-        leadership: normalizeLabel(getAliasedValue(row, ["Leadership", "Leadership Level"]), "Unspecified"),
+        leadership: normalizeLabel(getAliasedValue(row, leadershipAliases), "Unspecified"),
         generation: normalizeLabel(getAliasedValue(row, ["Generation", "Generational Cohort"]), "Unspecified"),
         rateType: normalizeLabel(getAliasedValue(row, ["Rate Type", "Pay Type"]), "Unspecified"),
         tenure: normalizeLabel(getAliasedValue(row, ["Tenure", "Years of Service"]), "Unspecified"),
@@ -1698,7 +1713,12 @@ async function computeDwsEmployeeExperienceDashboardData({
             { id: "job-category", label: "Job Category", field: "fieldCategory" },
             { id: "job-title", label: "Job Title", field: "jobTitle" },
           ]
-        : undefined,
+        : safeSourceClientId === "tsi"
+          ? [
+              { id: "role", label: "Role", field: "role" },
+              { id: "tenure", label: "Tenure", field: "tenure" },
+            ]
+          : undefined,
     hiddenDimensionIds: mergeHiddenDimensionIds([
       ...(hiddenDimensionIds ?? (demo ? DEMO_HIDDEN_DIMENSION_IDS : [])),
       ...(safeSourceClientId === "csg" ? CSG_EXCLUDED_DIMENSION_IDS : []),

@@ -1627,6 +1627,15 @@ export const OFFICE_BREAKDOWN_DIMENSIONS: BreakdownDimension[] = [
   { field: "tenure", label: "Tenure" },
 ];
 
+// TSI (cloned from DWS office) has no Division or Basin columns. Department is
+// the DEPT/REG column; Role is mapped onto `leadership` by the loader.
+export const TSI_BREAKDOWN_DIMENSIONS: BreakdownDimension[] = [
+  { field: "department", label: "Department" },
+  { field: "leadership", label: "Role" },
+  { field: "supervisor", label: "Supervisor" },
+  { field: "tenure", label: "Tenure" },
+];
+
 // CSG demographics for Brand Breakdown: keep Brand as the primary unit and
 // slice by the operational segment fields users requested.
 export const CSG_BREAKDOWN_DIMENSIONS: BreakdownDimension[] = [

@@ -14,6 +14,7 @@ export interface IdAuditFinding {
 export const PROTECTED_CLIENT_ASSET_IDS = new Set([
   "employee-experience--dws",
   "employee-experience--dws-field",
+  "employee-experience--tsi",
   "csg-integration-dashboard",
   "collaboration-dashboard",
   "integration-dashboard",
