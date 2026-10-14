@@ -918,6 +918,8 @@ function findSupervisorDimension(questions: EmployeeExperienceQuestionDefinition
   const dimensions = Array.from(new Set(questions.map((question) => question.dimension)));
   return (
     dimensions.find((dimension) => /supervisor|manager/i.test(dimension)) ??
+    // TSI names its manager index "Leader".
+    dimensions.find((dimension) => /^leader$/i.test(dimension.trim())) ??
     dimensions[dimensions.length - 1] ??
     "Supervisor"
   );
