@@ -43,6 +43,7 @@ import {
   TSI_EMPLOYEE_EXPERIENCE_GROUPS,
 } from "@/lib/employee-experience/perspective-access";
 import { isKnownBrandSegment } from "@/lib/employee-experience/brand-segment";
+import { tsiDepartmentResponseRate } from "@/lib/employee-experience/tsi-response-rates";
 import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
 import { VisualExportButton } from "@/components/dashboard/visual-export-button";
 import { VisualExportProvider, useVisualExportRegistry, useVisualRegistryActive } from "@/components/dashboard/visual-export-registry";
@@ -3717,6 +3718,7 @@ export function DwsEmployeeExperienceDashboardClient({
             separateCampaignCards={clientScope.key === "tsi"}
             filterPersistenceKey={perspectiveFilterKey(activePersp)}
             key="department-report"
+            responseRateFor={clientScope.key === "tsi" ? tsiDepartmentResponseRate : undefined}
             chromeless={redesignActive}
             filtersPortalId={redesignActive ? FR_FILTERS_SLOT : undefined}
             headerPortalId={redesignActive ? FR_HEADER_EXTRA_SLOT : undefined}

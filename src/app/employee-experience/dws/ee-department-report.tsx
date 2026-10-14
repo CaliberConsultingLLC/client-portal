@@ -118,6 +118,7 @@ export function EEDepartmentReport({
   compact = false,
   chromeless = false,
   separateCampaignCards = false,
+  responseRateFor,
   filtersPortalId,
   headerPortalId,
   titleSuffixPortalId,
@@ -152,6 +153,8 @@ export function EEDepartmentReport({
   chromeless?: boolean;
   /** Chromeless only: Current and Compared To as two separate filter cards. */
   separateCampaignCards?: boolean;
+  /** Static response rate lookup by unit name (TSI). Missing -> dash. */
+  responseRateFor?: (unitName: string) => string | null;
   filtersPortalId?: string;
   /**
    * Basin Report only (redesign pilot): when set and chromeless, the KPI strip
@@ -473,7 +476,7 @@ export function EEDepartmentReport({
   // Response Rate isn't computed yet, so it's a placeholder dash for now.
   const chromelessKpiItems: { label: string; value: string; color?: string }[] = [
     { label: "Responses", value: String(dept.responses) },
-    { label: "Response Rate", value: "—" },
+    { label: "Response Rate", value: responseRateFor?.(dept?.name) ?? "—" },
   ];
 
   // Basin Report pilot: Index Score Summary strip data, built from the same
