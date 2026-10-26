@@ -412,6 +412,18 @@ function ReadoutDeckViewerInner({
     setMenuOpen(false);
   }
 
+  function moveSlide(slideKey: string, direction: -1 | 1) {
+    if (!editable) return;
+    commitDeck((d) => {
+      const from = d.order.indexOf(slideKey);
+      const to = from + direction;
+      if (from < 0 || to < 0 || to >= d.order.length) return d;
+      const nextOrder = [...d.order];
+      [nextOrder[from], nextOrder[to]] = [nextOrder[to], nextOrder[from]];
+      return { ...d, order: nextOrder };
+    });
+  }
+
   function removeSlide(slideKey: string) {
     if (!editable) return;
     commitDeck((d) => {
@@ -1120,6 +1132,30 @@ function ReadoutDeckViewerInner({
                       ) : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-2 self-center">
+                      {editable ? (
+                        <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            title="Move this slide up"
+                            aria-label="Move slide up"
+                            disabled={idx === 0}
+                            onClick={() => moveSlide(key, -1)}
+                            className="inline-flex h-6 w-8 items-center justify-center rounded-full border border-[#C9D2D8] bg-white text-[12px] text-[#152238] hover:bg-[#152238] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-[#152238]"
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            title="Move this slide down"
+                            aria-label="Move slide down"
+                            disabled={idx === deck.order.length - 1}
+                            onClick={() => moveSlide(key, 1)}
+                            className="inline-flex h-6 w-8 items-center justify-center rounded-full border border-[#C9D2D8] bg-white text-[12px] text-[#152238] hover:bg-[#152238] hover:text-white disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-white disabled:hover:text-[#152238]"
+                          >
+                            ▼
+                          </button>
+                        </div>
+                      ) : null}
                       {editable ? (
                         pendingDeleteKey === key ? (
                           <div
