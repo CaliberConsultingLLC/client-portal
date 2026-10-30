@@ -105,12 +105,34 @@ export function HeatmapChart({
   const resolveScoreColor = (value: number | null) =>
     scoreColorResolver ? scoreColorResolver(value) : scoreScaleColor(value, minValue, midpoint, maxValue);
 
+  const [totalsSort, setTotalsSort] = useState<{ key: "growth" | "total"; dir: "asc" | "desc" } | null>(null);
+  const toggleTotalsSort = (key: "growth" | "total") =>
+    setTotalsSort((current) =>
+      current?.key === key
+        ? { key, dir: current.dir === "desc" ? "asc" : "desc" }
+        : { key, dir: "desc" }
+    );
+
   const sortedData = useMemo(() => {
-    return rows.map((dept) => {
+    const ordered = rows.map((dept) => {
       const row = data.find((d) => d.department === dept);
       return row || { department: dept, scores: {} };
     });
-  }, [rows, data]);
+    if (!totalsSort) return ordered;
+    const valueOf = (label: string) =>
+      totalsSort.key === "total" ? (rowTotals?.[label] ?? null) : (rowDeltas?.[label] ?? null);
+    return ordered.slice().sort((left, right) => {
+      const a = valueOf(left.department);
+      const b = valueOf(right.department);
+      if (a === null && b === null) return 0;
+      if (a === null) return 1;
+      if (b === null) return -1;
+      return totalsSort.dir === "desc" ? b - a : a - b;
+    });
+  }, [rows, data, totalsSort, rowTotals, rowDeltas]);
+
+  const sortMark = (key: "growth" | "total") =>
+    totalsSort?.key === key ? (totalsSort.dir === "desc" ? " ▼" : " ▲") : " ↕";
 
   return (
     <div className="overflow-x-auto">
@@ -150,14 +172,6 @@ export function HeatmapChart({
                 </div>
               </th>
             ))}
-            {rowTotals && (
-              <th
-                className="min-w-[52px] bg-[#E2E8EF] p-[11px_8px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]"
-                style={{ borderBottom: `1px solid ${strongGridLineColor}` }}
-              >
-                Total
-              </th>
-            )}
             {rowDeltas && (
               <th
                 className="min-w-[84px] bg-[#E2E8EF] p-[11px_8px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]"
@@ -166,7 +180,23 @@ export function HeatmapChart({
                   borderBottom: `1px solid ${strongGridLineColor}`,
                 }}
               >
-                {deltaHeader}
+                <button type="button" onClick={() => toggleTotalsSort("growth")} className="whitespace-nowrap uppercase tracking-[0.14em]" title={`Sort by ${deltaHeader.toLowerCase()}`}>
+                  {deltaHeader}{sortMark("growth")}
+                </button>
+              </th>
+            )}
+            {rowTotals && (
+              <th
+                className="min-w-[52px] bg-[#E2E8EF] p-[11px_8px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]"
+                style={{ borderBottom: `1px solid ${strongGridLineColor}` }}
+              >
+                {rowDeltas ? (
+                  <button type="button" onClick={() => toggleTotalsSort("total")} className="whitespace-nowrap uppercase tracking-[0.14em]" title="Sort by total">
+                    Total{sortMark("total")}
+                  </button>
+                ) : (
+                  "Total"
+                )}
               </th>
             )}
           </tr>
@@ -250,6 +280,17 @@ export function HeatmapChart({
                   </td>
                 );
               })}
+              {rowDeltas && (
+                <td
+                  className="bg-white p-[6px_8px] text-center text-[12.5px]"
+                  style={{
+                    borderLeft: `1px solid ${gridLineColor}`,
+                    borderTop: `1px solid ${gridLineColor}`,
+                  }}
+                >
+                  <DeltaCell value={rowDeltas[row.department]} />
+                </td>
+              )}
               {rowTotals &&
                 (isChip ? (
                   <td
@@ -291,17 +332,6 @@ export function HeatmapChart({
                     {formatScoreForDisplay(rowTotals[row.department] ?? null)}
                   </td>
                 ))}
-              {rowDeltas && (
-                <td
-                  className="bg-white p-[6px_8px] text-center text-[12.5px]"
-                  style={{
-                    borderLeft: `1px solid ${gridLineColor}`,
-                    borderTop: `1px solid ${gridLineColor}`,
-                  }}
-                >
-                  <DeltaCell value={rowDeltas[row.department]} />
-                </td>
-              )}
             </tr>
           ))}
           {columnTotals && (
@@ -362,12 +392,6 @@ export function HeatmapChart({
                   </td>
                 );
               })}
-              {rowTotals && (
-                <td
-                  className="bg-[#E2E8EF]"
-                  style={{ borderTop: `2px solid ${strongGridLineColor}` }}
-                />
-              )}
               {rowDeltas && (
                 <td
                   className="bg-[#E2E8EF] p-[6px_8px] text-center text-[12.5px]"
@@ -378,6 +402,12 @@ export function HeatmapChart({
                 >
                   <DeltaCell value={totalDelta} strong />
                 </td>
+              )}
+              {rowTotals && (
+                <td
+                  className="bg-[#E2E8EF]"
+                  style={{ borderTop: `2px solid ${strongGridLineColor}` }}
+                />
               )}
             </tr>
           )}
