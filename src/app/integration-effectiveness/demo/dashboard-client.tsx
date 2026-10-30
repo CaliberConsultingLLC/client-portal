@@ -914,6 +914,59 @@ function PointGap({ value }: { value: number | null }) {
 
 type TrendSortField = "label" | "growth" | "gap" | CampaignSlotKey;
 
+function ResponsesCard({
+  total,
+  counts,
+  scope,
+}: {
+  total: number;
+  counts?: { campaign1: number; campaign2: number; campaign3: number };
+  scope?: string;
+}) {
+  const chips = counts
+    ? CAMPAIGN_SLOT_KEYS.filter((key) => counts[key] > 0).map((key) => ({
+        key,
+        label: CAMPAIGN_SLOT_HEADERS[key],
+        value: counts[key],
+      }))
+    : [];
+  return (
+    <Card className="border-border-strong">
+      <CardContent className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 px-6 py-4">
+        <div className="flex items-baseline gap-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
+            Total Responses
+          </p>
+          <p className="text-4xl font-extrabold leading-none text-text-primary">{total}</p>
+          {scope ? <p className="text-sm text-text-secondary">{scope}</p> : null}
+        </div>
+        {chips.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {chips.map((chip) => (
+              <span
+                key={chip.key}
+                className="rounded-2xl border border-border-strong bg-surface-2 px-3 py-1 text-xs font-semibold text-text-secondary"
+              >
+                {chip.label} <span className="text-text-primary">{chip.value}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function withResponses(data: IntegrationDashboardData, content: React.ReactNode) {
+  const org = data.trends.organization;
+  return (
+    <div className="space-y-6">
+      <ResponsesCard total={data.meta.totalRespondents} counts={org.counts} scope="All brands" />
+      {content}
+    </div>
+  );
+}
+
 function TrendTable({
   title,
   description,
@@ -1032,7 +1085,6 @@ function TrendTable({
     >
       <td className={`px-4 py-3 text-text-primary ${wideLabels ? "min-w-[320px]" : "min-w-[180px]"}`}>
         <p className={pinned ? "font-bold" : "font-semibold"}>{row.label}</p>
-        <p className="text-xs text-text-muted">{row.respondentCount} responses</p>
       </td>
       {activeKeys.map((key) => (
         <td key={key} className="px-3 py-3 text-center">
@@ -1250,8 +1302,16 @@ function HeatMapsTab({
   const hmFile = (section: string) =>
     buildDashboardExportFilename({ client: "integration", perspective: `heatmaps-${section}` });
 
+  const scopedSlot = slotKeyForCampaignLabel(selectedCampaign);
+  const scopedTotal = scopedSlot ? indexRow.counts[scopedSlot] : indexRow.respondentCount;
+
   return (
     <div className="space-y-6">
+      <ResponsesCard
+        total={scopedTotal}
+        counts={indexRow.counts}
+        scope={`${brandReport ? brandReport.selectedBrand : "All brands"} · ${scopedSlot ? selectedCampaign : "all campaigns"}`}
+      />
       <RegisteredVisualExportFrame order={10} label="Download heat map" filename={hmFile("campaign")}>
         <HeatmapSection
           title="Campaign Heat Map"
@@ -1322,6 +1382,11 @@ function StatementsTab({
 
   return (
     <div className="space-y-6">
+      <ResponsesCard
+        total={pinned.respondentCount}
+        counts={pinned.counts}
+        scope={brandReport ? brandReport.selectedBrand : "All brands"}
+      />
       <RegisteredVisualExportFrame order={10} label="Download summary" filename={stFile("summary")}>
         <Card className="border-border-strong">
           <CardContent className="grid gap-6 p-6 lg:grid-cols-[1fr_1.15fr] lg:items-center">
@@ -1393,6 +1458,11 @@ function BrandReportTab({
 
   return (
     <div className="space-y-6">
+      <ResponsesCard
+        total={brandReport.trend.index.respondentCount}
+        counts={brandReport.trend.index.counts}
+        scope={brandReport.selectedBrand}
+      />
       <RegisteredVisualExportFrame order={10} label="Download summary" filename={brFile("summary")}>
         <Card className="border-border-strong">
           <CardContent className="grid gap-6 p-6 lg:grid-cols-[0.9fr_1.2fr] lg:items-center">
@@ -1403,7 +1473,7 @@ function BrandReportTab({
                 {buildBrandSummary(brandReport)}
               </p>
               <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
-                {brandReport.respondentCount} responses across all campaigns
+                All campaigns combined
               </p>
             </div>
             <IndexChangeTiles row={brandReport.trend.index} />
@@ -1528,7 +1598,8 @@ function buildIntegrationPerspectiveDefinitions(
 ): IntegrationPerspectiveDefinition[] {
   const rendererMap: Record<string, React.ReactNode> = {
     "integration.overview": <OverviewTab data={data} />,
-    "integration.longitudinalTrends": (
+    "integration.longitudinalTrends": withResponses(
+      data,
       <LongitudinalTrendsTab
         data={data}
         selectedBrand={filters.longitudinalBrand}
@@ -1551,7 +1622,7 @@ function buildIntegrationPerspectiveDefinitions(
         selectedCampaign={filters.heatMapCampaign}
       />
     ),
-    "integration.protectPrioritize": <PrioritiesTab data={data} />,
+    "integration.protectPrioritize": withResponses(data, <PrioritiesTab data={data} />),
     "integration.brandReport": (
       <BrandReportTab
         data={data}
@@ -1559,7 +1630,8 @@ function buildIntegrationPerspectiveDefinitions(
         selectedCampaign={filters.brandReportSelectedCampaign}
       />
     ),
-    "integration.employeeVoice": (
+    "integration.employeeVoice": withResponses(
+      data,
       <VoiceTab
         data={data}
         selectedBrand={filters.voiceSelectedBrand}

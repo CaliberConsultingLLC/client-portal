@@ -791,9 +791,11 @@ function buildTrendRow(
     campaign2: null,
     campaign3: null,
     overall: respondents.length >= minimumCount ? scoreFn(respondents) : null,
+    counts: { campaign1: 0, campaign2: 0, campaign3: 0 },
   };
   for (const slot of CAMPAIGN_SLOTS) {
     const scoped = respondentsForSlot(respondents, slot);
+    row.counts[slot] = scoped.length;
     row[slot] = scoped.length >= minimumCount ? scoreFn(scoped) : null;
   }
   return row;
