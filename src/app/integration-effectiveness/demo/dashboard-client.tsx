@@ -1255,7 +1255,7 @@ function HeatMapsTab({
       <RegisteredVisualExportFrame order={10} label="Download heat map" filename={hmFile("campaign")}>
         <HeatmapSection
           title="Campaign Heat Map"
-          description="Oldest campaign on the left, newest on the right, then Total and Growth (first to latest campaign)."
+          description="Oldest campaign on the left, newest on the right, then Growth (first to latest campaign) and Total on the far right."
           heatmap={campaignHeatmap}
           rowDeltas={rowDeltas}
           deltaHeader={deltaHeader}
