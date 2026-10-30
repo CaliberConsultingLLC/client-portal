@@ -13,12 +13,16 @@ export default function IntegrationEffectivenessLayout({
   return (
     <div className="min-h-screen bg-surface-2">
       <AppTopBanner
-        homeHref="/login"
+        brand="caliber"
+        homeHref="/portal"
+        tone="dark"
         items={[
-          { label: "Home", href: "/login" },
-          { label: "Collaboration", href: "/collaboration" },
-          { label: "Integration", href: "/integration-effectiveness" },
-          { label: "Employee Experience", href: "/employee-experience/dws" },
+          { label: "Home", href: "/portal", exact: true },
+          { label: "Dashboards", href: "/portal/dashboards" },
+          { label: "Reports", href: "/portal/reports" },
+          { label: "Documents", href: "/portal/documents" },
+          { label: "Resources", href: "/portal/resources" },
+          { label: "Integration Effectiveness", href: "/integration-effectiveness/csg" },
         ]}
       />
       {children}

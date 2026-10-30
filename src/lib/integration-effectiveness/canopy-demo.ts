@@ -464,7 +464,7 @@ function parseRespondents(questionIds: number[], databaseCsvText: string): Parse
         department: cleanLabel(getValue(row, "Department"), "Unspecified"),
         jobTitle: cleanLabel(getValue(row, "Job Title"), "Unspecified"),
         campaignDate: cleanLabel(getValue(row, "Campaign Date"), "Unspecified"),
-        campaign: cleanLabel(getValue(row, "Campaign"), "Unspecified Wave"),
+        campaign: canonicalCampaignLabel(cleanLabel(getValue(row, "Campaign"), "Unspecified Wave")),
         scores,
         comments: {
           improvement: getValue(row, "12").trim(),
@@ -568,35 +568,37 @@ type CampaignSlot = "campaign1" | "campaign2" | "campaign3";
 type LongitudinalScoreAccessor = (respondent: ParsedRespondent) => Array<number | null>;
 
 function campaignSlotForLabel(label: string): CampaignSlot | null {
-  const normalized = label.trim().toLowerCase();
+  const normalized = label.trim().toLowerCase().replace(/\s+/g, " ");
   if (
-    normalized === "initial" ||
-    normalized === "campaign 1" ||
-    normalized === "wave 1" ||
-    normalized.includes("campaign 1") ||
-    normalized.includes("wave 1")
+    /^(initial|first|1st|baseline|campaign 1|wave 1)$/.test(normalized) ||
+    /\b(campaign|wave) ?1\b/.test(normalized)
   ) {
     return "campaign1";
   }
   if (
-    normalized === "midpoint" ||
-    normalized === "campaign 2" ||
-    normalized === "wave 2" ||
-    normalized.includes("campaign 2") ||
-    normalized.includes("wave 2")
+    /^(second|2nd|midpoint|mid|campaign 2|wave 2)$/.test(normalized) ||
+    /\b(campaign|wave) ?2\b/.test(normalized)
   ) {
     return "campaign2";
   }
   if (
-    normalized === "final" ||
-    normalized === "campaign 3" ||
-    normalized === "wave 3" ||
-    normalized.includes("campaign 3") ||
-    normalized.includes("wave 3")
+    /^(third|3rd|final|last|campaign 3|wave 3)$/.test(normalized) ||
+    /\b(campaign|wave) ?3\b/.test(normalized)
   ) {
     return "campaign3";
   }
   return null;
+}
+
+const CAMPAIGN_SLOT_LABELS: Record<CampaignSlot, string> = {
+  campaign1: "Campaign 1",
+  campaign2: "Campaign 2",
+  campaign3: "Campaign 3",
+};
+
+function canonicalCampaignLabel(label: string) {
+  const slot = campaignSlotForLabel(label);
+  return slot ? CAMPAIGN_SLOT_LABELS[slot] : label;
 }
 
 function buildLongitudinalSeries(
@@ -944,7 +946,9 @@ export async function loadCanopyIntegrationDashboardData(
       totalCampaigns: new Set(respondents.map((respondent) => respondent.campaign)).size,
       totalDepartments: new Set(respondents.map((respondent) => respondent.department)).size,
       brands: Array.from(new Set(respondents.map((respondent) => respondent.brand))),
-      campaigns: Array.from(new Set(respondents.map((respondent) => respondent.campaign))),
+      campaigns: Array.from(new Set(respondents.map((respondent) => respondent.campaign))).sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true })
+      ),
       dataSourceLabel: options.demo
         ? "Static integration demo dataset: 5 brands x 3 campaigns"
         : "Canopy Integration Database 2026.csv + Canopy Integration Campaign 2026.csv",
