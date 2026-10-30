@@ -157,8 +157,20 @@ export function buildDefaultPerspectiveLibraryItems(): PerspectiveLibraryItem[] 
       "integration",
       "integration-statement-trends",
       "Statement Trends",
-      "Statement-level cuts across brand, campaign, role, and department.",
+      "Every statement by campaign with growth, plus brand filtering.",
       "integration.statementTrends",
+      {
+        defaultCategoryIds: ["canopy"],
+        defaultCategoryLabels: ["Canopy"],
+      }
+    ),
+    buildLibraryItem(
+      "integration-effectiveness-v1",
+      "integration",
+      "integration-heat-maps",
+      "Heat Maps",
+      "Statement heat maps by campaign, brand, department and job title, with growth.",
+      "integration.heatMaps",
       {
         defaultCategoryIds: ["canopy"],
         defaultCategoryLabels: ["Canopy"],

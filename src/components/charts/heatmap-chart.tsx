@@ -40,6 +40,29 @@ interface HeatmapChartProps {
    * the column), matching the EE comparison-heatmap treatment.
    */
   variant?: "fill" | "chip";
+  /**
+   * Optional change column rendered after Total. Values are growth percentages
+   * (e.g. 4.2 = +4.2%) keyed by row label; null renders as an em dash.
+   */
+  rowDeltas?: Record<string, number | null>;
+  deltaHeader?: string;
+  /** Growth shown in the bottom-right cell (the column-totals row). */
+  totalDelta?: number | null;
+}
+
+function DeltaCell({ value, strong = false }: { value: number | null | undefined; strong?: boolean }) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return <span style={{ color: "#8798AA" }}>—</span>;
+  }
+  const rounded = Math.round(value * 10) / 10;
+  const color = rounded > 0 ? "#2F6B3F" : rounded < 0 ? "#B2483E" : "#6E7E96";
+  const arrow = rounded > 0 ? "▲" : rounded < 0 ? "▼" : "";
+  return (
+    <span style={{ color, fontWeight: strong ? 800 : 700 }}>
+      {arrow} {rounded > 0 ? "+" : ""}
+      {rounded.toFixed(1)}%
+    </span>
+  );
 }
 
 export function HeatmapChart({
@@ -57,6 +80,9 @@ export function HeatmapChart({
   columnWidthClassName = "w-[112px]",
   scoreColorResolver,
   variant = "fill",
+  rowDeltas,
+  deltaHeader = "Change",
+  totalDelta,
 }: HeatmapChartProps) {
   const isChip = variant === "chip";
   const gridLineColor = "#D3DDE7";
@@ -130,6 +156,17 @@ export function HeatmapChart({
                 style={{ borderBottom: `1px solid ${strongGridLineColor}` }}
               >
                 Total
+              </th>
+            )}
+            {rowDeltas && (
+              <th
+                className="min-w-[84px] bg-[#E2E8EF] p-[11px_8px] text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#6E7E96]"
+                style={{
+                  borderLeft: `1px solid ${gridLineColor}`,
+                  borderBottom: `1px solid ${strongGridLineColor}`,
+                }}
+              >
+                {deltaHeader}
               </th>
             )}
           </tr>
@@ -254,6 +291,17 @@ export function HeatmapChart({
                     {formatScoreForDisplay(rowTotals[row.department] ?? null)}
                   </td>
                 ))}
+              {rowDeltas && (
+                <td
+                  className="bg-white p-[6px_8px] text-center text-[12.5px]"
+                  style={{
+                    borderLeft: `1px solid ${gridLineColor}`,
+                    borderTop: `1px solid ${gridLineColor}`,
+                  }}
+                >
+                  <DeltaCell value={rowDeltas[row.department]} />
+                </td>
+              )}
             </tr>
           ))}
           {columnTotals && (
@@ -319,6 +367,17 @@ export function HeatmapChart({
                   className="bg-[#E2E8EF]"
                   style={{ borderTop: `2px solid ${strongGridLineColor}` }}
                 />
+              )}
+              {rowDeltas && (
+                <td
+                  className="bg-[#E2E8EF] p-[6px_8px] text-center text-[12.5px]"
+                  style={{
+                    borderTop: `2px solid ${strongGridLineColor}`,
+                    borderLeft: `1px solid ${gridLineColor}`,
+                  }}
+                >
+                  <DeltaCell value={totalDelta} strong />
+                </td>
               )}
             </tr>
           )}

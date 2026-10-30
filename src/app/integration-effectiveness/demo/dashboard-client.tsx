@@ -7,7 +7,6 @@ import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-fil
 import { buildDashboardFilterStoreKey } from "@/lib/portal/dashboard-filter-cookie";
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
-import { ScoreTable } from "@/components/collaboration/score-table";
 import {
   VisualExportProvider,
   VisualExportMetaSetter,
@@ -48,6 +47,7 @@ import type {
   IntegrationHeatmap,
   IntegrationLongitudinalScope,
   IntegrationPriority,
+  IntegrationTrendRow,
   IntegrationVoiceEntry,
 } from "@/types/integration-effectiveness";
 
@@ -189,20 +189,6 @@ function sortByScoreDesc<T extends { score: number }>(rows: T[]) {
 
 function sortByScoreAsc<T extends { score: number }>(rows: T[]) {
   return rows.slice().sort((left, right) => left.score - right.score);
-}
-
-function sortMetricRows(
-  rows: IntegrationGroupMetric[],
-  field: SortField,
-  direction: SortDirection
-) {
-  const sorted = rows.slice().sort((left, right) => {
-    if (field === "label") {
-      return left.label.localeCompare(right.label);
-    }
-    return left.score - right.score;
-  });
-  return direction === "asc" ? sorted : sorted.reverse();
 }
 
 function averageScore(values: number[]) {
@@ -862,168 +848,662 @@ function VoiceList({
   );
 }
 
-function SegmentLensRow({
-  eyebrow,
-  title,
-  description,
-  tableTitle,
-  heatmapTitle,
-  labelHeader,
-  rows,
-  heatmap,
-  showVisualNote = false,
-  defaultSortField = "score",
-  defaultSortDirection = "desc",
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  tableTitle: string;
-  heatmapTitle: string;
-  labelHeader: string;
-  rows: IntegrationGroupMetric[];
-  heatmap: IntegrationHeatmap;
-  showVisualNote?: boolean;
-  defaultSortField?: SortField;
-  defaultSortDirection?: SortDirection;
-}) {
-  const sortedHeatmapRows = useMemo(() => sortHeatmapRowsByTotal(heatmap), [heatmap]);
+type CampaignSlotKey = "campaign1" | "campaign2" | "campaign3";
+const CAMPAIGN_SLOT_KEYS: CampaignSlotKey[] = ["campaign1", "campaign2", "campaign3"];
+const CAMPAIGN_SLOT_TITLES: Record<CampaignSlotKey, string> = {
+  campaign1: "Campaign 1",
+  campaign2: "Campaign 2",
+  campaign3: "Campaign 3",
+};
+/** Column and tile wording: Campaign 1 is the initial read, 2 the secondary, 3 the final. */
+const CAMPAIGN_SLOT_HEADERS: Record<CampaignSlotKey, string> = {
+  campaign1: "Initial",
+  campaign2: "Secondary",
+  campaign3: "Final",
+};
 
+function slotKeyForCampaignLabel(label: string): CampaignSlotKey | null {
+  const match = /campaign\s*([123])/i.exec(label);
+  if (!match) return null;
+  return CAMPAIGN_SLOT_KEYS[Number(match[1]) - 1] ?? null;
+}
+
+function activeSlotKeysForRows(rows: Array<IntegrationTrendRow | null | undefined>) {
+  return CAMPAIGN_SLOT_KEYS.filter((key) => rows.some((row) => row && row[key] != null));
+}
+
+function buildLabelMap(rows: IntegrationTrendRow[]) {
+  return Object.fromEntries(rows.map((row) => [row.id, row])) as Record<string, IntegrationTrendRow>;
+}
+
+function GrowthPill({ value, large = false }: { value: number | null; large?: boolean }) {
+  if (value == null) {
+    return <span className="text-text-muted">—</span>;
+  }
+  const rounded = Math.round(value * 10) / 10;
+  const tone =
+    rounded > 0
+      ? { bg: "#E3F0E6", fg: "#2F6B3F", arrow: "▲" }
+      : rounded < 0
+        ? { bg: "#F6E1DE", fg: "#B2483E", arrow: "▼" }
+        : { bg: "#EEF1F4", fg: "#6E7E96", arrow: "•" };
   return (
-    <section className="border-t border-border-strong pt-8 first:border-t-0 first:pt-0">
-      <div className="mb-4">
-        <HeaderTitle>{eyebrow}</HeaderTitle>
-        <h3 className="mt-2 text-2xl font-bold text-text-primary">{title}</h3>
-        <p className="mt-2 max-w-4xl text-sm leading-relaxed text-text-secondary">{description}</p>
-      </div>
-      <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)] xl:items-start">
-        <SortableMetricTable
-          title={tableTitle}
-          labelHeader={labelHeader}
-          rows={rows}
-          defaultSortField={defaultSortField}
-          defaultSortDirection={defaultSortDirection}
-        />
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>{heatmapTitle}</CardTitle>
-            <CardDescription>
-              {showVisualNote
-                ? "Includes a placeholder Midpoint column for this layout preview."
-                : "Statement rows are ordered by total score so the strongest signals sit at the top."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <HeatmapChart
-              rows={sortedHeatmapRows}
-              columns={heatmap.columns}
-              data={heatmap.data}
-              rowTotals={heatmap.rowTotals}
-              columnTotals={heatmap.columnTotals}
-              minValue={INTEGRATION_SCORE_SCALE.minValue}
-              midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-              maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-              rowLabelHeader="Statement"
-              abbreviateHeaders={false}
-              columnMinWidthClassName="min-w-[112px]"
-              columnWidthClassName="w-[112px]"
-            />
-          </CardContent>
-        </Card>
-      </div>
-    </section>
+    <span
+      className={`inline-flex items-center gap-1 rounded-2xl font-bold ${large ? "px-3 py-1 text-base" : "px-2 py-0.5 text-xs"}`}
+      style={{ backgroundColor: tone.bg, color: tone.fg }}
+    >
+      <span style={{ fontSize: large ? 12 : 9 }}>{tone.arrow}</span>
+      {formatGrowthPercentage(value)}
+    </span>
   );
 }
 
-function SortableMetricTable({
+function PointGap({ value }: { value: number | null }) {
+  if (value == null) {
+    return <span className="text-text-muted">—</span>;
+  }
+  const scaled = Math.round(value * 100) / 10; // display scale is raw x 10
+  const color = scaled > 0.05 ? "#2F6B3F" : scaled < -0.05 ? "#B2483E" : "#6E7E96";
+  return (
+    <span className="text-xs font-bold" style={{ color }}>
+      {scaled > 0.05 ? "+" : ""}
+      {scaled.toFixed(1)}
+    </span>
+  );
+}
+
+type TrendSortField = "label" | "growth" | "gap" | CampaignSlotKey;
+
+function TrendTable({
   title,
+  description,
   labelHeader,
   rows,
-  defaultSortField = "score",
-  defaultSortDirection = "desc",
+  pinnedRow,
+  benchmark,
+  benchmarkById,
+  benchmarkHeader = "vs. Avg",
+  fromKey,
+  toKey,
+  wideLabels = false,
 }: {
   title: string;
+  description?: string;
   labelHeader: string;
-  rows: IntegrationGroupMetric[];
-  defaultSortField?: SortField;
-  defaultSortDirection?: SortDirection;
+  rows: IntegrationTrendRow[];
+  /** Always shown first (e.g. the brand average) and never re-sorted. */
+  pinnedRow?: IntegrationTrendRow | null;
+  /** One comparison row applied to every row (e.g. the brand average). */
+  benchmark?: IntegrationTrendRow | null;
+  /** Per-row comparison keyed by row id (e.g. Canopy overall for each statement). */
+  benchmarkById?: Record<string, IntegrationTrendRow>;
+  benchmarkHeader?: string;
+  fromKey?: CampaignSlotKey;
+  toKey?: CampaignSlotKey;
+  wideLabels?: boolean;
 }) {
-  const [sortField, setSortField] = useState<SortField>(defaultSortField);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(defaultSortDirection);
-
-  const sortedRows = useMemo(
-    () => sortMetricRows(rows, sortField, sortDirection),
-    [rows, sortField, sortDirection]
+  const activeKeys = useMemo(
+    () => activeSlotKeysForRows([...rows, pinnedRow]),
+    [rows, pinnedRow]
   );
+  const resolvedFrom = fromKey && activeKeys.includes(fromKey) ? fromKey : activeKeys[0];
+  const resolvedTo =
+    toKey && activeKeys.includes(toKey) ? toKey : activeKeys[activeKeys.length - 1];
+  const hasChange = activeKeys.length > 1 && resolvedFrom !== resolvedTo;
+  const hasGap = Boolean(benchmark || benchmarkById) && resolvedTo !== undefined;
 
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+  const [sortField, setSortField] = useState<TrendSortField>("label");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const effectiveSort: TrendSortField =
+    sortField === "label" && hasChange ? "growth" : sortField;
+  const effectiveDirection: SortDirection =
+    sortField === "label" && hasChange ? "desc" : sortDirection;
+
+  const growthFor = (row: IntegrationTrendRow) =>
+    resolvedFrom && resolvedTo
+      ? calculateGrowthPercentage(row[resolvedFrom], row[resolvedTo])
+      : null;
+  const gapFor = (row: IntegrationTrendRow) => {
+    const reference = benchmarkById ? benchmarkById[row.id] : benchmark;
+    if (!reference || !resolvedTo) return null;
+    const own = row[resolvedTo];
+    const other = reference[resolvedTo];
+    return own == null || other == null ? null : own - other;
+  };
+
+  const sortedRows = useMemo(() => {
+    const value = (row: IntegrationTrendRow): number | string | null => {
+      if (effectiveSort === "label") return row.label;
+      if (effectiveSort === "growth") return growthFor(row);
+      if (effectiveSort === "gap") return gapFor(row);
+      return row[effectiveSort];
+    };
+    const sorted = rows.slice().sort((left, right) => {
+      const a = value(left);
+      const b = value(right);
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      if (typeof a === "string" || typeof b === "string") return String(a).localeCompare(String(b));
+      return a - b;
+    });
+    return effectiveDirection === "asc" ? sorted : sorted.reverse();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, effectiveSort, effectiveDirection, resolvedFrom, resolvedTo, benchmark, benchmarkById]);
+
+  const toggleSort = (field: TrendSortField) => {
+    if (effectiveSort === field) {
+      setSortField(field);
+      setSortDirection(effectiveDirection === "asc" ? "desc" : "asc");
       return;
     }
     setSortField(field);
     setSortDirection(field === "label" ? "asc" : "desc");
   };
 
+  const headerButton = (field: TrendSortField, label: string, align: "left" | "center" = "center") => (
+    <button
+      className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted ${align === "left" ? "" : "justify-center"}`}
+      onClick={() => toggleSort(field)}
+    >
+      {label}
+      <ArrowDownUp className="h-3 w-3" />
+    </button>
+  );
+
+  const scoreCell = (value: number | null) =>
+    value == null ? (
+      <span className="text-text-muted">—</span>
+    ) : (
+      <span
+        className="inline-block min-w-[52px] rounded-2xl px-2 py-0.5 text-center text-xs font-bold"
+        style={getScoreBadgeStyle(value)}
+      >
+        {formatScoreForDisplay(value)}
+      </span>
+    );
+
+  const renderRow = (row: IntegrationTrendRow, index: number, pinned = false) => (
+    <tr
+      key={`${pinned ? "pinned-" : ""}${row.id}`}
+      className={`border-t border-border-strong ${
+        pinned ? "bg-surface-3" : index % 2 === 0 ? "bg-white" : "bg-surface-2/50"
+      }`}
+    >
+      <td className={`px-4 py-3 text-text-primary ${wideLabels ? "min-w-[320px]" : "min-w-[180px]"}`}>
+        <p className={pinned ? "font-bold" : "font-semibold"}>{row.label}</p>
+        <p className="text-xs text-text-muted">{row.respondentCount} responses</p>
+      </td>
+      {activeKeys.map((key) => (
+        <td key={key} className="px-3 py-3 text-center">
+          {scoreCell(row[key])}
+        </td>
+      ))}
+      {hasChange ? (
+        <td className="px-3 py-3 text-center">
+          <GrowthPill value={growthFor(row)} />
+        </td>
+      ) : null}
+      {hasGap ? (
+        <td className="px-3 py-3 text-center">{pinned ? <span className="text-text-muted">—</span> : <PointGap value={gapFor(row)} />}</td>
+      ) : null}
+    </tr>
+  );
+
   return (
     <Card className="border-border-strong">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="overflow-hidden rounded-2xl border border-border-strong">
+        <div className="overflow-x-auto rounded-2xl border border-border-strong">
           <table className="w-full text-sm">
             <thead className="bg-surface-3">
               <tr>
-                <th className="px-4 py-2.5 text-left">
-                  <button
-                    className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-text-muted"
-                    onClick={() => toggleSort("label")}
-                  >
-                    {labelHeader}
-                    <ArrowDownUp className="h-3.5 w-3.5" />
-                  </button>
-                </th>
-                <th className="px-4 py-2.5 text-right">
-                  <button
-                    className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-text-muted"
-                    onClick={() => toggleSort("score")}
-                  >
-                    Index
-                    <ArrowDownUp className="h-3.5 w-3.5" />
-                  </button>
-                </th>
+                <th className="px-4 py-2.5 text-left">{headerButton("label", labelHeader, "left")}</th>
+                {activeKeys.map((key) => (
+                  <th key={key} className="px-3 py-2.5 text-center">
+                    {headerButton(key, CAMPAIGN_SLOT_HEADERS[key])}
+                    <p className="mt-0.5 text-[10px] font-medium text-text-muted">
+                      {CAMPAIGN_SLOT_TITLES[key]}
+                    </p>
+                  </th>
+                ))}
+                {hasChange ? (
+                  <th className="px-3 py-2.5 text-center">
+                    {headerButton("growth", "Growth")}
+                    <p className="mt-0.5 text-[10px] font-medium text-text-muted">
+                      {resolvedFrom ? CAMPAIGN_SLOT_HEADERS[resolvedFrom] : ""} to{" "}
+                      {resolvedTo ? CAMPAIGN_SLOT_HEADERS[resolvedTo] : ""}
+                    </p>
+                  </th>
+                ) : null}
+                {hasGap ? (
+                  <th className="px-3 py-2.5 text-center">
+                    {headerButton("gap", benchmarkHeader)}
+                    <p className="mt-0.5 text-[10px] font-medium text-text-muted">points</p>
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
-              {sortedRows.map((row, index) => (
-                <tr
-                  key={row.id}
-                  className={`border-t border-border-strong ${
-                    index % 2 === 0 ? "bg-white" : "bg-surface-2/50"
-                  }`}
-                >
-                  <td className="px-4 py-3 text-text-primary">
-                    <div>
-                      <p className="font-semibold">{row.label}</p>
-                      <p className="text-xs text-text-muted">{row.respondentCount} responses</p>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span
-                      className="inline-block min-w-[52px] rounded-2xl px-2 py-0.5 text-center text-xs font-bold"
-                      style={getScoreBadgeStyle(row.score)}
-                    >
-                      {formatScoreForDisplay(row.score)}
-                    </span>
+              {pinnedRow ? renderRow(pinnedRow, 0, true) : null}
+              {sortedRows.map((row, index) => renderRow(row, index))}
+              {sortedRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={1 + activeKeys.length + (hasChange ? 1 : 0) + (hasGap ? 1 : 0)}
+                    className="px-4 py-6 text-center text-sm text-text-muted"
+                  >
+                    Not enough responses to show this cut (2-response minimum).
                   </td>
                 </tr>
-              ))}
+              ) : null}
             </tbody>
           </table>
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function IndexChangeTiles({
+  row,
+  fromKey,
+  toKey,
+}: {
+  row: IntegrationTrendRow;
+  fromKey?: CampaignSlotKey;
+  toKey?: CampaignSlotKey;
+}) {
+  const keys = activeSlotKeysForRows([row]);
+  const from = fromKey && keys.includes(fromKey) ? fromKey : keys[0];
+  const to = toKey && keys.includes(toKey) ? toKey : keys[keys.length - 1];
+  const growth = from && to && from !== to ? calculateGrowthPercentage(row[from], row[to]) : null;
+  return (
+    <div
+      className="grid gap-3"
+      style={{ gridTemplateColumns: `repeat(${Math.max(keys.length, 1) + (keys.length > 1 ? 1 : 0)}, minmax(0, 1fr))` }}
+    >
+      {keys.map((key) => {
+        const value = row[key] as number;
+        return (
+          <div
+            key={key}
+            className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong px-3 py-4 text-center shadow-sm"
+            style={getScoreCardStyle(value)}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] opacity-80">
+              {CAMPAIGN_SLOT_HEADERS[key]} Index
+            </p>
+            <p className="mt-2 text-4xl font-extrabold leading-none">{formatScoreForDisplay(value)}</p>
+            <p className="mt-2 text-xs opacity-80">{CAMPAIGN_SLOT_TITLES[key]}</p>
+          </div>
+        );
+      })}
+      {keys.length > 1 ? (
+        <div className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-white px-3 py-4 text-center shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">Growth %</p>
+          <div className="mt-3">
+            <GrowthPill value={growth} large />
+          </div>
+          <p className="mt-2 text-xs text-text-secondary">
+            {from ? CAMPAIGN_SLOT_HEADERS[from] : ""} to {to ? CAMPAIGN_SLOT_HEADERS[to] : ""}
+          </p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function growthByStatement(rows: IntegrationTrendRow[]) {
+  const keys = activeSlotKeysForRows(rows);
+  const from = keys[0];
+  const to = keys[keys.length - 1];
+  const byLabel: Record<string, number | null> = {};
+  rows.forEach((row) => {
+    byLabel[row.label] =
+      from && to && from !== to ? calculateGrowthPercentage(row[from], row[to]) : null;
+  });
+  return byLabel;
+}
+
+function HeatmapSection({
+  title,
+  description,
+  heatmap,
+  rowLabelHeader = "Statement",
+  rowDeltas,
+  deltaHeader,
+  totalDelta,
+}: {
+  title: string;
+  description: string;
+  heatmap: IntegrationHeatmap;
+  rowLabelHeader?: string;
+  rowDeltas?: Record<string, number | null>;
+  deltaHeader?: string;
+  totalDelta?: number | null;
+}) {
+  const sortedRows = useMemo(() => sortHeatmapRowsByTotal(heatmap), [heatmap]);
+  return (
+    <Card className="border-border-strong">
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {heatmap.columns.length === 0 ? (
+          <p className="rounded-2xl border border-border-strong bg-surface-2 px-4 py-6 text-center text-sm text-text-muted">
+            Not enough responses to show this cut (2-response minimum).
+          </p>
+        ) : (
+          <HeatmapChart
+            rows={sortedRows}
+            columns={heatmap.columns}
+            data={heatmap.data}
+            rowTotals={heatmap.rowTotals}
+            columnTotals={heatmap.columnTotals}
+            minValue={INTEGRATION_SCORE_SCALE.minValue}
+            midpoint={INTEGRATION_SCORE_SCALE.midpoint}
+            maxValue={INTEGRATION_SCORE_SCALE.maxValue}
+            rowLabelHeader={rowLabelHeader}
+            abbreviateHeaders={false}
+            columnMinWidthClassName="min-w-[112px]"
+            columnWidthClassName="w-[112px]"
+            rowDeltas={rowDeltas}
+            deltaHeader={deltaHeader}
+            totalDelta={totalDelta}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HeatMapsTab({
+  data,
+  selectedBrand,
+  selectedCampaign,
+}: {
+  data: IntegrationDashboardData;
+  selectedBrand: string;
+  selectedCampaign: string;
+}) {
+  const brandKey = selectedBrand === "all" ? "all" : selectedBrand;
+  const scope =
+    data.heatmapScopes[`${brandKey}::${selectedCampaign}`] ?? data.heatmapScopes["all::all"];
+  const campaignHeatmap = data.campaignHeatmaps[brandKey] ?? data.campaignHeatmaps.all;
+  const brandReport = data.brandReports.find((report) => report.selectedBrand === brandKey);
+  const statementRows = brandReport ? brandReport.trend.questions : data.trends.statements;
+  const indexRow = brandReport ? brandReport.trend.index : data.trends.organization;
+  const keys = activeSlotKeysForRows([indexRow]);
+  const first = keys[0];
+  const last = keys[keys.length - 1];
+  const rowDeltas = growthByStatement(statementRows);
+  const totalDelta =
+    first && last && first !== last ? calculateGrowthPercentage(indexRow[first], indexRow[last]) : null;
+  const deltaHeader = "Growth";
+  const scopeLabel =
+    `${brandKey === "all" ? "All brands" : brandKey} · ${selectedCampaign === "all" ? "all campaigns" : selectedCampaign}`;
+  const hmFile = (section: string) =>
+    buildDashboardExportFilename({ client: "integration", perspective: `heatmaps-${section}` });
+
+  return (
+    <div className="space-y-6">
+      <RegisteredVisualExportFrame order={10} label="Download heat map" filename={hmFile("campaign")}>
+        <HeatmapSection
+          title="Campaign Heat Map"
+          description="Oldest campaign on the left, newest on the right, then Total and Growth (first to latest campaign)."
+          heatmap={campaignHeatmap}
+          rowDeltas={rowDeltas}
+          deltaHeader={deltaHeader}
+          totalDelta={totalDelta}
+        />
+      </RegisteredVisualExportFrame>
+      {brandKey === "all" ? (
+        <RegisteredVisualExportFrame order={20} label="Download heat map" filename={hmFile("brand")}>
+          <HeatmapSection
+            title="Brand Heat Map"
+            description={`${scopeLabel}. Growth shows each statement's first-to-latest movement across Canopy.`}
+            heatmap={scope.brands}
+            rowDeltas={rowDeltas}
+            deltaHeader={deltaHeader}
+            totalDelta={totalDelta}
+          />
+        </RegisteredVisualExportFrame>
+      ) : null}
+      <RegisteredVisualExportFrame order={30} label="Download heat map" filename={hmFile("department")}>
+        <HeatmapSection
+          title="Department Heat Map"
+          description={`${scopeLabel}. Only cells backed by at least two responses are shown.`}
+          heatmap={scope.departments}
+          rowDeltas={rowDeltas}
+          deltaHeader={deltaHeader}
+          totalDelta={totalDelta}
+        />
+      </RegisteredVisualExportFrame>
+      <RegisteredVisualExportFrame order={40} label="Download heat map" filename={hmFile("job-title")}>
+        <HeatmapSection
+          title="Job Title Heat Map"
+          description={`${scopeLabel}. Only cells backed by at least two responses are shown.`}
+          heatmap={scope.jobTitles}
+          rowDeltas={rowDeltas}
+          deltaHeader={deltaHeader}
+          totalDelta={totalDelta}
+        />
+      </RegisteredVisualExportFrame>
+    </div>
+  );
+}
+
+function StatementsTab({
+  data,
+  selectedBrand,
+  fromLabel,
+  toLabel,
+}: {
+  data: IntegrationDashboardData;
+  selectedBrand: string;
+  fromLabel: string;
+  toLabel: string;
+}) {
+  const brandReport =
+    selectedBrand === "all"
+      ? null
+      : (data.brandReports.find((report) => report.selectedBrand === selectedBrand) ?? null);
+  const rows = brandReport ? brandReport.trend.questions : data.trends.statements;
+  const pinned = brandReport ? brandReport.trend.index : data.trends.organization;
+  const fromKey = slotKeyForCampaignLabel(fromLabel) ?? undefined;
+  const toKey = slotKeyForCampaignLabel(toLabel) ?? undefined;
+  const stFile = (section: string) =>
+    buildDashboardExportFilename({ client: "integration", perspective: `statements-${section}` });
+
+  return (
+    <div className="space-y-6">
+      <RegisteredVisualExportFrame order={10} label="Download summary" filename={stFile("summary")}>
+        <Card className="border-border-strong">
+          <CardContent className="grid gap-6 p-6 lg:grid-cols-[1fr_1.15fr] lg:items-center">
+            <div>
+              <HeaderTitle>Statement trends</HeaderTitle>
+              <h2 className="mt-2 text-3xl font-extrabold text-text-primary">
+                {brandReport ? brandReport.selectedBrand : "Canopy overall"}
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+                Every integration statement, scored by campaign, with the growth between the two campaigns
+                you are comparing. Use the heat maps report to see where the change is coming from.
+              </p>
+            </div>
+            <IndexChangeTiles row={pinned} fromKey={fromKey} toKey={toKey} />
+          </CardContent>
+        </Card>
+      </RegisteredVisualExportFrame>
+
+      <RegisteredVisualExportFrame order={20} label="Download table" filename={stFile("table")}>
+        <TrendTable
+          title="Integration Statements"
+          description="Sorted by growth by default. Select any column header to re-sort."
+          labelHeader="Statement"
+          rows={rows}
+          pinnedRow={pinned}
+          benchmarkById={brandReport ? buildLabelMap(data.trends.statements) : undefined}
+          benchmarkHeader="vs. Canopy"
+          fromKey={fromKey}
+          toKey={toKey}
+          wideLabels
+        />
+      </RegisteredVisualExportFrame>
+    </div>
+  );
+}
+
+function BrandReportTab({
+  data,
+  selectedBrand,
+  selectedCampaign,
+}: {
+  data: IntegrationDashboardData;
+  selectedBrand: string;
+  selectedCampaign: string;
+}) {
+  const brandReport =
+    data.brandReports.find((report) => report.selectedBrand === selectedBrand) ?? data.brandReports[0];
+
+  if (!brandReport) return null;
+
+  const campaignMetrics =
+    selectedCampaign !== "all" ? brandReport.questionMetricsByCampaign[selectedCampaign] : undefined;
+  const chartMetrics = campaignMetrics ?? brandReport.questionMetrics;
+  const chartSlot = slotKeyForCampaignLabel(selectedCampaign);
+  const chartAverage =
+    campaignMetrics && chartSlot
+      ? (brandReport.trend.index[chartSlot] ?? brandReport.integrationIndex)
+      : brandReport.integrationIndex;
+  const questionBars = sortByScoreAsc(chartMetrics)
+    .reverse()
+    .map((question) => ({ name: question.shortLabel, value: question.score }));
+  const [protectItems, focusItems] = dedupePriorityGroups(
+    brandReport.strengths.slice(0, 3),
+    brandReport.priorities.slice(0, 3)
+  );
+
+  const brFile = (section: string) =>
+    buildDashboardExportFilename({ client: "integration", perspective: `brand-${brandReport.selectedBrand}-${section}` });
+
+  return (
+    <div className="space-y-6">
+      <RegisteredVisualExportFrame order={10} label="Download summary" filename={brFile("summary")}>
+        <Card className="border-border-strong">
+          <CardContent className="grid gap-6 p-6 lg:grid-cols-[0.9fr_1.2fr] lg:items-center">
+            <div>
+              <HeaderTitle>Brand summary</HeaderTitle>
+              <h2 className="mt-2 text-4xl font-extrabold text-text-primary">{brandReport.selectedBrand}</h2>
+              <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+                {buildBrandSummary(brandReport)}
+              </p>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.14em] text-text-muted">
+                {brandReport.respondentCount} responses across all campaigns
+              </p>
+            </div>
+            <IndexChangeTiles row={brandReport.trend.index} />
+          </CardContent>
+        </Card>
+      </RegisteredVisualExportFrame>
+
+      <RegisteredVisualExportFrame order={20} label="Download chart" filename={brFile("statement-scores")}>
+        <Card className="border-border-strong">
+          <CardHeader>
+            <CardTitle>
+              Statement Scores
+              {campaignMetrics ? ` · ${selectedCampaign}` : " · All Campaigns"}
+            </CardTitle>
+            <CardDescription>Follows the campaign selected in the filters.</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <GradientBarChart
+              data={questionBars}
+              average={chartAverage}
+              minValue={INTEGRATION_SCORE_SCALE.minValue}
+              midpoint={INTEGRATION_SCORE_SCALE.midpoint}
+              maxValue={INTEGRATION_SCORE_SCALE.maxValue}
+            />
+          </CardContent>
+        </Card>
+      </RegisteredVisualExportFrame>
+
+      <RegisteredVisualExportFrame order={30} label="Download table" filename={brFile("statement-change")}>
+        <TrendTable
+          title="Statement Change"
+          description="Initial, secondary and growth for every statement, compared with Canopy overall."
+          labelHeader="Statement"
+          rows={brandReport.trend.questions}
+          benchmarkById={buildLabelMap(data.trends.statements)}
+          benchmarkHeader="vs. Canopy"
+          wideLabels
+        />
+      </RegisteredVisualExportFrame>
+
+      <RegisteredVisualExportFrame order={40} label="Download table" filename={brFile("departments")}>
+        <TrendTable
+          title="Departments"
+          description="Brand average pinned on top. The comparison column shows each team against it."
+          labelHeader="Department"
+          rows={brandReport.trend.departments}
+          pinnedRow={{ ...brandReport.trend.index, label: `${brandReport.selectedBrand} average` }}
+          benchmark={brandReport.trend.index}
+          benchmarkHeader="vs. Brand Avg"
+        />
+      </RegisteredVisualExportFrame>
+
+      <RegisteredVisualExportFrame order={50} label="Download table" filename={brFile("job-titles")}>
+        <TrendTable
+          title="Job Titles"
+          description="Brand average pinned on top. The comparison column shows each role against it."
+          labelHeader="Job Title"
+          rows={brandReport.trend.jobTitles}
+          pinnedRow={{ ...brandReport.trend.index, label: `${brandReport.selectedBrand} average` }}
+          benchmark={brandReport.trend.index}
+          benchmarkHeader="vs. Brand Avg"
+        />
+      </RegisteredVisualExportFrame>
+
+      <div className="border-t border-border-strong pt-6">
+        <div className="grid gap-6 xl:grid-cols-2">
+          <RegisteredVisualExportFrame order={70} label="Download list" filename={brFile("protect")} className="h-full">
+            <CompactPriorityList
+              title="Protect"
+              description="The strongest signals worth preserving as the integration continues."
+              items={protectItems}
+            />
+          </RegisteredVisualExportFrame>
+          <RegisteredVisualExportFrame order={80} label="Download list" filename={brFile("focus")} className="h-full">
+            <CompactPriorityList
+              title="Focus"
+              description="The clearest areas where leaders should intervene directly."
+              items={focusItems}
+            />
+          </RegisteredVisualExportFrame>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <RegisteredVisualExportFrame order={90} label="Download comments" filename={brFile("voice-improvement")} className="h-full">
+          <VoiceList
+            title="What this brand wants improved"
+            prompt={VOICE_PROMPTS.improvement}
+            entries={brandReport.voice.improvement}
+          />
+        </RegisteredVisualExportFrame>
+        <RegisteredVisualExportFrame order={100} label="Download comments" filename={brFile("voice-strengths")} className="h-full">
+          <VoiceList
+            title="What this brand says is working"
+            prompt={VOICE_PROMPTS.strengths}
+            entries={brandReport.voice.strengths}
+          />
+        </RegisteredVisualExportFrame>
+      </div>
+    </div>
   );
 }
 
@@ -1034,6 +1514,12 @@ function buildIntegrationPerspectiveDefinitions(
     longitudinalQuestionId: string;
     longitudinalDepartment: string;
     brandReportSelectedBrand: string;
+    brandReportSelectedCampaign: string;
+    statementBrand: string;
+    statementFromCampaign: string;
+    statementToCampaign: string;
+    heatMapBrand: string;
+    heatMapCampaign: string;
     voiceSelectedBrand: string;
     voiceSelectedCampaign: string;
     voiceSelectedSentiment: "all" | "positive" | "neutral" | "negative";
@@ -1050,10 +1536,28 @@ function buildIntegrationPerspectiveDefinitions(
         selectedDepartment={filters.longitudinalDepartment}
       />
     ),
-    "integration.statementTrends": <StatementsTab data={data} />,
+    "integration.statementTrends": (
+      <StatementsTab
+        data={data}
+        selectedBrand={filters.statementBrand}
+        fromLabel={filters.statementFromCampaign}
+        toLabel={filters.statementToCampaign}
+      />
+    ),
+    "integration.heatMaps": (
+      <HeatMapsTab
+        data={data}
+        selectedBrand={filters.heatMapBrand}
+        selectedCampaign={filters.heatMapCampaign}
+      />
+    ),
     "integration.protectPrioritize": <PrioritiesTab data={data} />,
     "integration.brandReport": (
-      <BrandReportTab data={data} selectedBrand={filters.brandReportSelectedBrand} />
+      <BrandReportTab
+        data={data}
+        selectedBrand={filters.brandReportSelectedBrand}
+        selectedCampaign={filters.brandReportSelectedCampaign}
+      />
     ),
     "integration.employeeVoice": (
       <VoiceTab
@@ -1090,6 +1594,14 @@ function buildIntegrationPerspectiveDefinitions(
         categoryIds: ["canopy"],
         categoryLabels: ["Executive"],
         content: rendererMap["integration.statementTrends"],
+      },
+      {
+        id: "heatmaps",
+        label: "Heat Maps",
+        rendererKey: "integration.heatMaps",
+        categoryIds: ["canopy"],
+        categoryLabels: ["Executive"],
+        content: rendererMap["integration.heatMaps"],
       },
       {
         id: "priorities",
@@ -1139,6 +1651,25 @@ function buildIntegrationPerspectiveDefinitions(
         content,
       });
     });
+
+  // Heat maps were split out of Statement Trends. Dashboards configured before
+  // that split keep working: add the report right after Statement Trends.
+  if (!definitions.some((definition) => definition.rendererKey === "integration.heatMaps")) {
+    const statementIndex = definitions.findIndex(
+      (definition) => definition.rendererKey === "integration.statementTrends"
+    );
+    if (statementIndex >= 0) {
+      const statementDefinition = definitions[statementIndex];
+      definitions.splice(statementIndex + 1, 0, {
+        id: "heatmaps",
+        label: "Heat Maps",
+        rendererKey: "integration.heatMaps",
+        categoryIds: statementDefinition.categoryIds,
+        categoryLabels: statementDefinition.categoryLabels,
+        content: rendererMap["integration.heatMaps"],
+      });
+    }
+  }
 
   return definitions;
 }
@@ -1227,6 +1758,36 @@ export function IntegrationEffectivenessDashboardClient({
     "brandReportSelectedBrand",
     () => data.brandReports[0]?.selectedBrand ?? ""
   );
+  const [brandReportCampaignPref, setBrandReportCampaignPref] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "brandReportCampaign",
+    "latest"
+  );
+  const [statementBrand, setStatementBrand] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "statementBrand",
+    "all"
+  );
+  const [statementFromPref, setStatementFromPref] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "statementFrom",
+    "first"
+  );
+  const [statementToPref, setStatementToPref] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "statementTo",
+    "latest"
+  );
+  const [heatMapBrand, setHeatMapBrand] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "heatMapBrand",
+    "all"
+  );
+  const [heatMapCampaign, setHeatMapCampaign] = usePersistedDashboardFilter(
+    filterStoreKey,
+    "heatMapCampaign",
+    "all"
+  );
   const [voiceSelectedBrand, setVoiceSelectedBrand] = usePersistedDashboardFilter(
     filterStoreKey,
     "voiceSelectedBrand",
@@ -1286,6 +1847,27 @@ export function IntegrationEffectivenessDashboardClient({
     : voiceSelectedBrand === "all" || data.meta.brands.includes(voiceSelectedBrand)
       ? voiceSelectedBrand
       : "all";
+  const campaignLabels = useMemo(
+    () => data.meta.campaigns.filter((label) => slotKeyForCampaignLabel(label) !== null),
+    [data.meta.campaigns]
+  );
+  const firstCampaignLabel = campaignLabels[0] ?? "";
+  const latestCampaignLabel = campaignLabels[campaignLabels.length - 1] ?? "";
+  const resolveCampaignPref = (value: string, allowAll: boolean) => {
+    if (value === "all") return allowAll ? "all" : latestCampaignLabel;
+    if (value === "first") return firstCampaignLabel;
+    if (value === "latest") return latestCampaignLabel;
+    return campaignLabels.includes(value) ? value : latestCampaignLabel;
+  };
+  const brandReportCampaign = resolveCampaignPref(brandReportCampaignPref, true);
+  const statementFromCampaign = resolveCampaignPref(statementFromPref, false);
+  const statementToCampaign = resolveCampaignPref(statementToPref, false);
+  const heatMapCampaignResolved = resolveCampaignPref(heatMapCampaign, true);
+  const allBrandNames = data.meta.brands;
+  const resolvedStatementBrand =
+    statementBrand === "all" || allBrandNames.includes(statementBrand) ? statementBrand : "all";
+  const resolvedHeatMapBrand =
+    heatMapBrand === "all" || allBrandNames.includes(heatMapBrand) ? heatMapBrand : "all";
   const perspectiveDefinitions = useMemo(() => {
     const definitions = buildIntegrationPerspectiveDefinitions(
         data,
@@ -1294,6 +1876,12 @@ export function IntegrationEffectivenessDashboardClient({
           longitudinalQuestionId,
           longitudinalDepartment,
           brandReportSelectedBrand: resolvedBrandReportSelectedBrand,
+          brandReportSelectedCampaign: brandReportCampaign,
+          statementBrand: resolvedStatementBrand,
+          statementFromCampaign,
+          statementToCampaign,
+          heatMapBrand: resolvedHeatMapBrand,
+          heatMapCampaign: heatMapCampaignResolved,
           voiceSelectedBrand: resolvedVoiceSelectedBrand,
           voiceSelectedCampaign,
           voiceSelectedSentiment,
@@ -1309,6 +1897,12 @@ export function IntegrationEffectivenessDashboardClient({
       longitudinalQuestionId,
       longitudinalDepartment,
       resolvedBrandReportSelectedBrand,
+      brandReportCampaign,
+      resolvedStatementBrand,
+      statementFromCampaign,
+      statementToCampaign,
+      resolvedHeatMapBrand,
+      heatMapCampaignResolved,
       resolvedVoiceSelectedBrand,
       voiceSelectedCampaign,
       voiceSelectedSentiment,
@@ -1361,99 +1955,173 @@ export function IntegrationEffectivenessDashboardClient({
     ...(includeAll ? [{ id: "all", label: "All Brands" }] : []),
     ...brands.map((brand) => ({ id: brand, label: brand })),
   ];
+  const campaignPillOptions = (includeAll: boolean) => [
+    ...(includeAll ? [{ id: "all", label: "All Campaigns" }] : []),
+    ...campaignLabels.map((label) => ({ id: label, label })),
+  ];
+  const railStack = (children: React.ReactNode) => (
+    <FilterStack>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{children}</div>
+    </FilterStack>
+  );
   const filtersSlotContent =
     activePerspective?.rendererKey === "integration.longitudinalTrends" ? (
-      <FilterStack>
-        <EmbeddedFilterCard title="Brand">
-          <PillOptionRow
-            value={longitudinalBrand}
-            onChange={setLongitudinalBrand}
-            options={brandPillOptions(true, data.brandReports.map((report) => report.selectedBrand))}
-          />
-        </EmbeddedFilterCard>
-        <EmbeddedFilterCard title="Campaign Statement">
-          <select
-            aria-label="Campaign Statement"
-            value={longitudinalQuestionId}
-            onChange={(event) => setLongitudinalQuestionId(event.target.value)}
-            style={railSelectStyle}
-          >
-            <option value="all">All Statements</option>
-            {data.questionMetrics.map((question) => (
-              <option key={question.id} value={question.id}>
-                {question.shortLabel}
-              </option>
-            ))}
-          </select>
-        </EmbeddedFilterCard>
-        <EmbeddedFilterCard title="Department">
-          <select
-            aria-label="Department"
-            value={longitudinalDepartment}
-            onChange={(event) => setLongitudinalDepartment(event.target.value)}
-            style={railSelectStyle}
-          >
-            <option value="all">All Departments</option>
-            {data.departmentMetrics.map((department) => (
-              <option key={department.id} value={department.label}>
-                {department.label}
-              </option>
-            ))}
-          </select>
-          {railHint("All selections filter the visible brand nodes through one lens while the campaign cards keep the organization-level read.")}
-        </EmbeddedFilterCard>
-      </FilterStack>
+      railStack(
+        <>
+          <EmbeddedFilterCard defaultOpen title="Brand">
+            <PillOptionRow
+              value={longitudinalBrand}
+              onChange={setLongitudinalBrand}
+              options={brandPillOptions(true, data.brandReports.map((report) => report.selectedBrand))}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Campaign Statement">
+            <select
+              aria-label="Campaign Statement"
+              value={longitudinalQuestionId}
+              onChange={(event) => setLongitudinalQuestionId(event.target.value)}
+              style={railSelectStyle}
+            >
+              <option value="all">All Statements</option>
+              {data.questionMetrics.map((question) => (
+                <option key={question.id} value={question.id}>
+                  {question.shortLabel}
+                </option>
+              ))}
+            </select>
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Department">
+            <select
+              aria-label="Department"
+              value={longitudinalDepartment}
+              onChange={(event) => setLongitudinalDepartment(event.target.value)}
+              style={railSelectStyle}
+            >
+              <option value="all">All Departments</option>
+              {data.departmentMetrics.map((department) => (
+                <option key={department.id} value={department.label}>
+                  {department.label}
+                </option>
+              ))}
+            </select>
+            {railHint("All selections filter the visible brand nodes through one lens while the campaign cards keep the organization-level read.")}
+          </EmbeddedFilterCard>
+        </>
+      )
     ) : activePerspective?.rendererKey === "integration.brandReport" ? (
-      <FilterStack>
-        <EmbeddedFilterCard title="Brand">
-          <PillOptionRow
-            value={resolvedBrandReportSelectedBrand}
-            onChange={setBrandReportSelectedBrand}
-            options={brandPillOptions(false, brandOptions)}
-          />
-          {railHint("Grouped cuts follow a strict 2-response masking rule, so smaller subgroups stay hidden while still counting toward aggregate reads.")}
-        </EmbeddedFilterCard>
-      </FilterStack>
+      railStack(
+        <>
+          <EmbeddedFilterCard defaultOpen title="Brand">
+            <PillOptionRow
+              value={resolvedBrandReportSelectedBrand}
+              onChange={setBrandReportSelectedBrand}
+              options={brandPillOptions(false, brandOptions)}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Campaign">
+            <PillOptionRow
+              value={brandReportCampaign}
+              onChange={setBrandReportCampaignPref}
+              options={campaignPillOptions(true)}
+            />
+            {railHint("Sets the statement chart. Growth tables always show every campaign.")}
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Masking">
+            {railHint("Grouped cuts follow a strict 2-response masking rule, so smaller subgroups stay hidden while still counting toward aggregate reads.")}
+          </EmbeddedFilterCard>
+        </>
+      )
+    ) : activePerspective?.rendererKey === "integration.statementTrends" ? (
+      railStack(
+        <>
+          <EmbeddedFilterCard defaultOpen title="Brand">
+            <PillOptionRow
+              value={resolvedStatementBrand}
+              onChange={setStatementBrand}
+              options={brandPillOptions(true, data.meta.brands)}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Compare From">
+            <PillOptionRow
+              value={statementFromCampaign}
+              onChange={setStatementFromPref}
+              options={campaignPillOptions(false)}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Compare To">
+            <PillOptionRow
+              value={statementToCampaign}
+              onChange={setStatementToPref}
+              options={campaignPillOptions(false)}
+            />
+            {railHint("Growth is measured from the first campaign to the second.")}
+          </EmbeddedFilterCard>
+        </>
+      )
+    ) : activePerspective?.rendererKey === "integration.heatMaps" ? (
+      railStack(
+        <>
+          <EmbeddedFilterCard defaultOpen title="Brand">
+            <PillOptionRow
+              value={resolvedHeatMapBrand}
+              onChange={setHeatMapBrand}
+              options={brandPillOptions(true, data.meta.brands)}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Campaign">
+            <PillOptionRow
+              value={heatMapCampaignResolved}
+              onChange={setHeatMapCampaign}
+              options={campaignPillOptions(true)}
+            />
+            {railHint("The campaign heat map always shows every campaign, oldest on the left.")}
+          </EmbeddedFilterCard>
+        </>
+      )
     ) : activePerspective?.rendererKey === "integration.employeeVoice" ? (
-      <FilterStack>
-        <EmbeddedFilterCard title="Brand">
-          <PillOptionRow
-            value={resolvedVoiceSelectedBrand}
-            onChange={setVoiceSelectedBrand}
-            options={brandPillOptions(!voiceBrandRestricted, voiceBrandOptions)}
-          />
-        </EmbeddedFilterCard>
-        <EmbeddedFilterCard title="Campaign">
-          <PillOptionRow
-            value={voiceSelectedCampaign}
-            onChange={setVoiceSelectedCampaign}
-            options={[
-              { id: "all", label: "All Campaigns" },
-              ...data.meta.campaigns.map((campaign) => ({ id: campaign, label: campaign })),
-            ]}
-          />
-        </EmbeddedFilterCard>
-        <EmbeddedFilterCard title="Sentiment">
-          <PillOptionRow
-            value={voiceSelectedSentiment}
-            onChange={(value) =>
-              setVoiceSelectedSentiment(value as "all" | "positive" | "neutral" | "negative")
-            }
-            options={[
-              { id: "all", label: "All Sentiment" },
-              { id: "negative", label: "Negative" },
-              { id: "neutral", label: "Neutral" },
-              { id: "positive", label: "Positive" },
-            ]}
-          />
-        </EmbeddedFilterCard>
-      </FilterStack>
+      railStack(
+        <>
+          <EmbeddedFilterCard defaultOpen title="Brand">
+            <PillOptionRow
+              value={resolvedVoiceSelectedBrand}
+              onChange={setVoiceSelectedBrand}
+              options={brandPillOptions(!voiceBrandRestricted, voiceBrandOptions)}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Campaign">
+            <PillOptionRow
+              value={voiceSelectedCampaign}
+              onChange={setVoiceSelectedCampaign}
+              options={[
+                { id: "all", label: "All Campaigns" },
+                ...data.meta.campaigns.map((campaign) => ({ id: campaign, label: campaign })),
+              ]}
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Sentiment">
+            <PillOptionRow
+              value={voiceSelectedSentiment}
+              onChange={(value) =>
+                setVoiceSelectedSentiment(value as "all" | "positive" | "neutral" | "negative")
+              }
+              options={[
+                { id: "all", label: "All Sentiment" },
+                { id: "negative", label: "Negative" },
+                { id: "neutral", label: "Neutral" },
+                { id: "positive", label: "Positive" },
+              ]}
+            />
+          </EmbeddedFilterCard>
+        </>
+      )
     ) : (
-      <EmbeddedFilterCard title="Filters">
-        <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
-          This report shows all brands and campaigns. Filters appear here for reports that support them.
-        </p>
-      </EmbeddedFilterCard>
+      railStack(
+        <EmbeddedFilterCard defaultOpen title="Filters">
+          <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
+            This report shows all brands and campaigns. Filters appear here for reports that support them.
+          </p>
+        </EmbeddedFilterCard>
+      )
     );
 
   const exportFilename = buildDashboardExportFilename({
@@ -1470,14 +2138,14 @@ export function IntegrationEffectivenessDashboardClient({
       {!isCsgIntegration ? null : (
         <CompositeVisualExportButton filename={exportFilename} logoUrl="/canopy-services-logo.png" skipGeneratedHeader asContextCard />
       )}
-      <EmbeddedFilterCard title="Score Scale">
+      <EmbeddedFilterCard defaultOpen title="Score Scale">
         <div className="flex items-center gap-2">
           <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{INTEGRATION_SCORE_SCALE.minLabel}</span>
           <div className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]" style={{ background: gradient }} />
           <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{INTEGRATION_SCORE_SCALE.maxLabel}</span>
         </div>
       </EmbeddedFilterCard>
-      <EmbeddedFilterCard title="Campaigns">
+      <EmbeddedFilterCard defaultOpen title="Campaigns">
         <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
           Campaign 1 is the initial read, Campaign 2 the second, and Campaign 3 the final. {data.meta.campaigns.length} of 3 loaded.
         </p>
@@ -1840,359 +2508,6 @@ function PrioritiesTab({ data }: { data: IntegrationDashboardData }) {
           />
         </RegisteredVisualExportFrame>
       </div>
-    </div>
-  );
-}
-
-function StatementsTab({ data }: { data: IntegrationDashboardData }) {
-  const questionBars = sortByScoreAsc(data.questionMetrics)
-    .reverse()
-    .map((question) => ({
-      name: question.shortLabel,
-      value: question.score,
-    }));
-  const dimensionRows = data.dimensionMetrics.map((row) => ({
-    label: row.label,
-    score: row.score,
-  }));
-
-  const stFile = (section: string) =>
-    buildDashboardExportFilename({ client: "integration", perspective: `statements-${section}` });
-
-  return (
-    <div className="space-y-8">
-      <RegisteredVisualExportFrame order={10} label="Download card" filename={stFile("overview")}>
-      <Card className="border-border-strong">
-        <CardContent className="grid gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
-          <div>
-            <HeaderTitle>Statement-level read</HeaderTitle>
-            <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-              This perspective allows leaders to review statement trends across brand, campaign, role,
-              and department so they can see where the integration story shifts most clearly.
-            </p>
-          </div>
-          <div className="flex min-h-[112px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-white px-4 py-3 text-center shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
-              Responses
-            </p>
-            <p className="mt-2 text-4xl font-extrabold leading-none text-text-primary">
-              {data.meta.totalRespondents}
-            </p>
-            <p className="mt-2 text-sm text-text-secondary">Included in the current view</p>
-          </div>
-        </CardContent>
-      </Card>
-      </RegisteredVisualExportFrame>
-
-      <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-        <div className="lg:col-span-7">
-          <RegisteredVisualExportFrame order={20} label="Download chart" filename={stFile("integration-statements")} className="h-full">
-          <Card className="h-full border-border-strong">
-            <CardHeader>
-              <CardTitle>Integration Statements</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <GradientBarChart
-                data={questionBars}
-                average={data.overview.integrationIndex}
-                minValue={INTEGRATION_SCORE_SCALE.minValue}
-                midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-                maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-              />
-            </CardContent>
-          </Card>
-          </RegisteredVisualExportFrame>
-        </div>
-        <div className="lg:col-span-5">
-          <RegisteredVisualExportFrame order={30} label="Download table" filename={stFile("dimension-scores")} className="h-full">
-          <ScoreTable
-            title="Dimension Scores"
-            headers={["Dimension", "Index"]}
-            rows={dimensionRows}
-            minValue={INTEGRATION_SCORE_SCALE.minValue}
-            midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-            maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-          />
-          </RegisteredVisualExportFrame>
-        </div>
-      </div>
-
-      <RegisteredVisualExportFrame order={40} label="Download sections" filename={stFile("function-segments")}>
-      <div className="border-t border-border-strong pt-8">
-        <FunctionSegmentSections data={data} />
-      </div>
-      </RegisteredVisualExportFrame>
-    </div>
-  );
-}
-
-function BrandReportTab({
-  data,
-  selectedBrand,
-}: {
-  data: IntegrationDashboardData;
-  selectedBrand: string;
-}) {
-  const brandReport =
-    data.brandReports.find((report) => report.selectedBrand === selectedBrand) ?? data.brandReports[0];
-
-  if (!brandReport) return null;
-
-  const questionBars = sortByScoreAsc(brandReport.questionMetrics)
-    .reverse()
-    .map((question) => ({ name: question.shortLabel, value: question.score }));
-  const departmentRows = brandReport.departmentMetrics.map((row) => ({
-    label: row.label,
-    score: row.score,
-  }));
-  const jobTitleRows = brandReport.jobTitleMetrics.map((row) => ({
-    label: row.label,
-    score: row.score,
-  }));
-  const departmentHeatmapRows = brandReport.departmentHeatmap.rows
-    .slice()
-    .sort(
-      (left, right) =>
-        (brandReport.departmentHeatmap.rowTotals[right] ?? 0) -
-        (brandReport.departmentHeatmap.rowTotals[left] ?? 0)
-    );
-  const jobTitleHeatmapRows = brandReport.jobTitleHeatmap.rows
-    .slice()
-    .sort(
-      (left, right) =>
-        (brandReport.jobTitleHeatmap.rowTotals[right] ?? 0) -
-        (brandReport.jobTitleHeatmap.rowTotals[left] ?? 0)
-    );
-  const [protectItems, focusItems] = dedupePriorityGroups(
-    brandReport.strengths.slice(0, 3),
-    brandReport.priorities.slice(0, 3)
-  );
-
-  const brFile = (section: string) =>
-    buildDashboardExportFilename({ client: "integration", perspective: `brand-${brandReport.selectedBrand}-${section}` });
-
-  return (
-      <div className="space-y-6">
-        <RegisteredVisualExportFrame order={10} label="Download summary" filename={brFile("summary")}>
-        <Card className="border-border-strong">
-          <CardContent className="grid gap-6 p-6 lg:grid-cols-[1.05fr_1fr] lg:items-center">
-            <div>
-              <HeaderTitle>Brand summary</HeaderTitle>
-              <h2 className="mt-2 text-4xl font-extrabold text-text-primary">{brandReport.selectedBrand}</h2>
-              <p className="mt-3 text-sm leading-relaxed text-text-secondary">
-                {buildBrandSummary(brandReport)}
-              </p>
-            </div>
-            <div className="grid gap-3 lg:grid-cols-[0.8fr_1fr]">
-              <div
-                className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-surface-2 px-4 py-4 text-center shadow-sm"
-                style={getScoreCardStyle(brandReport.integrationIndex)}
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
-                  Brand Index
-                </p>
-                <p className="mt-2 text-4xl font-extrabold leading-none text-text-primary">
-                  {formatScoreForDisplay(brandReport.integrationIndex)}
-                </p>
-                <p className="mt-2 text-sm text-text-secondary">
-                  based on {brandReport.respondentCount} responses
-                </p>
-              </div>
-              <div
-                className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-white px-4 py-4 text-center shadow-sm"
-              >
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-secondary">
-                  Growth %
-                </p>
-                <p className="mt-2 text-4xl font-extrabold leading-none text-text-primary">—</p>
-                <p className="mt-2 text-sm text-text-secondary">Reserved for longitudinal brand movement</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </RegisteredVisualExportFrame>
-
-        <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
-          <div className="lg:col-span-7">
-            <RegisteredVisualExportFrame order={20} label="Download chart" filename={brFile("statement-scores")} className="h-full">
-            <Card className="h-full border-border-strong">
-              <CardHeader>
-                <CardTitle>Statement Scores</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <GradientBarChart
-                  data={questionBars}
-                  average={brandReport.integrationIndex}
-                  minValue={INTEGRATION_SCORE_SCALE.minValue}
-                  midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-                  maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-                />
-              </CardContent>
-            </Card>
-            </RegisteredVisualExportFrame>
-          </div>
-          <div className="space-y-4 lg:col-span-5">
-            <RegisteredVisualExportFrame order={30} label="Download table" filename={brFile("departments")}>
-            <ScoreTable
-              title="Departments"
-              headers={["Department", "Index"]}
-              rows={departmentRows}
-              minValue={INTEGRATION_SCORE_SCALE.minValue}
-              midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-              maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-            />
-            </RegisteredVisualExportFrame>
-            <RegisteredVisualExportFrame order={40} label="Download table" filename={brFile("job-titles")}>
-            <ScoreTable
-              title="Job Titles"
-              headers={["Job Title", "Index"]}
-              rows={jobTitleRows}
-              minValue={INTEGRATION_SCORE_SCALE.minValue}
-              midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-              maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-            />
-            </RegisteredVisualExportFrame>
-          </div>
-        </div>
-
-        <RegisteredVisualExportFrame order={50} label="Download heat map" filename={brFile("department-heatmap")}>
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Department Heatmap</CardTitle>
-            <CardDescription>
-              Only department-level cells backed by at least two responses are shown.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <HeatmapChart
-              rows={departmentHeatmapRows}
-              columns={brandReport.departmentHeatmap.columns}
-              data={brandReport.departmentHeatmap.data}
-              rowTotals={brandReport.departmentHeatmap.rowTotals}
-              columnTotals={brandReport.departmentHeatmap.columnTotals}
-              minValue={INTEGRATION_SCORE_SCALE.minValue}
-              midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-              maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-              rowLabelHeader="Statement"
-              abbreviateHeaders={false}
-              columnMinWidthClassName="min-w-[112px]"
-              columnWidthClassName="w-[112px]"
-            />
-          </CardContent>
-        </Card>
-        </RegisteredVisualExportFrame>
-
-        <RegisteredVisualExportFrame order={60} label="Download heat map" filename={brFile("job-title-heatmap")}>
-        <Card className="border-border-strong">
-          <CardHeader>
-            <CardTitle>Job Title Heatmap</CardTitle>
-            <CardDescription>
-              Only job-title cells backed by at least two responses are shown.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <HeatmapChart
-              rows={jobTitleHeatmapRows}
-              columns={brandReport.jobTitleHeatmap.columns}
-              data={brandReport.jobTitleHeatmap.data}
-              rowTotals={brandReport.jobTitleHeatmap.rowTotals}
-              columnTotals={brandReport.jobTitleHeatmap.columnTotals}
-              minValue={INTEGRATION_SCORE_SCALE.minValue}
-              midpoint={INTEGRATION_SCORE_SCALE.midpoint}
-              maxValue={INTEGRATION_SCORE_SCALE.maxValue}
-              rowLabelHeader="Statement"
-              abbreviateHeaders={false}
-              columnMinWidthClassName="min-w-[112px]"
-              columnWidthClassName="w-[112px]"
-            />
-          </CardContent>
-        </Card>
-        </RegisteredVisualExportFrame>
-
-        <div className="border-t border-border-strong pt-6">
-          <div className="grid gap-6 xl:grid-cols-2">
-            <RegisteredVisualExportFrame order={70} label="Download list" filename={brFile("protect")} className="h-full">
-              <CompactPriorityList
-                title="Protect"
-                description="The strongest signals worth preserving as the integration continues."
-                items={protectItems}
-              />
-            </RegisteredVisualExportFrame>
-            <RegisteredVisualExportFrame order={80} label="Download list" filename={brFile("focus")} className="h-full">
-              <CompactPriorityList
-                title="Focus"
-                description="The clearest areas where leaders should intervene directly."
-                items={focusItems}
-              />
-            </RegisteredVisualExportFrame>
-          </div>
-        </div>
-
-        <div className="grid gap-6 xl:grid-cols-2">
-          <RegisteredVisualExportFrame order={90} label="Download comments" filename={brFile("voice-improvement")} className="h-full">
-            <VoiceList
-              title="What this brand wants improved"
-              prompt={VOICE_PROMPTS.improvement}
-              entries={brandReport.voice.improvement}
-            />
-          </RegisteredVisualExportFrame>
-          <RegisteredVisualExportFrame order={100} label="Download comments" filename={brFile("voice-strengths")} className="h-full">
-            <VoiceList
-              title="What this brand says is working"
-              prompt={VOICE_PROMPTS.strengths}
-              entries={brandReport.voice.strengths}
-            />
-          </RegisteredVisualExportFrame>
-        </div>
-      </div>
-  );
-}
-
-function FunctionSegmentSections({ data }: { data: IntegrationDashboardData }) {
-  return (
-    <div className="space-y-8">
-      <SegmentLensRow
-        eyebrow="Segment 1"
-        title="Campaign"
-        description="Campaign shows whether the statement-level read changes across the campaign marks that have actually been collected."
-        tableTitle="Campaign Breakdown"
-        heatmapTitle="Campaign Heatmap"
-        labelHeader="Campaign"
-        rows={data.campaignMetrics}
-        heatmap={data.heatmaps.campaigns}
-        defaultSortField="label"
-        defaultSortDirection="asc"
-      />
-      <SegmentLensRow
-        eyebrow="Segment 2"
-        title="Brand"
-        description="This row shows which brands are running hotter or colder overall, and which statements are driving that spread."
-        tableTitle="Brand Breakdown"
-        heatmapTitle="Brand Heatmap"
-        labelHeader="Brand"
-        rows={data.brandMetrics}
-        heatmap={data.heatmaps.brands}
-      />
-      <SegmentLensRow
-        eyebrow="Segment 3"
-        title="Department"
-        description="Department is the operating cut. Use it to see where the lived experience changes most clearly across teams."
-        tableTitle="Department Breakdown"
-        heatmapTitle="Department Heatmap"
-        labelHeader="Department"
-        rows={data.departmentMetrics.filter((metric) => metric.respondentCount >= 2)}
-        heatmap={data.heatmaps.departments}
-      />
-      <SegmentLensRow
-        eyebrow="Segment 4"
-        title="Job Title"
-        description="Job title highlights whether the integration story changes by role and level, not just by org structure."
-        tableTitle="Job Title Breakdown"
-        heatmapTitle="Job Title Heatmap"
-        labelHeader="Job Title"
-        rows={data.jobTitleMetrics}
-        heatmap={data.heatmaps.jobTitles}
-      />
     </div>
   );
 }
