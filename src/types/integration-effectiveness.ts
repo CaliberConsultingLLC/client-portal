@@ -58,6 +58,33 @@ export interface IntegrationHeatmap {
   columnTotals: Record<string, number>;
 }
 
+/** One row of a campaign-over-campaign comparison table. Scores are null when
+ * the row has no (or too few) responses in that campaign. */
+export interface IntegrationTrendRow {
+  id: string;
+  label: string;
+  respondentCount: number;
+  campaign1: number | null;
+  campaign2: number | null;
+  campaign3: number | null;
+  /** All campaigns pooled. */
+  overall: number | null;
+}
+
+export interface IntegrationBrandTrend {
+  index: IntegrationTrendRow;
+  questions: IntegrationTrendRow[];
+  departments: IntegrationTrendRow[];
+  jobTitles: IntegrationTrendRow[];
+}
+
+/** Statement-by-group heatmaps for one brand/campaign scope. */
+export interface IntegrationHeatmapScope {
+  brands: IntegrationHeatmap;
+  departments: IntegrationHeatmap;
+  jobTitles: IntegrationHeatmap;
+}
+
 export interface IntegrationBrandReport {
   selectedBrand: string;
   respondentCount: number;
@@ -69,6 +96,10 @@ export interface IntegrationBrandReport {
   jobTitleMetrics: IntegrationGroupMetric[];
   departmentHeatmap: IntegrationHeatmap;
   jobTitleHeatmap: IntegrationHeatmap;
+  /** Campaign-over-campaign movement for this brand. */
+  trend: IntegrationBrandTrend;
+  /** Statement metrics for one campaign (keyed "Campaign 1".."Campaign 3"). */
+  questionMetricsByCampaign: Record<string, IntegrationQuestionMetric[]>;
   priorities: IntegrationPriority[];
   strengths: IntegrationPriority[];
   voice: {
@@ -125,6 +156,16 @@ export interface IntegrationDashboardData {
     campaignDates: IntegrationHeatmap;
   };
   brandReports: IntegrationBrandReport[];
+  /** Organization-wide campaign movement. Statement rows carry the full statement text. */
+  trends: {
+    organization: IntegrationTrendRow;
+    statements: IntegrationTrendRow[];
+    brands: IntegrationTrendRow[];
+  };
+  /** Heatmaps keyed "<brand|all>::<campaign|all>". Campaign columns are ordered oldest to newest. */
+  heatmapScopes: Record<string, IntegrationHeatmapScope>;
+  /** Statement x Campaign heatmaps keyed by brand (or "all"). Columns run Campaign 1 -> newest. */
+  campaignHeatmaps: Record<string, IntegrationHeatmap>;
   longitudinal?: {
     overall: IntegrationLongitudinalScope;
     statements: Record<string, IntegrationLongitudinalScope>;

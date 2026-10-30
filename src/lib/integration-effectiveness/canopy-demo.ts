@@ -7,6 +7,8 @@ import type {
   IntegrationDimensionMetric,
   IntegrationGroupMetric,
   IntegrationHeatmap,
+  IntegrationHeatmapScope,
+  IntegrationTrendRow,
   IntegrationLongitudinalScope,
   IntegrationLongitudinalSeries,
   IntegrationPriority,
@@ -729,6 +731,165 @@ function buildHeatmapForGrouping(
   };
 }
 
+const CAMPAIGN_SLOTS: CampaignSlot[] = ["campaign1", "campaign2", "campaign3"];
+
+function respondentsForSlot(respondents: ParsedRespondent[], slot: CampaignSlot) {
+  return respondents.filter((respondent) => campaignSlotForLabel(respondent.campaign) === slot);
+}
+
+/** Campaign slots that actually have responses, oldest first. */
+function activeSlots(respondents: ParsedRespondent[]) {
+  return CAMPAIGN_SLOTS.filter((slot) => respondentsForSlot(respondents, slot).length > 0);
+}
+
+type TrendScoreFn = (scoped: ParsedRespondent[]) => number | null;
+
+function allValues(scoped: ParsedRespondent[]) {
+  return scoped.flatMap((respondent) =>
+    Object.values(respondent.scores).filter((value): value is number => value !== null)
+  );
+}
+
+/** Pooled average of every answer (matches the Brand Index card). */
+const pooledIndexScore: TrendScoreFn = (scoped) => {
+  const values = allValues(scoped);
+  return values.length > 0 ? round2(average(values)) : null;
+};
+
+/** Average of each respondent's own average (matches the group tables). */
+const respondentMeanScore: TrendScoreFn = (scoped) => {
+  const means = scoped
+    .map((respondent) =>
+      Object.values(respondent.scores).filter((value): value is number => value !== null)
+    )
+    .filter((values) => values.length > 0)
+    .map((values) => average(values));
+  return means.length > 0 ? round2(average(means)) : null;
+};
+
+function questionScoreFn(itemId: number): TrendScoreFn {
+  return (scoped) => {
+    const values = scoped
+      .map((respondent) => respondent.scores[itemId])
+      .filter((value): value is number => value !== null && value !== undefined);
+    return values.length > 0 ? round2(average(values)) : null;
+  };
+}
+
+function buildTrendRow(
+  id: string,
+  label: string,
+  respondents: ParsedRespondent[],
+  scoreFn: TrendScoreFn,
+  minimumCount = 1
+): IntegrationTrendRow {
+  const row: IntegrationTrendRow = {
+    id,
+    label,
+    respondentCount: respondents.length,
+    campaign1: null,
+    campaign2: null,
+    campaign3: null,
+    overall: respondents.length >= minimumCount ? scoreFn(respondents) : null,
+  };
+  for (const slot of CAMPAIGN_SLOTS) {
+    const scoped = respondentsForSlot(respondents, slot);
+    row[slot] = scoped.length >= minimumCount ? scoreFn(scoped) : null;
+  }
+  return row;
+}
+
+function buildGroupTrendRows(
+  respondents: ParsedRespondent[],
+  accessor: (respondent: ParsedRespondent) => string,
+  minimumCount: number
+): IntegrationTrendRow[] {
+  const labels = Array.from(new Set(respondents.map(accessor)));
+  return labels
+    .map((label) =>
+      buildTrendRow(
+        label.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        label,
+        respondents.filter((respondent) => accessor(respondent) === label),
+        respondentMeanScore,
+        minimumCount
+      )
+    )
+    .filter((row) => row.overall !== null);
+}
+
+/** Statement x Campaign heatmap. Columns run oldest -> newest. */
+function buildCampaignHeatmap(
+  respondents: ParsedRespondent[],
+  questions: ParsedQuestion[]
+): IntegrationHeatmap {
+  const slots = activeSlots(respondents);
+  const columns = slots.map((slot) => CAMPAIGN_SLOT_LABELS[slot]);
+  const rows = questions.map((question) => question.statement);
+  const data = questions.map((question) => ({
+    department: question.statement,
+    scores: Object.fromEntries(
+      slots.map((slot) => {
+        const scoped = respondentsForSlot(respondents, slot);
+        return [
+          CAMPAIGN_SLOT_LABELS[slot],
+          scoped.length >= 2 ? questionScoreFn(question.itemId)(scoped) : null,
+        ];
+      })
+    ),
+  }));
+  const rowTotals = Object.fromEntries(
+    questions.map((question) => [question.statement, questionScoreFn(question.itemId)(respondents) ?? 0])
+  );
+  const columnTotals = Object.fromEntries(
+    slots.map((slot) => [
+      CAMPAIGN_SLOT_LABELS[slot],
+      pooledIndexScore(respondentsForSlot(respondents, slot)) ?? 0,
+    ])
+  );
+  return { rows, columns, data, rowTotals, columnTotals };
+}
+
+const EMPTY_HEATMAP: IntegrationHeatmap = {
+  rows: [],
+  columns: [],
+  data: [],
+  rowTotals: {},
+  columnTotals: {},
+};
+
+function buildHeatmapScopes(
+  respondents: ParsedRespondent[],
+  questions: ParsedQuestion[]
+): Record<string, IntegrationHeatmapScope> {
+  const brands = Array.from(new Set(respondents.map((respondent) => respondent.brand)));
+  const slots = activeSlots(respondents);
+  const scopes: Record<string, IntegrationHeatmapScope> = {};
+
+  for (const brand of ["all", ...brands]) {
+    const brandScoped =
+      brand === "all" ? respondents : respondents.filter((respondent) => respondent.brand === brand);
+    const campaignScopes: Array<[string, ParsedRespondent[]]> = [
+      ["all", brandScoped],
+      ...slots.map((slot): [string, ParsedRespondent[]] => [
+        CAMPAIGN_SLOT_LABELS[slot],
+        respondentsForSlot(brandScoped, slot),
+      ]),
+    ];
+    for (const [campaignKey, scoped] of campaignScopes) {
+      scopes[`${brand}::${campaignKey}`] = {
+        brands:
+          brand === "all"
+            ? buildHeatmapForGrouping(scoped, questions, (respondent) => respondent.brand, 2)
+            : EMPTY_HEATMAP,
+        departments: buildHeatmapForGrouping(scoped, questions, (respondent) => respondent.department, 2),
+        jobTitles: buildHeatmapForGrouping(scoped, questions, (respondent) => respondent.jobTitle, 2),
+      };
+    }
+  }
+  return scopes;
+}
+
 function buildBrandReport(
   brand: string,
   respondents: ParsedRespondent[],
@@ -777,6 +938,26 @@ function buildBrandReport(
       questions,
       (respondent) => respondent.jobTitle,
       2
+    ),
+    trend: {
+      index: buildTrendRow("index", brand, scopedRespondents, pooledIndexScore, 1),
+      questions: questions.map((question) =>
+        buildTrendRow(
+          `question-${question.itemId}`,
+          question.statement,
+          scopedRespondents,
+          questionScoreFn(question.itemId),
+          1
+        )
+      ),
+      departments: buildGroupTrendRows(scopedRespondents, (respondent) => respondent.department, 2),
+      jobTitles: buildGroupTrendRows(scopedRespondents, (respondent) => respondent.jobTitle, 2),
+    },
+    questionMetricsByCampaign: Object.fromEntries(
+      activeSlots(scopedRespondents).map((slot) => [
+        CAMPAIGN_SLOT_LABELS[slot],
+        buildQuestionMetrics(respondentsForSlot(scopedRespondents, slot), questions),
+      ])
     ),
     priorities: buildPriorityList(questionMetrics, departmentMetrics),
     strengths: buildStrengthList(questionMetrics, departmentMetrics),
@@ -996,6 +1177,30 @@ export async function loadCanopyIntegrationDashboardData(
       ),
     },
     brandReports,
+    trends: {
+      organization: buildTrendRow("organization", "Canopy overall", respondents, pooledIndexScore, 1),
+      statements: questions.map((question) =>
+        buildTrendRow(
+          `question-${question.itemId}`,
+          question.statement,
+          respondents,
+          questionScoreFn(question.itemId),
+          1
+        )
+      ),
+      brands: buildGroupTrendRows(respondents, (respondent) => respondent.brand, 1),
+    },
+    heatmapScopes: buildHeatmapScopes(respondents, questions),
+    campaignHeatmaps: Object.fromEntries([
+      ["all", buildCampaignHeatmap(respondents, questions)],
+      ...Array.from(new Set(respondents.map((respondent) => respondent.brand))).map((brand) => [
+        brand,
+        buildCampaignHeatmap(
+          respondents.filter((respondent) => respondent.brand === brand),
+          questions
+        ),
+      ]),
+    ]),
     longitudinal: buildLongitudinalData(respondents, questions),
     priorities: buildPriorityList(questionMetrics, departmentMetrics),
     strengths: buildStrengthList(questionMetrics, departmentMetrics),
