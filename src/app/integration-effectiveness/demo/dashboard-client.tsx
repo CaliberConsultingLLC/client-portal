@@ -8,16 +8,17 @@ import { buildDashboardFilterStoreKey } from "@/lib/portal/dashboard-filter-cook
 import { GradientBarChart } from "@/components/charts/gradient-bar-chart";
 import { HeatmapChart } from "@/components/charts/heatmap-chart";
 import { ScoreTable } from "@/components/collaboration/score-table";
-import { ColorLegend } from "@/components/collaboration/color-legend";
-import { DashboardCanvas, DashboardRibbon } from "@/components/dashboard/dashboard-shell";
 import {
   VisualExportProvider,
   VisualExportMetaSetter,
 } from "@/components/dashboard/visual-export-registry";
+import { FieldRedesignShell } from "@/app/employee-experience/dws/field-redesign-shell";
+import { EmbeddedFilterCard, FilterStack, PillOptionRow } from "@/app/employee-experience/dws/ee-report-kit";
 import { CompositeVisualExportButton } from "@/components/dashboard/composite-visual-export-button";
 import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
 import {
   buildDashboardExportFilename,
+  DASHBOARD_VISUAL_EXPORT_TARGET_ID,
 } from "@/lib/dashboard/export-visual";
 import {
   scoreScaleColor,
@@ -31,7 +32,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
-import { Select } from "@/components/ui/select";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
 import { INTEGRATION_SCORE_SCALE } from "@/lib/integration-effectiveness/score-scale";
@@ -274,45 +274,6 @@ function HeaderTitle({ children }: { children: React.ReactNode }) {
       {children}
     </p>
   );
-}
-
-function FilterRailSection({
-  title,
-  description,
-  children,
-  defaultOpen = true,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <Card className="border-border-strong">
-      <CardHeader className={open ? undefined : "pb-4"}>
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <span>
-            <CardTitle>{title}</CardTitle>
-            {description && open ? <CardDescription className="mt-2">{description}</CardDescription> : null}
-          </span>
-          <span className="rounded-full border border-border-strong px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">
-            {open ? "Hide" : "Show"}
-          </span>
-        </button>
-      </CardHeader>
-      {open ? <CardContent className="space-y-4 pt-0">{children}</CardContent> : null}
-    </Card>
-  );
-}
-
-function IntegrationFilterRail({ children }: { children: React.ReactNode }) {
-  return <div className="xl:sticky xl:top-6 xl:self-start">{children}</div>;
 }
 
 function currentCampaignMark(data: IntegrationDashboardData) {
@@ -1383,31 +1344,39 @@ export function IntegrationEffectivenessDashboardClient({
       </div>
     );
   }
-  const activeLeftRail =
+  const railSelectStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "11px 14px",
+    borderRadius: 11,
+    fontSize: 12.5,
+    fontWeight: 600,
+    border: "1px solid #D4DAD6",
+    background: "#fff",
+    color: "#3B4B63",
+  };
+  const railHint = (text: string) => (
+    <p style={{ fontSize: 11, lineHeight: 1.45, color: "#6E7E96", marginTop: 9 }}>{text}</p>
+  );
+  const brandPillOptions = (includeAll: boolean, brands: string[]) => [
+    ...(includeAll ? [{ id: "all", label: "All Brands" }] : []),
+    ...brands.map((brand) => ({ id: brand, label: brand })),
+  ];
+  const filtersSlotContent =
     activePerspective?.rendererKey === "integration.longitudinalTrends" ? (
-      <IntegrationFilterRail>
-        <FilterRailSection
-          title="Filters"
-          description="Apply one lens across the longitudinal view and keep the chart centered in the analysis canvas."
-        >
-          <Select
-            label="Brand"
+      <FilterStack>
+        <EmbeddedFilterCard title="Brand">
+          <PillOptionRow
             value={longitudinalBrand}
-            onChange={(event) => setLongitudinalBrand(event.target.value)}
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
-          >
-            <option value="all">All Brands</option>
-            {data.brandReports.map((report) => (
-              <option key={report.selectedBrand} value={report.selectedBrand}>
-                {report.selectedBrand}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Campaign Statement"
+            onChange={setLongitudinalBrand}
+            options={brandPillOptions(true, data.brandReports.map((report) => report.selectedBrand))}
+          />
+        </EmbeddedFilterCard>
+        <EmbeddedFilterCard title="Campaign Statement">
+          <select
+            aria-label="Campaign Statement"
             value={longitudinalQuestionId}
             onChange={(event) => setLongitudinalQuestionId(event.target.value)}
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
+            style={railSelectStyle}
           >
             <option value="all">All Statements</option>
             {data.questionMetrics.map((question) => (
@@ -1415,12 +1384,14 @@ export function IntegrationEffectivenessDashboardClient({
                 {question.shortLabel}
               </option>
             ))}
-          </Select>
-          <Select
-            label="Department"
+          </select>
+        </EmbeddedFilterCard>
+        <EmbeddedFilterCard title="Department">
+          <select
+            aria-label="Department"
             value={longitudinalDepartment}
             onChange={(event) => setLongitudinalDepartment(event.target.value)}
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
+            style={railSelectStyle}
           >
             <option value="all">All Departments</option>
             {data.departmentMetrics.map((department) => (
@@ -1428,85 +1399,62 @@ export function IntegrationEffectivenessDashboardClient({
                 {department.label}
               </option>
             ))}
-          </Select>
-          <p className="text-sm leading-relaxed text-text-secondary italic">
-            All selections filter the visible brand nodes through one consistent lens while the campaign cards preserve the organization-level read.
-          </p>
-        </FilterRailSection>
-      </IntegrationFilterRail>
+          </select>
+          {railHint("All selections filter the visible brand nodes through one lens while the campaign cards keep the organization-level read.")}
+        </EmbeddedFilterCard>
+      </FilterStack>
     ) : activePerspective?.rendererKey === "integration.brandReport" ? (
-      <IntegrationFilterRail>
-        <FilterRailSection
-          title="Selected Brand"
-          description="Use the left rail for the active brand selection instead of consuming center-canvas space."
-        >
-          <Select
-            label="Brand"
+      <FilterStack>
+        <EmbeddedFilterCard title="Brand">
+          <PillOptionRow
             value={resolvedBrandReportSelectedBrand}
-            onChange={(event) => setBrandReportSelectedBrand(event.target.value)}
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
-          >
-            {brandOptions.map((brand) => (
-              <option key={brand} value={brand}>
-                {brand}
-              </option>
-            ))}
-          </Select>
-          <p className="text-sm leading-relaxed text-text-secondary italic">
-            Grouped cuts follow a strict 2-response masking rule, so smaller subgroups stay hidden while still contributing to valid aggregate reads.
-          </p>
-        </FilterRailSection>
-      </IntegrationFilterRail>
+            onChange={setBrandReportSelectedBrand}
+            options={brandPillOptions(false, brandOptions)}
+          />
+          {railHint("Grouped cuts follow a strict 2-response masking rule, so smaller subgroups stay hidden while still counting toward aggregate reads.")}
+        </EmbeddedFilterCard>
+      </FilterStack>
     ) : activePerspective?.rendererKey === "integration.employeeVoice" ? (
-      <IntegrationFilterRail>
-        <FilterRailSection
-          title="Filters"
-          description="Apply the same comment filters across sentiment, themes, and every visible voice list."
-        >
-          <Select
-            label="Brand"
+      <FilterStack>
+        <EmbeddedFilterCard title="Brand">
+          <PillOptionRow
             value={resolvedVoiceSelectedBrand}
-            onChange={(event) => setVoiceSelectedBrand(event.target.value)}
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
-          >
-            {!voiceBrandRestricted ? <option value="all">All Brands</option> : null}
-            {voiceBrandOptions.map((brand) => (
-              <option key={brand} value={brand}>
-                {brand}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Campaign"
+            onChange={setVoiceSelectedBrand}
+            options={brandPillOptions(!voiceBrandRestricted, voiceBrandOptions)}
+          />
+        </EmbeddedFilterCard>
+        <EmbeddedFilterCard title="Campaign">
+          <PillOptionRow
             value={voiceSelectedCampaign}
-            onChange={(event) => setVoiceSelectedCampaign(event.target.value)}
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
-          >
-            <option value="all">All Campaigns</option>
-            {data.meta.campaigns.map((campaign) => (
-              <option key={campaign} value={campaign}>
-                {campaign}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Sentiment"
+            onChange={setVoiceSelectedCampaign}
+            options={[
+              { id: "all", label: "All Campaigns" },
+              ...data.meta.campaigns.map((campaign) => ({ id: campaign, label: campaign })),
+            ]}
+          />
+        </EmbeddedFilterCard>
+        <EmbeddedFilterCard title="Sentiment">
+          <PillOptionRow
             value={voiceSelectedSentiment}
-            onChange={(event) =>
-              setVoiceSelectedSentiment(
-                event.target.value as "all" | "positive" | "neutral" | "negative"
-              )
+            onChange={(value) =>
+              setVoiceSelectedSentiment(value as "all" | "positive" | "neutral" | "negative")
             }
-            className="h-11 rounded-2xl border-border-strong bg-white text-sm font-semibold shadow-sm"
-          >
-            <option value="all">All Sentiment</option>
-            <option value="negative">Negative</option>
-            <option value="neutral">Neutral</option>
-            <option value="positive">Positive</option>
-          </Select>
-        </FilterRailSection>
-      </IntegrationFilterRail>
-    ) : undefined;
+            options={[
+              { id: "all", label: "All Sentiment" },
+              { id: "negative", label: "Negative" },
+              { id: "neutral", label: "Neutral" },
+              { id: "positive", label: "Positive" },
+            ]}
+          />
+        </EmbeddedFilterCard>
+      </FilterStack>
+    ) : (
+      <EmbeddedFilterCard title="Filters">
+        <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
+          This report shows all brands and campaigns. Filters appear here for reports that support them.
+        </p>
+      </EmbeddedFilterCard>
+    );
 
   const exportFilename = buildDashboardExportFilename({
     client: "integration",
@@ -1515,45 +1463,59 @@ export function IntegrationEffectivenessDashboardClient({
   });
   const isCsgIntegration = data.meta.organizationName === "Canopy Services Group";
 
+  const latestCampaign = data.meta.campaigns[data.meta.campaigns.length - 1] ?? "";
+  const gradient = "linear-gradient(90deg, #D7B35A 0%, #FFFFFF 50%, #3F5F86 100%)";
+  const contextSlot = (
+    <div className="flex flex-col gap-3">
+      {!isCsgIntegration ? null : (
+        <CompositeVisualExportButton filename={exportFilename} logoUrl="/canopy-services-logo.png" skipGeneratedHeader asContextCard />
+      )}
+      <EmbeddedFilterCard title="Score Scale">
+        <div className="flex items-center gap-2">
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{INTEGRATION_SCORE_SCALE.minLabel}</span>
+          <div className="h-3.5 flex-1 rounded-2xl border border-[#C8D2CF]" style={{ background: gradient }} />
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#6E7E96" }}>{INTEGRATION_SCORE_SCALE.maxLabel}</span>
+        </div>
+      </EmbeddedFilterCard>
+      <EmbeddedFilterCard title="Campaigns">
+        <p style={{ fontSize: 12, lineHeight: 1.5, color: "#3B4B63" }}>
+          Campaign 1 is the initial read, Campaign 2 the second, and Campaign 3 the final. {data.meta.campaigns.length} of 3 loaded.
+        </p>
+      </EmbeddedFilterCard>
+    </div>
+  );
+
   return (
-    <VisualExportProvider active client={data.meta.organizationName}>
+    <VisualExportProvider active client={data.meta.organizationName} logoUrl="/canopy-services-logo.png">
       <VisualExportMetaSetter
         title={activePerspective?.label ?? "Integration Effectiveness"}
-        filters={[data.meta.campaigns[data.meta.campaigns.length - 1]]}
+        filters={[latestCampaign]}
       />
-      <DashboardRibbon
-        title="Integration Effectiveness"
-        categories={
-          categorySections.length > 1
-            ? categorySections.map((section) => ({ id: section.id, label: section.label }))
-            : []
-        }
-        activeCategoryId={activeCategorySection?.id}
-        onCategoryChange={(nextCategoryId) => {
-          const nextCategorySection =
-            categorySections.find((section) => section.id === nextCategoryId) ?? categorySections[0];
-          if (!nextCategorySection) {
-            return;
-          }
-          setActiveCategory(nextCategorySection.id);
-          setActiveTab(nextCategorySection.tabIds[0] ?? "");
+      <FieldRedesignShell
+        clientName={data.meta.organizationName}
+        logoUrl="/canopy-services-logo.png"
+        clientSubline="Integration Effectiveness"
+        campaignLabel={latestCampaign}
+        eyebrow={`${activeCategorySection?.label ?? ""} · ${latestCampaign}`}
+        reportTitle={activePerspective?.label ?? "Integration Effectiveness"}
+        views={categorySections.map((section) => ({
+          id: section.id,
+          label: section.label,
+          perspectives: section.tabIds
+            .map((id) => perspectiveDefinitions.find((tab) => tab.id === id))
+            .filter((tab): tab is IntegrationPerspectiveDefinition => Boolean(tab))
+            .map((tab) => ({ id: tab.id, label: tab.label })),
+        }))}
+        activeViewId={activeCategorySection?.id ?? ""}
+        activeReportId={resolvedActiveTabId}
+        onSelectReport={(viewId, reportId) => {
+          setActiveCategory(viewId);
+          setActiveTab(reportId);
         }}
-        perspectives={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
-        activePerspectiveId={resolvedActiveTabId}
-        onPerspectiveChange={setActiveTab}
-        legend={
-          <ColorLegend
-            minLabel={INTEGRATION_SCORE_SCALE.minLabel}
-            maxLabel={INTEGRATION_SCORE_SCALE.maxLabel}
-          />
-        }
-        sticky={!isCsgIntegration}
-        toolbar={!isCsgIntegration ? <CompositeVisualExportButton filename={exportFilename} /> : undefined}
-      />
-      <div>
-      <DashboardCanvas
-        leftRail={activeLeftRail}
-        maxWidthClassName="max-w-[1320px]"
+        contextSlot={contextSlot}
+        filtersSlot={filtersSlotContent}
+        thickerHeaderDivider
+        basinReportSurface
       >
         {brandRestricted && activePerspective?.rendererKey === "integration.brandReport" && brandOptions.length === 0 ? (
           <div className="rounded-2xl border border-border-strong bg-white px-6 py-8 text-sm text-text-secondary">
@@ -1566,10 +1528,9 @@ export function IntegrationEffectivenessDashboardClient({
             No allowed values match this user&apos;s Employee Voice filter rule.
           </div>
         ) : (
-          activeTabContent
+          <div id={DASHBOARD_VISUAL_EXPORT_TARGET_ID}>{activeTabContent}</div>
         )}
-      </DashboardCanvas>
-      </div>
+      </FieldRedesignShell>
     </VisualExportProvider>
   );
 }
