@@ -69,6 +69,8 @@ export interface IntegrationTrendRow {
   campaign3: number | null;
   /** All campaigns pooled. */
   overall: number | null;
+  /** Responses behind this row, per campaign. */
+  counts: { campaign1: number; campaign2: number; campaign3: number };
 }
 
 export interface IntegrationBrandTrend {
