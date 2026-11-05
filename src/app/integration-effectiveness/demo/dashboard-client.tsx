@@ -410,16 +410,6 @@ function buildLongitudinalCurrentStateModel(
   };
 }
 
-// Darken a hex color a little so near-white scale colors stay visible on a light background.
-function darkenHex(hex: string, amount: number) {
-  const c = hex.replace("#", "");
-  const mixed = [0, 2, 4].map((i) => {
-    const channel = Number.parseInt(c.slice(i, i + 2), 16);
-    return Math.round(channel + (0x1c - channel) * amount);
-  });
-  return `#${mixed.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
-}
-
 function LongitudinalNodeChart({
   series,
   currentMark,
@@ -448,58 +438,9 @@ function LongitudinalNodeChart({
     [entry.campaign1, entry.campaign2, entry.campaign3][slot] ?? null;
   const ticks = [0, 2.5, 5, 7.5, 10];
 
-  const connectors = series.flatMap((entry, seriesIndex) => {
-    const out: Array<{
-      id: string;
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-      from: string;
-      to: string;
-      delta: number;
-    }> = [];
-    let previous: { slot: number; score: number } | null = null;
-    for (let slot = 0; slot < campaigns.length; slot++) {
-      const score = scoreOf(entry, slot);
-      if (score == null) continue;
-      if (previous) {
-        out.push({
-          id: `${entry.id}-${previous.slot}-${slot}`,
-          x1: barX(previous.slot, seriesIndex) + barWidth / 2,
-          y1: yForScore(previous.score),
-          x2: barX(slot, seriesIndex) + barWidth / 2,
-          y2: yForScore(score),
-          from: darkenHex(integrationScoreColor(previous.score), 0.22),
-          to: darkenHex(integrationScoreColor(score), 0.22),
-          delta: (score - previous.score) * 10,
-        });
-      }
-      previous = { slot, score };
-    }
-    return out;
-  });
-
   return (
     <div className="w-full">
       <svg viewBox={`0 0 ${width} ${height}`} className="h-[470px] w-full">
-        <defs>
-          {connectors.map((c) => (
-            <linearGradient
-              key={c.id}
-              id={`lt-grad-${c.id}`}
-              gradientUnits="userSpaceOnUse"
-              x1={c.x1}
-              y1={c.y1}
-              x2={c.x2}
-              y2={c.y2}
-            >
-              <stop offset="0%" stopColor={c.from} />
-              <stop offset="100%" stopColor={c.to} />
-            </linearGradient>
-          ))}
-        </defs>
-
         {ticks.map((tick) => {
           const y = yForScore(tick);
           return (
@@ -543,6 +484,17 @@ function LongitudinalNodeChart({
             if (score == null) return null;
             const x = barX(slot, seriesIndex);
             const y = yForScore(score);
+            let prior: number | null = null;
+            for (let k = slot - 1; k >= 0; k--) {
+              const v = scoreOf(entry, k);
+              if (v != null) {
+                prior = v;
+                break;
+              }
+            }
+            const delta = prior == null ? null : (score - prior) * 10;
+            const tone = delta == null ? "" : delta > 0.05 ? "#2F6B3F" : delta < -0.05 ? "#B2483E" : "#6E7E96";
+            const pillW = Math.min(40, barWidth - 6);
             return (
               <g key={`${entry.id}-${campaign}`}>
                 <rect
@@ -565,6 +517,14 @@ function LongitudinalNodeChart({
                 >
                   {formatScoreForDisplay(score)}
                 </text>
+                {delta != null && baseY - y >= 36 ? (
+                  <g>
+                    <rect x={x + (barWidth - pillW) / 2} y={y + 8} width={pillW} height={20} rx={10} fill="#FFFFFF" stroke="rgba(16,47,74,0.14)" />
+                    <text x={x + barWidth / 2} y={y + 22} textAnchor="middle" fill={tone} fontSize="11" fontWeight="700">
+                      {`${delta > 0.05 ? "+" : ""}${delta.toFixed(1)}`}
+                    </text>
+                  </g>
+                ) : null}
                 <text
                   x={x + barWidth / 2 + 4}
                   y={baseY + 16}
@@ -581,30 +541,6 @@ function LongitudinalNodeChart({
           })
         )}
 
-        {connectors.map((c) => {
-          const mx = (c.x1 + c.x2) / 2;
-          const my = (c.y1 + c.y2) / 2;
-          const label = `${c.delta > 0.05 ? "+" : ""}${c.delta.toFixed(1)}`;
-          const tone = c.delta > 0.05 ? "#2F6B3F" : c.delta < -0.05 ? "#B2483E" : "#6E7E96";
-          return (
-            <g key={`line-${c.id}`}>
-              <line
-                x1={c.x1}
-                y1={c.y1}
-                x2={c.x2}
-                y2={c.y2}
-                stroke={`url(#lt-grad-${c.id})`}
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeDasharray="1 7"
-              />
-              <rect x={mx - 20} y={my - 11} width={40} height={20} rx={10} fill="#FFFFFF" stroke="rgba(16,47,74,0.14)" />
-              <text x={mx} y={my + 4} textAnchor="middle" fill={tone} fontSize="11" fontWeight="700">
-                {label}
-              </text>
-            </g>
-          );
-        })}
       </svg>
     </div>
   );
