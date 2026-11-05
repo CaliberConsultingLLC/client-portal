@@ -108,25 +108,67 @@ function ReadoutDeckViewerInner({
   const handleVisible = designChrome && editing;
   const editable = designChrome && editing;
 
-  const persistDeck = useCallback(
-    (nextDeck: ReadoutDeck) => {
-      if (persistTimer.current) clearTimeout(persistTimer.current);
-      persistTimer.current = setTimeout(async () => {
-        try {
-          const response = await fetch(`/api/portal/readouts/${readout.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deck: nextDeck }),
-          });
-          const payload = (await response.json()) as { readout?: Readout };
-          if (payload.readout) setReadout(payload.readout);
-        } catch (error) {
-          console.error("Failed to persist readout deck", error);
+  // Saving: edits are queued in pendingDeckRef and sent after a short pause. A
+  // failed save (network, session expiry, server error) is retried and shown in
+  // the toolbar instead of failing silently, and anything still pending is
+  // flushed when the page is hidden or closed.
+  const pendingDeckRef = useRef<ReadoutDeck | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const sendDeck = useCallback(
+    async (keepalive = false) => {
+      const toSave = pendingDeckRef.current;
+      if (!toSave) return;
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+      setSaveState("saving");
+      try {
+        const response = await fetch(`/api/portal/readouts/${readout.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deck: toSave }),
+          keepalive,
+        });
+        if (!response.ok) throw new Error(`Save failed (${response.status})`);
+        const payload = (await response.json()) as { readout?: Readout };
+        if (payload.readout) setReadout(payload.readout);
+        if (pendingDeckRef.current === toSave) {
+          pendingDeckRef.current = null;
+          setSaveState("saved");
+        } else {
+          void sendDeck();
         }
-      }, 400);
+      } catch (error) {
+        console.error("Failed to persist readout deck", error);
+        setSaveState("error");
+        retryTimer.current = setTimeout(() => void sendDeck(), 3000);
+      }
     },
     [readout.id]
   );
+
+  const persistDeck = useCallback(
+    (nextDeck: ReadoutDeck) => {
+      pendingDeckRef.current = nextDeck;
+      setSaveState("saving");
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      persistTimer.current = setTimeout(() => void sendDeck(), 400);
+    },
+    [sendDeck]
+  );
+
+  useEffect(() => {
+    function flush() {
+      if (!pendingDeckRef.current) return;
+      if (persistTimer.current) clearTimeout(persistTimer.current);
+      void sendDeck(true);
+    }
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [sendDeck]);
 
   const commitDeck = useCallback(
     (updater: (current: ReadoutDeck) => ReadoutDeck) => {
@@ -1521,6 +1563,16 @@ function ReadoutDeckViewerInner({
                   Grid
                 </button>
               </div>
+            ) : null}
+            {designChrome && saveState !== "idle" ? (
+              <span
+                title={saveState === "error" ? "The last change could not be saved. Retrying automatically." : "Changes save automatically"}
+                className={`rounded-full border border-white/10 bg-[rgba(20,28,24,0.94)] px-3 py-[9px] text-[11px] font-semibold shadow-[0_12px_34px_rgba(0,0,0,0.35)] ${
+                  saveState === "error" ? "text-[#F0A79B]" : saveState === "saved" ? "text-[#9BD3AC]" : "text-white/70"
+                }`}
+              >
+                {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : "Not saved, retrying"}
+              </span>
             ) : null}
             {designChrome ? (
               <button
