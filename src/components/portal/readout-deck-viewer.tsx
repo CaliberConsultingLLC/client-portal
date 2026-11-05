@@ -1092,7 +1092,7 @@ function ReadoutDeckViewerInner({
                     >
                       {romanNumeral(idx + 1)}
                     </span>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 shrink-0 basis-[38%]">
                       <ReadoutEditableText
                         editing={editable}
                         value={sl.label}
@@ -1125,6 +1125,19 @@ function ReadoutDeckViewerInner({
                         </div>
                       ) : null}
                     </div>
+                    {editable ? (
+                      <input
+                        type="text"
+                        value={sl.coverNote ?? ""}
+                        maxLength={90}
+                        placeholder="Short description (optional)"
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => patchSlide(key, { coverNote: e.target.value })}
+                        className="min-w-0 flex-1 truncate border-b border-dashed border-[#C9D3DF] bg-transparent py-0.5 text-[13px] text-[#6E7E96] outline-none placeholder:text-[#A9B6C6]"
+                      />
+                    ) : (
+                      <p className="min-w-0 flex-1 truncate text-[13px] text-[#6E7E96]">{sl.coverNote ?? ""}</p>
+                    )}
                     <div className="flex shrink-0 items-center gap-2 self-center">
                       {editable ? (
                         <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>

@@ -148,6 +148,8 @@ export type ReadoutSlide = {
   dot: string;
   headline: string;
   blurb: string;
+  /** Optional one-line description shown to the right of the title on the cover agenda. */
+  coverNote?: string;
   /** Cover focus-card accent (Roman numeral + border). */
   focusAccent?: string | null;
   /** Where the slide "See in dashboard" button opens (perspective + filters). */
