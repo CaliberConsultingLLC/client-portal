@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowDownUp } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
@@ -1955,19 +1955,18 @@ export function IntegrationEffectivenessDashboardClient({
     () => buildIntegrationCategorySections(perspectiveDefinitions),
     [perspectiveDefinitions]
   );
-  const [activeTab, setActiveTab] = useState(perspectiveDefinitions[0]?.id ?? "overview");
-  const [activeCategory, setActiveCategory] = useState(categorySections[0]?.id ?? "");
+  // A readout deep link opens the dashboard on ?perspective=<id>.
   const searchParams = useSearchParams();
-  const deepLinkAppliedRef = useRef(false);
-  useEffect(() => {
-    if (deepLinkAppliedRef.current || !searchParams) return;
-    deepLinkAppliedRef.current = true;
-    const perspectiveParam = searchParams.get("perspective");
-    if (!perspectiveParam) return;
-    const section = categorySections.find((entry) => entry.tabIds.includes(perspectiveParam));
-    if (section) setActiveCategory(section.id);
-    if (perspectiveDefinitions.some((tab) => tab.id === perspectiveParam)) setActiveTab(perspectiveParam);
-  }, [searchParams, categorySections, perspectiveDefinitions]);
+  const linkedPerspective = searchParams?.get("perspective") ?? "";
+  const linkedDefinition = perspectiveDefinitions.find((tab) => tab.id === linkedPerspective);
+  const [activeTab, setActiveTab] = useState(linkedDefinition?.id ?? perspectiveDefinitions[0]?.id ?? "overview");
+  const [activeCategory, setActiveCategory] = useState(
+    (linkedDefinition
+      ? categorySections.find((section) => section.tabIds.includes(linkedDefinition.id))?.id
+      : undefined) ??
+      categorySections[0]?.id ??
+      ""
+  );
   const activeCategorySection =
     categorySections.find((section) => section.id === activeCategory) ?? categorySections[0];
   const visibleTabs =
