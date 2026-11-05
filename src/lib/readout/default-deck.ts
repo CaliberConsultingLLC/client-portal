@@ -3,6 +3,7 @@ import type {
   ReadoutColKey,
   ReadoutCover,
   ReadoutDeck,
+  ReadoutGridRect,
   ReadoutSlide,
   ReadoutSlideCols,
 } from "@/types/readout";
@@ -219,4 +220,97 @@ export function buildDefaultReadoutDeck(clientName = "Deep Well Services"): Read
       },
     },
   };
+}
+
+/** Free-form grid resolution: coarse on purpose so boxes line up without fiddling. */
+export const READOUT_GRID_COLS = 12;
+export const READOUT_GRID_ROWS = 8;
+
+function overlaps(a: ReadoutGridRect, b: ReadoutGridRect) {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** First open spot of the requested size, scanning top-left to bottom-right. */
+export function findFreeGridRect(
+  grid: Record<string, ReadoutGridRect>,
+  w = 4,
+  h = 2
+): ReadoutGridRect {
+  const taken = Object.values(grid);
+  for (let y = 0; y + h <= READOUT_GRID_ROWS; y++) {
+    for (let x = 0; x + w <= READOUT_GRID_COLS; x++) {
+      const rect = { x, y, w, h };
+      if (!taken.some((t) => overlaps(rect, t))) return rect;
+    }
+  }
+  return { x: 0, y: 0, w, h };
+}
+
+/**
+ * Approximate a slide's column layout on the grid: each column keeps its
+ * share of the width, blocks stack top to bottom (visuals tallest), and
+ * consecutive data points share a row.
+ */
+export function columnsToGrid(slide: ReadoutSlide): Record<string, ReadoutGridRect> {
+  const count = normalizeColCount(slide.colCount);
+  const widths = normalizeWidths(
+    count,
+    slide.widths ?? (count === 2 ? [slide.r ?? 0.5, 1 - (slide.r ?? 0.5)] : undefined)
+  );
+  const cols = normalizeSlideCols(slide.cols);
+  const keys = activeColKeys(count);
+  const grid: Record<string, ReadoutGridRect> = {};
+
+  // Column x-ranges in whole cells, at least 2 wide.
+  const xs: Array<[number, number]> = [];
+  let cursor = 0;
+  widths.forEach((w, i) => {
+    const span = i === widths.length - 1 ? READOUT_GRID_COLS - cursor : Math.max(2, Math.round(w * READOUT_GRID_COLS));
+    xs.push([cursor, span]);
+    cursor += span;
+  });
+
+  keys.forEach((key, ci) => {
+    const [x0, span] = xs[ci];
+    type Row = { ids: string[]; weight: number };
+    const rows: Row[] = [];
+    let dp: string[] = [];
+    const flush = () => {
+      if (dp.length) rows.push({ ids: dp, weight: 2 });
+      dp = [];
+    };
+    for (const id of cols[key]) {
+      const block = slide.blocks[id];
+      if (!block) continue;
+      if (block.type === "datapoint") {
+        dp.push(id);
+      } else {
+        flush();
+        rows.push({ ids: [id], weight: block.type === "visual" ? 4 : 2 });
+      }
+    }
+    flush();
+    if (!rows.length) return;
+    const total = rows.reduce((s, r) => s + r.weight, 0);
+    const heights = rows.map((r) => Math.max(1, Math.round((r.weight / total) * READOUT_GRID_ROWS)));
+    // Make the column fill the area exactly.
+    let sum = heights.reduce((a, b) => a + b, 0);
+    for (let guard = 0; sum !== READOUT_GRID_ROWS && guard < 64; guard++) {
+      const idx = sum > READOUT_GRID_ROWS ? heights.indexOf(Math.max(...heights)) : heights.indexOf(Math.min(...heights));
+      if (sum > READOUT_GRID_ROWS && heights[idx] <= 1) break;
+      heights[idx] += sum > READOUT_GRID_ROWS ? -1 : 1;
+      sum = heights.reduce((a, b) => a + b, 0);
+    }
+    let y = 0;
+    rows.forEach((row, ri) => {
+      const h = heights[ri];
+      const each = Math.max(1, Math.floor(span / row.ids.length));
+      row.ids.forEach((id, k) => {
+        const w = k === row.ids.length - 1 ? span - each * k : each;
+        grid[id] = { x: x0 + each * k, y, w, h };
+      });
+      y += h;
+    });
+  });
+  return grid;
 }

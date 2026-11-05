@@ -140,6 +140,9 @@ export type ReadoutSlideCols = {
   d: string[];
 };
 
+/** A block's rectangle on the free-form grid, in whole cells (see READOUT_GRID_COLS / READOUT_GRID_ROWS). */
+export type ReadoutGridRect = { x: number; y: number; w: number; h: number };
+
 export type ReadoutSlide = {
   label: string;
   pill: string;
@@ -160,6 +163,14 @@ export type ReadoutSlide = {
   colCount?: ReadoutColCount;
   /** Relative column widths (length = colCount). */
   widths?: number[];
+  /**
+   * Layout mode. Missing or "columns" keeps the classic column layout (every
+   * existing readout). "grid" places blocks freely by `grid`; `cols` is kept so
+   * a slide can be switched back.
+   */
+  layout?: "columns" | "grid";
+  /** Free-form placement per block id, used when layout === "grid". */
+  grid?: Record<string, ReadoutGridRect>;
   /** Column block ids. Object form (not nested arrays) for Firestore compatibility. */
   cols: ReadoutSlideCols;
   blocks: Record<string, ReadoutBlock>;

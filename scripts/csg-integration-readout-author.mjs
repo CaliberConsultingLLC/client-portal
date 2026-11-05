@@ -168,8 +168,8 @@ const s1 = slide({
   colB: ["v"],
   blocks: {
     v: visual("s1", "Item scores, Campaign 1 vs Campaign 2", "All 11 integration statements, Campaign 1 on the left and Campaign 2 on the right, with change."),
-    d1: dp(7, ptsSgn(O1, O2), "OVERALL INTEGRATION SCORE · POINTS · CAMPAIGN 1 TO CAMPAIGN 2"),
-    d2: dp(7, "11 of 11", "STATEMENTS DECLINED · C&C AND TIGER DOWN, BEALING FLAT"),
+    d1: dp(7, ptsSgn(O1, O2), "OVERALL SCORE · POINTS"),
+    d2: dp(7, "11 of 11", "STATEMENTS DECLINED"),
     "t-perception": text(
       0,
       "What employees are telling us",
@@ -483,6 +483,26 @@ const s9 = slide({
 // ---------------------------------------------------------------- assemble
 const slides = { s1, s2, s3, s4, s5, s6, s7, s8, s9 };
 const order = Object.keys(slides);
+
+// Free-form grid placement (12 columns x 8 rows) for every slide. Each slide keeps
+// its column layout too, so a slide can be switched back to columns in the editor.
+const R = (x, y, w, h) => ({ x, y, w, h });
+const GRIDS = {
+  s1: { d1: R(0, 0, 2, 2), d2: R(2, 0, 2, 2), "t-perception": R(4, 0, 5, 2), "t-lowest": R(0, 2, 5, 4), "t-comm": R(5, 2, 4, 4), "t-ideas": R(0, 6, 9, 2), v: R(9, 0, 3, 8) },
+  s2: { pos: R(0, 0, 5, 4), neg: R(0, 4, 5, 4), v: R(5, 0, 7, 8) },
+  s3: { pos: R(0, 0, 5, 4), neg: R(0, 4, 5, 4), v: R(5, 0, 7, 8) },
+  s4: { pos: R(0, 0, 5, 4), neg: R(0, 4, 5, 4), v: R(5, 0, 7, 8) },
+  s5: { d1: R(0, 0, 3, 2), d2: R(3, 0, 3, 2), d3: R(6, 0, 3, 2), d4: R(9, 0, 3, 2), v: R(0, 2, 7, 6), "t-read": R(7, 2, 5, 6) },
+  s6: { d1: R(0, 0, 3, 2), d2: R(3, 0, 4, 2), "t-gm": R(0, 2, 4, 6), "t-comm": R(4, 2, 3, 6), v: R(7, 0, 5, 8) },
+  s7: { d1: R(0, 0, 3, 2), d2: R(0, 2, 3, 2), "t-read": R(0, 4, 3, 4), v: R(3, 0, 9, 8) },
+  s8: { "t-a": R(0, 0, 4, 8), "t-b": R(4, 0, 5, 8), v: R(9, 0, 3, 8) },
+  s9: { d1: R(0, 0, 3, 2), d2: R(3, 0, 4, 2), "t-themes": R(0, 2, 4, 6), "t-voice": R(4, 2, 3, 6), v: R(7, 0, 5, 8) },
+};
+for (const k of Object.keys(slides)) {
+  assert.deepEqual(Object.keys(GRIDS[k]).sort(), Object.keys(slides[k].blocks).sort(), "grid covers every block on " + k);
+  slides[k].layout = "grid";
+  slides[k].grid = GRIDS[k];
+}
 
 let baseSnap = await db.collection("readouts").doc(BASE_READOUT_ID).get();
 if (!baseSnap.exists) baseSnap = await db.collection("readouts").doc(NEW_ID).get(); // re-run after the old test readout was deleted

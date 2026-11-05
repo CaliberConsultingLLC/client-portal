@@ -20,10 +20,14 @@ import {
 import type { ReadoutDashboardLinkOptions } from "@/lib/readout/dashboard-link-options";
 import {
   READOUT_COL_KEYS,
+  READOUT_GRID_COLS,
+  READOUT_GRID_ROWS,
   activeColKeys,
   buildDefaultReadoutDeck,
+  columnsToGrid,
   defaultWidths,
   emptySlideCols,
+  findFreeGridRect,
   normalizeColCount,
   normalizeReadoutDeck,
   normalizeWidths,
@@ -37,6 +41,7 @@ import type {
   ReadoutDashboardLink,
   ReadoutDataPointBlock,
   ReadoutDeck,
+  ReadoutGridRect,
   ReadoutSlide,
   ReadoutSlideCols,
   ReadoutTextBlock,
@@ -211,11 +216,14 @@ function ReadoutDeckViewerInner({
       for (const key of READOUT_COL_KEYS) {
         cols[key] = sl.cols[key].filter((id) => id !== blockId);
       }
+      const grid = sl.grid
+        ? Object.fromEntries(Object.entries(sl.grid).filter(([id]) => id !== blockId))
+        : undefined;
       return {
         ...d,
         slides: {
           ...d.slides,
-          [slideKey]: { ...sl, blocks, cols },
+          [slideKey]: { ...sl, blocks, cols, grid },
         },
       };
     });
@@ -330,7 +338,15 @@ function ReadoutDeckViewerInner({
         ...d,
         slides: {
           ...d.slides,
-          [key]: { ...sl, cols, blocks: { ...sl.blocks, [id]: block } },
+          [key]: {
+            ...sl,
+            cols,
+            grid:
+              sl.layout === "grid"
+                ? { ...(sl.grid ?? {}), [id]: findFreeGridRect(sl.grid ?? {}, 4, 2) }
+                : sl.grid,
+            blocks: { ...sl.blocks, [id]: block },
+          },
         },
       };
     });
@@ -343,7 +359,10 @@ function ReadoutDeckViewerInner({
     commitDeck((d) => {
       const sl = d.slides[key];
       const prevCount = normalizeColCount(sl.colCount);
-      if (prevCount === nextCount) return d;
+      if (prevCount === nextCount) {
+        if (sl.layout !== "grid") return d;
+        return { ...d, slides: { ...d.slides, [key]: { ...sl, layout: "columns" } } };
+      }
       const cols = { ...emptySlideCols(), ...normalizeSlideCols(sl.cols) };
       if (nextCount < prevCount) {
         const keep = activeColKeys(nextCount);
@@ -360,6 +379,7 @@ function ReadoutDeckViewerInner({
           ...d.slides,
           [key]: {
             ...sl,
+            layout: "columns",
             colCount: nextCount,
             cols,
             widths,
@@ -368,6 +388,74 @@ function ReadoutDeckViewerInner({
         },
       };
     });
+  }
+
+  function setSlideGridLayout() {
+    const key = deck.order[slide - 1];
+    if (!key || !deck.slides[key]) return;
+    commitDeck((d) => {
+      const sl = d.slides[key];
+      if (sl.layout === "grid") return d;
+      const grid = sl.grid && Object.keys(sl.grid).length ? sl.grid : columnsToGrid(sl);
+      return { ...d, slides: { ...d.slides, [key]: { ...sl, layout: "grid", grid } } };
+    });
+  }
+
+  function setSlideGridRect(slideKey: string, blockId: string, rect: ReadoutGridRect) {
+    commitDeck((d) => {
+      const sl = d.slides[slideKey];
+      return {
+        ...d,
+        slides: { ...d.slides, [slideKey]: { ...sl, grid: { ...(sl.grid ?? {}), [blockId]: rect } } },
+      };
+    });
+  }
+
+  // Move or resize a block on the free-form grid; positions snap to whole cells.
+  function startGridDrag(
+    slideKey: string,
+    blockId: string,
+    rect: ReadoutGridRect,
+    mode: "move" | "resize",
+    e: React.MouseEvent
+  ) {
+    if (!editing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const canvas = (e.currentTarget as HTMLElement).closest("[data-grid-canvas]") as HTMLElement | null;
+    if (!canvas) return;
+    const box = canvas.getBoundingClientRect();
+    const cw = box.width / READOUT_GRID_COLS;
+    const ch = box.height / READOUT_GRID_ROWS;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    let last = rect;
+    const move = (ev: MouseEvent) => {
+      const dx = Math.round((ev.clientX - sx) / cw);
+      const dy = Math.round((ev.clientY - sy) / ch);
+      const next: ReadoutGridRect =
+        mode === "move"
+          ? {
+              ...rect,
+              x: clamp(rect.x + dx, 0, READOUT_GRID_COLS - rect.w),
+              y: clamp(rect.y + dy, 0, READOUT_GRID_ROWS - rect.h),
+            }
+          : {
+              ...rect,
+              w: clamp(rect.w + dx, 1, READOUT_GRID_COLS - rect.x),
+              h: clamp(rect.h + dy, 1, READOUT_GRID_ROWS - rect.y),
+            };
+      if (next.x === last.x && next.y === last.y && next.w === last.w && next.h === last.h) return;
+      last = next;
+      setSlideGridRect(slideKey, blockId, next);
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   }
 
   function addSlide() {
@@ -633,6 +721,82 @@ function ReadoutDeckViewerInner({
 
   const cover = deck.cover;
 
+  function renderGridCanvas(key: string, sl: ReadoutSlide) {
+    const placed: Record<string, ReadoutGridRect> = { ...(sl.grid ?? {}) };
+    // Blocks with no saved spot (added while the slide was in columns) get one.
+    for (const id of Object.keys(sl.blocks)) {
+      if (!placed[id]) placed[id] = findFreeGridRect(placed, 4, 2);
+    }
+    const ids = Object.keys(sl.blocks).filter((id) => placed[id]);
+    return (
+      <div data-grid-canvas className="relative min-h-0 flex-1">
+        {editable ? (
+          <div
+            className="pointer-events-none absolute inset-0 border-b border-r border-[rgba(110,126,150,0.16)]"
+            style={{
+              backgroundImage:
+                "linear-gradient(to right, rgba(110,126,150,0.16) 1px, transparent 1px), linear-gradient(to bottom, rgba(110,126,150,0.16) 1px, transparent 1px)",
+              backgroundSize: `${100 / READOUT_GRID_COLS}% ${100 / READOUT_GRID_ROWS}%`,
+            }}
+          />
+        ) : null}
+        {ids.map((blockId) => {
+          const r = placed[blockId];
+          const block = sl.blocks[blockId];
+          return (
+            <div
+              key={blockId}
+              className="absolute"
+              style={{
+                left: `${(r.x / READOUT_GRID_COLS) * 100}%`,
+                top: `${(r.y / READOUT_GRID_ROWS) * 100}%`,
+                width: `${(r.w / READOUT_GRID_COLS) * 100}%`,
+                height: `${(r.h / READOUT_GRID_ROWS) * 100}%`,
+                padding: 6,
+              }}
+            >
+              <div className="relative h-full w-full">
+                <DeckCard
+                  fill
+                  readoutId={readout.id}
+                  slideKey={key}
+                  blockId={blockId}
+                  block={block}
+                  editing={editable}
+                  chromeVisible={designChrome}
+                  onDragStart={() => undefined}
+                  onDrop={() => undefined}
+                  onUpdate={(patch) => updateBlock(key, blockId, patch)}
+                  onRemove={() => removeBlock(key, blockId)}
+                  onVResize={() => undefined}
+                  onVReset={() => undefined}
+                  onWResize={() => undefined}
+                  onWReset={() => undefined}
+                />
+                {editable ? (
+                  <>
+                    <div
+                      title="Drag to move this box"
+                      className="absolute left-1/2 top-0 z-20 h-[14px] w-14 -translate-x-1/2 cursor-move rounded-b-md bg-[rgba(201,154,60,0.85)] text-center text-[10px] font-bold leading-[14px] text-white"
+                      onMouseDown={(e) => startGridDrag(key, blockId, r, "move", e)}
+                    >
+                      ⠿
+                    </div>
+                    <div
+                      title="Drag to resize this box"
+                      className="absolute bottom-0 right-0 z-20 h-[18px] w-[18px] cursor-nwse-resize rounded-tl-md bg-[rgba(201,154,60,0.85)]"
+                      onMouseDown={(e) => startGridDrag(key, blockId, r, "resize", e)}
+                    />
+                  </>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div
       className="readout-deck relative min-h-[calc(100vh-var(--app-top-banner-height))] overflow-hidden bg-[#ECEFED] text-[#152238]"
@@ -768,6 +932,9 @@ function ReadoutDeckViewerInner({
               />
             </header>
 
+            {sl.layout === "grid" ? (
+              renderGridCanvas(key, sl)
+            ) : (
             <div className="grid min-h-0 flex-1" style={{ gridTemplateColumns: gridTemplate }}>
               {Array.from({ length: colCount }, (_, colIdx) => colIdx).flatMap((colIdx) => {
                 const colKey = activeColKeys(colCount)[colIdx];
@@ -940,6 +1107,7 @@ function ReadoutDeckViewerInner({
                 return [column] as ReactNode[];
               })}
             </div>
+            )}
           </div>
         );
       })}
@@ -1319,7 +1487,7 @@ function ReadoutDeckViewerInner({
                   const activeCount = activeKey
                     ? normalizeColCount(deck.slides[activeKey]?.colCount)
                     : 2;
-                  const active = activeCount === n;
+                  const active = activeCount === n && (activeKey ? deck.slides[activeKey]?.layout !== "grid" : true);
                   return (
                     <button
                       key={n}
@@ -1336,6 +1504,18 @@ function ReadoutDeckViewerInner({
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  title="Free-form grid: place and size boxes anywhere"
+                  onClick={setSlideGridLayout}
+                  className={`rounded-full px-2.5 py-1.5 text-[10px] font-bold ${
+                    deck.slides[deck.order[slide - 1]]?.layout === "grid"
+                      ? "bg-[linear-gradient(135deg,#E8CC70,#C99A3C)] text-[#242424]"
+                      : "text-white/75 hover:text-[#E8CC70]"
+                  }`}
+                >
+                  Grid
+                </button>
               </div>
             ) : null}
             {designChrome ? (
@@ -1629,6 +1809,7 @@ function DeckCard({
   onVReset,
   onWResize,
   onWReset,
+  fill = false,
 }: {
   readoutId: string;
   slideKey: string;
@@ -1644,6 +1825,8 @@ function DeckCard({
   onVReset: () => void;
   onWResize: (e: React.MouseEvent) => void;
   onWReset: () => void;
+  /** Free-form grid mode: the card fills a grid cell instead of sizing itself within a column. */
+  fill?: boolean;
 }) {
   const isVisual = block.type === "visual";
   const isDataPoint = block.type === "datapoint";
@@ -1665,7 +1848,7 @@ function DeckCard({
       : isVisual
         ? `${widthPct}%`
         : `calc(${widthPct}% - 6px)`;
-  const dragEnabled = isVisual && editing;
+  const dragEnabled = isVisual && editing && !fill;
   const bodyRef = useRef<HTMLElement | null>(null);
   // Which edge a dragged card would be inserted on: data points split
   // left/right, stacked blocks split top/bottom.
@@ -1699,6 +1882,9 @@ function DeckCard({
         boxShadow: isVisual
           ? "7px 9px 20px rgba(15,23,42,0.07),2px 3px 6px rgba(15,23,42,0.04)"
           : "none",
+        ...(fill
+          ? { flex: "none", width: "100%", height: "100%", maxWidth: "none", minWidth: 0, minHeight: 0 }
+          : {}),
       }}
       onDragOver={(e) => {
         e.preventDefault();
@@ -1756,7 +1942,7 @@ function DeckCard({
               onRemove={onRemove}
             />
           </div>
-          {editing ? (
+          {editing && !fill ? (
             <div
               title="Drag to set this visual's height · double-click to auto-fill"
               className="absolute inset-x-0 bottom-0 z-10 flex h-[13px] cursor-row-resize items-center justify-center border-t border-[#EDF1EE] bg-[#F7F9F8] hover:bg-[rgba(201,154,60,0.12)]"
@@ -1766,7 +1952,7 @@ function DeckCard({
               <div className="h-1 w-11 rounded-sm bg-[#C9AF6E]" />
             </div>
           ) : null}
-          {editing ? (
+          {editing && !fill ? (
             <div
               title="Drag to set this visual's width · double-click for full column width"
               className="absolute bottom-5 right-0 top-3 z-10 flex w-[11px] cursor-col-resize items-center justify-center hover:bg-[rgba(201,154,60,0.14)]"
@@ -1870,7 +2056,7 @@ function DeckCard({
               </div>
             ) : null}
           </div>
-          {editing ? (
+          {editing && !fill ? (
             <div
               title="Drag to set this data point's height · double-click to auto-fit"
               className="absolute inset-x-0 bottom-0 z-10 flex h-[13px] cursor-row-resize items-center justify-center border-t border-[rgba(0,0,0,0.06)] bg-[rgba(255,255,255,0.55)] hover:bg-[rgba(201,154,60,0.25)]"
@@ -1880,7 +2066,7 @@ function DeckCard({
               <div className="h-1 w-11 rounded-sm bg-[#C9AF6E]" />
             </div>
           ) : null}
-          {editing ? (
+          {editing && !fill ? (
             <div
               title="Drag to set this data point's width · double-click for full column width"
               className="absolute bottom-3 right-0 top-3 z-10 flex w-[11px] cursor-col-resize items-center justify-center hover:bg-[rgba(201,154,60,0.14)]"

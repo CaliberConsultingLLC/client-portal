@@ -27,10 +27,10 @@ function Cell({ value, delta, muted }: { value: number | null; delta: number | n
   return (
     <td
       style={{ background: bg, color: textOn(bg), opacity: muted ? 0.55 : 1 }}
-      className="border border-white px-0 py-1 text-center align-middle"
+      className="whitespace-nowrap border border-white px-0 py-[5px] text-center align-middle leading-none"
     >
-      <div className="text-[15px] font-bold leading-tight">{value === null ? " " : f(value)}</div>
-      <div className="text-[10px] leading-tight opacity-90">{delta === null ? " " : sgn(delta)}</div>
+      <span className="text-[13px] font-bold">{value === null ? " " : f(value)}</span>
+      <span className="ml-1 text-[10px] opacity-90">{delta === null ? "" : sgn(delta)}</span>
     </td>
   );
 }
