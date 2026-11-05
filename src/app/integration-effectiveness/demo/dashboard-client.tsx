@@ -299,12 +299,13 @@ function findGroupScore(rows: IntegrationGroupMetric[], label: string) {
   return rows.find((row) => row.label === label)?.score ?? null;
 }
 
+// Growth is the change in points on the 100-point display scale (internal scores are 0-10).
 function calculateGrowthPercentage(from: number | null, to: number | null) {
-  if (from == null || to == null || from === 0) {
+  if (from == null || to == null) {
     return null;
   }
 
-  return ((to - from) / from) * 100;
+  return (to - from) * 10;
 }
 
 function formatGrowthPercentage(value: number | null) {
@@ -314,7 +315,7 @@ function formatGrowthPercentage(value: number | null) {
 
   const rounded = Math.round(value * 10) / 10;
   const prefix = rounded > 0 ? "+" : "";
-  return `${prefix}${rounded.toFixed(1)}%`;
+  return `${prefix}${rounded.toFixed(1)} pts`;
 }
 
 function buildLongitudinalCurrentStateModel(
@@ -409,6 +410,16 @@ function buildLongitudinalCurrentStateModel(
   };
 }
 
+// Darken a hex color a little so near-white scale colors stay visible on a light background.
+function darkenHex(hex: string, amount: number) {
+  const c = hex.replace("#", "");
+  const mixed = [0, 2, 4].map((i) => {
+    const channel = Number.parseInt(c.slice(i, i + 2), 16);
+    return Math.round(channel + (0x1c - channel) * amount);
+  });
+  return `#${mixed.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
 function LongitudinalNodeChart({
   series,
   currentMark,
@@ -417,189 +428,179 @@ function LongitudinalNodeChart({
   currentMark: string;
 }) {
   const width = 1200;
-  const height = 420;
-  const margin = { top: 48, right: 34, bottom: 44, left: 56 };
+  const height = 470;
+  const margin = { top: 40, right: 40, bottom: 104, left: 72 };
   const plotWidth = width - margin.left - margin.right;
   const plotHeight = height - margin.top - margin.bottom;
-  const minScore = INTEGRATION_SCORE_SCALE.minValue;
-  const maxScore = INTEGRATION_SCORE_SCALE.maxValue;
-  const scoreTicks = [
-    minScore,
-    minScore + (maxScore - minScore) * 0.25,
-    INTEGRATION_SCORE_SCALE.midpoint,
-    minScore + (maxScore - minScore) * 0.75,
-    maxScore,
-  ];
+  const maxScore = 10; // internal 0-10 scale, shown as 0-100
   const campaigns = ["Campaign 1", "Campaign 2", "Campaign 3"] as const;
   const campaignIndex = campaigns.indexOf(currentMark as (typeof campaigns)[number]);
-  const safeCampaignIndex = campaignIndex === -1 ? 1 : campaignIndex;
-  const xForCampaign = (index: number) =>
-    margin.left + (plotWidth / Math.max(campaigns.length - 1, 1)) * index;
-  const yForScore = (score: number) =>
-    margin.top + ((maxScore - score) / (maxScore - minScore)) * plotHeight;
+  const slotWidth = plotWidth / campaigns.length;
+  const barCount = Math.max(series.length, 1);
+  const barWidth = Math.min(64, (slotWidth * 0.72) / barCount - 10);
+  const barGap = 10;
+  const groupWidth = barCount * barWidth + (barCount - 1) * barGap;
+  const baseY = margin.top + plotHeight;
+  const yForScore = (score: number) => margin.top + ((maxScore - score) / maxScore) * plotHeight;
+  const barX = (slot: number, seriesIndex: number) =>
+    margin.left + slotWidth * slot + (slotWidth - groupWidth) / 2 + seriesIndex * (barWidth + barGap);
+  const scoreOf = (entry: LongitudinalSeriesEntry, slot: number) =>
+    [entry.campaign1, entry.campaign2, entry.campaign3][slot] ?? null;
+  const ticks = [0, 2.5, 5, 7.5, 10];
 
-  const allPoints = series.flatMap((entry) => {
-    const scores = [entry.campaign1, entry.campaign2, entry.campaign3];
-    return scores
-      .map((score, index) =>
-        score == null
-          ? null
-          : {
-              ...entry,
-              pointId: `${entry.id}-${campaigns[index]}`,
-              campaign: campaigns[index],
-              campaignIndex: index,
-              score,
-              x: xForCampaign(index),
-              y: yForScore(score),
-            }
-      )
-      .filter((point): point is NonNullable<typeof point> => Boolean(point));
-  });
-  const seriesPaths = series
-    .map((entry) => {
-      const entryPoints = allPoints.filter((point) => point.id === entry.id);
-      if (entryPoints.length < 2) return null;
-      return {
-        id: entry.id,
-        color: entry.color,
-        path: entryPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" "),
-      };
-    })
-    .filter((path): path is NonNullable<typeof path> => Boolean(path));
-  const labelPoints = allPoints
-    .filter((point) => point.campaignIndex === safeCampaignIndex)
-    .sort((left, right) => left.y - right.y);
-
-  const labelHeight = 36;
-  const labelOffset = 14;
-  const labelSide = safeCampaignIndex >= 2 ? "left" : "right";
-  let previousLabelY = margin.top - labelHeight;
-  const labelPositions = new Map<string, number>();
-  labelPoints.forEach((point, index) => {
-    const desiredY = point.y;
-    const adjustedY = Math.max(desiredY, previousLabelY + labelHeight + 10);
-    const boundedY = Math.min(
-      adjustedY,
-      height - margin.bottom - 8 - (labelPoints.length - index - 1) * (labelHeight + 10)
-    );
-    labelPositions.set(point.id, boundedY);
-    previousLabelY = boundedY;
+  const connectors = series.flatMap((entry, seriesIndex) => {
+    const out: Array<{
+      id: string;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      from: string;
+      to: string;
+      delta: number;
+    }> = [];
+    let previous: { slot: number; score: number } | null = null;
+    for (let slot = 0; slot < campaigns.length; slot++) {
+      const score = scoreOf(entry, slot);
+      if (score == null) continue;
+      if (previous) {
+        out.push({
+          id: `${entry.id}-${previous.slot}-${slot}`,
+          x1: barX(previous.slot, seriesIndex) + barWidth / 2,
+          y1: yForScore(previous.score),
+          x2: barX(slot, seriesIndex) + barWidth / 2,
+          y2: yForScore(score),
+          from: darkenHex(integrationScoreColor(previous.score), 0.22),
+          to: darkenHex(integrationScoreColor(score), 0.22),
+          delta: (score - previous.score) * 10,
+        });
+      }
+      previous = { slot, score };
+    }
+    return out;
   });
 
   return (
     <div className="w-full">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-[420px] w-full">
-        {campaigns.map((campaign, index) => {
-          const x = xForCampaign(index);
-          return (
-            <g key={campaign}>
-              <line
-                x1={x}
-                y1={margin.top}
-                x2={x}
-                y2={height - margin.bottom}
-                stroke="rgba(16,47,74,0.10)"
-                strokeDasharray="4 6"
-              />
-              <text
-                x={x}
-                y={height - 14}
-                textAnchor="middle"
-                fill="#60727D"
-                fontSize="12"
-                fontWeight="600"
-              >
-                {campaign}
-              </text>
-            </g>
-          );
-        })}
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[470px] w-full">
+        <defs>
+          {connectors.map((c) => (
+            <linearGradient
+              key={c.id}
+              id={`lt-grad-${c.id}`}
+              gradientUnits="userSpaceOnUse"
+              x1={c.x1}
+              y1={c.y1}
+              x2={c.x2}
+              y2={c.y2}
+            >
+              <stop offset="0%" stopColor={c.from} />
+              <stop offset="100%" stopColor={c.to} />
+            </linearGradient>
+          ))}
+        </defs>
 
-        {scoreTicks.map((tick) => {
+        {ticks.map((tick) => {
           const y = yForScore(tick);
           return (
             <g key={tick}>
-              <line
-                x1={margin.left}
-                y1={y}
-                x2={width - margin.right + 20}
-                y2={y}
-                stroke="rgba(16,47,74,0.08)"
-              />
-              <text x={18} y={y + 4} fill="#60727D" fontSize="12" fontWeight="600">
+              <line x1={margin.left} y1={y} x2={width - margin.right} y2={y} stroke="rgba(16,47,74,0.08)" />
+              <text x={margin.left - 12} y={y + 4} textAnchor="end" fill="#60727D" fontSize="12" fontWeight="600">
                 {formatScoreForDisplay(tick)}
               </text>
             </g>
           );
         })}
 
-        {seriesPaths.map((seriesPath) => (
-          <path
-            key={seriesPath.id}
-            d={seriesPath.path}
-            fill="none"
-            stroke={seriesPath.color}
-            strokeWidth={3}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeOpacity={0.34}
-          />
-        ))}
-
-        {allPoints.map((point) => (
-          <circle
-            key={point.pointId}
-            cx={point.x}
-            cy={point.y}
-            r={point.campaignIndex === safeCampaignIndex ? 12 : 9}
-            fill={point.color}
-            fillOpacity={point.campaignIndex === safeCampaignIndex ? 1 : 0.72}
-            stroke="#FFFFFF"
-            strokeWidth={3}
-          />
-        ))}
-
-        {labelPoints.map((point) => {
-          const scoreText = `${point.label} | ${formatScoreForDisplay(point.score)}`;
-          const labelWidth = Math.max(104, Math.min(184, scoreText.length * 6.9 + 26));
-          const labelY = labelPositions.get(point.id) ?? point.y;
-          const labelX =
-            labelSide === "right" ? point.x + labelOffset : Math.max(margin.left, point.x - labelOffset - labelWidth);
-          const connectorEndX = labelSide === "right" ? labelX : labelX + labelWidth;
-          const textX = labelX + labelWidth / 2;
-
-          return (
-            <g key={point.id}>
-              <line
-                x1={point.x}
-                y1={point.y}
-                x2={connectorEndX}
-                y2={labelY}
-                stroke={point.color}
-                strokeWidth={1.5}
-                strokeOpacity={0.35}
-              />
+        {campaigns.map((campaign, slot) => (
+          <g key={campaign}>
+            {slot === campaignIndex ? (
               <rect
-                x={labelX}
-                y={labelY - labelHeight / 2}
-                rx={12}
-                ry={12}
-                width={labelWidth}
-                height={labelHeight}
-                fill="#EEF3F6"
-                stroke="rgba(16,47,74,0.08)"
-                filter="drop-shadow(0px 8px 18px rgba(16,35,51,0.08))"
+                x={margin.left + slotWidth * slot + 6}
+                y={margin.top - 8}
+                width={slotWidth - 12}
+                height={plotHeight + 8}
+                rx={14}
+                fill="rgba(16,47,74,0.035)"
               />
-              <text
-                x={textX}
-                y={labelY + 4}
-                textAnchor="middle"
-                fill="#102533"
-                fontSize="12"
-                fontWeight="700"
-              >
-                {scoreText}
+            ) : null}
+            <text
+              x={margin.left + slotWidth * slot + slotWidth / 2}
+              y={height - 12}
+              textAnchor="middle"
+              fill="#60727D"
+              fontSize="14"
+              fontWeight="700"
+            >
+              {campaign}
+            </text>
+          </g>
+        ))}
+
+        {series.map((entry, seriesIndex) =>
+          campaigns.map((campaign, slot) => {
+            const score = scoreOf(entry, slot);
+            if (score == null) return null;
+            const x = barX(slot, seriesIndex);
+            const y = yForScore(score);
+            return (
+              <g key={`${entry.id}-${campaign}`}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barWidth}
+                  height={Math.max(baseY - y, 1)}
+                  rx={6}
+                  fill={integrationScoreColor(score)}
+                  stroke="rgba(16,47,74,0.28)"
+                  strokeWidth={1}
+                />
+                <text
+                  x={x + barWidth / 2}
+                  y={y - 8}
+                  textAnchor="middle"
+                  fill="#102533"
+                  fontSize="13"
+                  fontWeight="700"
+                >
+                  {formatScoreForDisplay(score)}
+                </text>
+                <text
+                  x={x + barWidth / 2 + 4}
+                  y={baseY + 16}
+                  textAnchor="end"
+                  transform={`rotate(-32 ${x + barWidth / 2 + 4} ${baseY + 16})`}
+                  fill="#60727D"
+                  fontSize="12"
+                  fontWeight="600"
+                >
+                  {entry.label.length > 16 ? `${entry.label.slice(0, 15)}…` : entry.label}
+                </text>
+              </g>
+            );
+          })
+        )}
+
+        {connectors.map((c) => {
+          const mx = (c.x1 + c.x2) / 2;
+          const my = (c.y1 + c.y2) / 2;
+          const label = `${c.delta > 0.05 ? "+" : ""}${c.delta.toFixed(1)}`;
+          const tone = c.delta > 0.05 ? "#2F6B3F" : c.delta < -0.05 ? "#B2483E" : "#6E7E96";
+          return (
+            <g key={`line-${c.id}`}>
+              <line
+                x1={c.x1}
+                y1={c.y1}
+                x2={c.x2}
+                y2={c.y2}
+                stroke={`url(#lt-grad-${c.id})`}
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeDasharray="1 7"
+              />
+              <rect x={mx - 20} y={my - 11} width={40} height={20} rx={10} fill="#FFFFFF" stroke="rgba(16,47,74,0.14)" />
+              <text x={mx} y={my + 4} textAnchor="middle" fill={tone} fontSize="11" fontWeight="700">
+                {label}
               </text>
             </g>
           );
@@ -1180,7 +1181,7 @@ function IndexChangeTiles({
       })}
       {keys.length > 1 ? (
         <div className="flex min-h-[132px] flex-col items-center justify-center rounded-2xl border border-border-strong bg-white px-3 py-4 text-center shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">Growth %</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-text-secondary">Growth (points)</p>
           <div className="mt-3">
             <GrowthPill value={growth} large />
           </div>
@@ -2533,7 +2534,7 @@ function LongitudinalTrendsTab({
     },
     {
       key: "growthToCampaign2",
-      header: "Growth %",
+      header: "Growth (pts)",
       render: (row: LongitudinalSummaryRow) => (
         <span className="text-text-primary">{formatGrowthPercentage(row.growthToCampaign2)}</span>
       ),
@@ -2549,7 +2550,7 @@ function LongitudinalTrendsTab({
     },
     {
       key: "growthToCampaign3",
-      header: "Growth %",
+      header: "Growth (pts)",
       render: (row: LongitudinalSummaryRow) => (
         <span className="text-text-primary">{formatGrowthPercentage(row.growthToCampaign3)}</span>
       ),
