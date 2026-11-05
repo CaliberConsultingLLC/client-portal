@@ -86,6 +86,8 @@ export async function loadJobTitleFitHeatmap() {
   const people = rows
     .slice(1)
     .filter((r) => r.length > 5)
+    // One Campaign 2 response (ID 190) rated every statement at the minimum; excluded from all figures.
+    .filter((r) => !(get(r, "ID") === "190" && get(r, "Campaign") === "Second"))
     .map((r) => {
       const raw = get(r, "Job Title");
       return {

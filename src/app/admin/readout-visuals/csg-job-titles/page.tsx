@@ -102,7 +102,7 @@ export default async function CsgJobTitleHeatmapPage() {
         </table>
         <p className="mt-2 text-[11px] text-[#6E7E96]">
           Titles with one response are one person&apos;s voice, not a role average. Campaign 1 only titles show their Campaign 1 overall
-          score (faded) and no Campaign 2 detail.
+          score (faded) and no Campaign 2 detail. One Campaign 2 response that rated every statement at the minimum is excluded.
         </p>
       </div>
     </div>

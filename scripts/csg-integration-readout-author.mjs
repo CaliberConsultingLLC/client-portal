@@ -49,8 +49,12 @@ function parseCSV(text) {
 const [dbBuf] = await bucket.file("clients/csg/data/Canopy Integration Database 2026.csv").download();
 const rawRows = parseCSV(dbBuf.toString("utf8").replace(/^﻿/, ""));
 const H = rawRows[0].map((h) => h.trim());
-const all = rawRows.slice(1).filter((r) => r.length > 5).map((r) => Object.fromEntries(H.map((h, i) => [h, (r[i] ?? "").trim()])));
+// Respondent 190 (Campaign 2, Bealing) rated all 11 statements at the minimum while
+// writing positive comments; Dustin chose to exclude that response from every figure.
+const EXCLUDED_C2_ID = "190";
+const allRaw = rawRows.slice(1).filter((r) => r.length > 5).map((r) => Object.fromEntries(H.map((h, i) => [h, (r[i] ?? "").trim()])));
 
+const all = allRaw.filter((d) => !(d.ID === EXCLUDED_C2_ID && d.Campaign === "Second"));
 const ITEMS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const sc = (v) => Math.round(Number.parseFloat(v)) / 10;
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -72,9 +76,10 @@ const TITLE_MAP = {
 const title = (d) => TITLE_MAP[d["Job Title"]] ?? d["Job Title"];
 const C1 = all.filter((d) => d.Campaign === "Initial");
 const C2 = all.filter((d) => d.Campaign === "Second");
-assert.equal(all.length, 67);
+assert.equal(allRaw.length, 67);
+assert.equal(all.length, 66);
 assert.equal(C1.length, 33);
-assert.equal(C2.length, 34);
+assert.equal(C2.length, 33);
 
 const item = (set, i) => mean(set.map((d) => sc(d[i])));
 const ov = (set) => mean(set.flatMap((d) => ITEMS.map((i) => sc(d[i]))));
@@ -98,7 +103,8 @@ assert.equal(rank2[1], 5); // ideas welcome is second lowest
 assert.equal(rank2[2], 8); // pace third lowest
 const brandRange = [CC.c, TG.c, BL.c];
 const brandSpread = Math.max(...brandRange) - Math.min(...brandRange);
-assert(brandSpread < 0.2);
+assert(Math.abs(BL.c - BL.a) < 0.1, "Bealing is flat once the outlier is excluded");
+assert(Math.abs(CC.c - TG.c) < 0.2);
 
 // Statement-level helper strings
 const S = (i, set1 = C1, set2 = C2) => `${f2(item(set2, i))}, ${dlt(item(set1, i), item(set2, i))} from ${f2(item(set1, i))}`;
@@ -148,7 +154,7 @@ const dp = (color, value, subtitle) => ({ type: "datapoint", color, size: 2, val
 // ---- Slide 1: overall story
 const s1 = slide({
   label: "Overall story",
-  pill: { color: "red", text: "Declines across all brands" },
+  pill: { color: "red", text: "Broad decline" },
   accent: "red",
   headline: "Integration has not been smooth, the pace is too quick, and communication is not frequent enough.",
   blurb: "Campaign 1 to Campaign 2, every integration measure moved down.",
@@ -157,11 +163,11 @@ const s1 = slide({
   blocks: {
     v: visual("s1", "Item scores, Campaign 1 vs Campaign 2", "All 11 integration statements, Campaign 1 on the left and Campaign 2 on the right, with change."),
     d1: dp(7, f2(O2), `OVERALL INTEGRATION SCORE · CAMPAIGN 2 · ${dlt(O1, O2)} FROM ${f2(O1)}`),
-    d2: dp(7, "11 of 11", "STATEMENTS DECLINED · EVERY BRAND DOWN TOO"),
+    d2: dp(7, "11 of 11", "STATEMENTS DECLINED · C&C AND TIGER DOWN, BEALING FLAT"),
     "t-perception": text(
       0,
       "What employees are telling us",
-      `The perception is that integration has not been smooth, the pace is too quick, and communication is not frequent enough. Brand scores sit close together in Campaign 2 (${f2(Math.min(...brandRange))} to ${f2(Math.max(...brandRange))}), so there is parity across brands. The story is the decline, not a gap between brands.`
+      `The perception is that integration has not been smooth, the pace is too quick, and communication is not frequent enough. The two larger brands sit almost on top of each other in Campaign 2 (C&C ${f2(CC.c)}, Tiger ${f2(TG.c)}), so there is parity between them. The story is the decline, not a gap between brands.`
     ),
     "t-lowest": text(
       7,
@@ -269,15 +275,12 @@ const s3 = slide({
 
 // Bealing
 const blA = brand(C1, "Bealing"), blB = brand(C2, "Bealing");
-const blB_ex = blB.filter((d) => d.ID !== "190");
 const blSales1 = dept(blA, "Sales"), blSales2 = dept(blB, "Sales");
-assert.equal(blB_ex.length, 4);
-assert(ITEMS.every((i) => sc(all.find((d) => d.ID === "190" && d.Campaign === "Second")[i]) === 0.1), "ID 190 is all-minimum");
 const s4 = slide({
   label: "Bealing",
-  pill: { color: "gold", text: "Small base, read with care" },
-  accent: "gold",
-  headline: `Bealing is down ${dabs(BL.a, BL.c)}, yet staff are still glad to be part of Canopy.`,
+  pill: { color: "green", text: "Holding, small base" },
+  accent: "green",
+  headline: `Bealing is the one brand holding steady (${dlt(BL.a, BL.c)}), with legacy and role clarity slipping.`,
   blurb: `Bealing overall ${f2(BL.a)} to ${f2(BL.c)} (${dlt(BL.a, BL.c)}). Small base: ${BL.n1} responses in Campaign 1 (May), ${BL.n2} in Campaign 2.`,
   colA: ["pos", "neg"],
   colB: ["v"],
@@ -286,24 +289,26 @@ const s4 = slide({
     pos: text(
       1,
       "Biggest positive",
-      `Being glad the brand joined Canopy barely moved (${S(11, blA, blB)}), and belief in long-term success holds among the highest statements at ${f2(item(blB, 10))}. Sales held up (${f2(ov(blSales1))} to ${f2(ov(blSales2))}, ${dlt(ov(blSales1), ov(blSales2))}, ${blSales2.length} responses each campaign).`,
+      `Being glad the brand joined Canopy rose the most (${S(11, blA, blB)}). Communication from Canopy leadership (${S(2, blA, blB)}) and knowing who to contact (${S(9, blA, blB)}) also improved. Long-term belief in the acquisition stays among the highest at ${f2(item(blB, 10))}, and Sales edged up (${f2(ov(blSales1))} to ${f2(ov(blSales2))}, ${dlt(ov(blSales1), ov(blSales2))}, ${blSales2.length} responses each campaign).`,
       1
     ),
     neg: text(
       7,
       "Biggest concern",
-      `Respect for the brand's legacy and role clarity each fell ${dabs(item(blA, 3), item(blB, 3))} (${f2(item(blA, 3))} to ${f2(item(blB, 3))}), with ideas welcomed (${S(5, blA, blB)}) and a smooth process (${S(7, blA, blB)}) close behind. Caution: one Campaign 2 response rated every statement at the lowest possible score. Without it Bealing is essentially flat (${f2(BL.a)} to ${f2(ov(blB_ex))}, ${dlt(BL.a, ov(blB_ex))}).`,
+      `Respect for the brand's legacy and role clarity each fell ${dabs(item(blA, 3), item(blB, 3))} (${f2(item(blA, 3))} to ${f2(item(blB, 3))}), and ideas being welcomed (${S(5, blA, blB)}) and a smooth process (${S(7, blA, blB)}) slipped too. Legacy, ideas and the process are also among the largest falls across the organization. With only ${BL.n2} responses in Campaign 2, read this as direction.`,
       1
     ),
   },
 });
+assert(item(blB, 11) - item(blA, 11) > 1);
+assert(r2(item(blB, 3)) - r2(item(blA, 3)) < -0.7 && r2(item(blB, 4)) - r2(item(blA, 4)) < -0.7);
 
 // ---- Slide 5: longitudinal
 const s5 = slide({
   label: "Longitudinal trends",
-  pill: { color: "red", text: "Down across the board" },
+  pill: { color: "red", text: "Down, led by C&C and Tiger" },
   accent: "red",
-  headline: "Overall, C&C, Tiger and Bealing are all lower than they were in Campaign 1.",
+  headline: "Overall, C&C and Tiger are clearly lower than in Campaign 1, and Bealing has not moved.",
   blurb: "Integration score by campaign, oldest on the left, newest on the right.",
   colA: ["d1", "d2", "d3", "d4", "t-read"],
   colB: ["v"],
@@ -316,7 +321,7 @@ const s5 = slide({
     "t-read": text(
       0,
       "The read",
-      `Every line points down. All three brands have landed in the same place in Campaign 2 (${f2(Math.min(...brandRange))} to ${f2(Math.max(...brandRange))}) after starting apart (${f2(Math.min(CC.a, TG.a, BL.a))} to ${f2(Math.max(CC.a, TG.a, BL.a))}), and all 11 statements declined. Campaign 1 ran in February for C&C and Tiger and in May for Bealing; Campaign 2 ran in October for all three. Tiger and Bealing bases are small (${TG.n1} and ${BL.n1} responses in Campaign 1), so the size of their moves is directional.`
+      `The overall line and both larger brands point down, and all 11 statements declined. C&C and Tiger have landed in the same place (${f2(CC.c)} and ${f2(TG.c)}) after starting apart (${f2(CC.a)} and ${f2(TG.a)}). Bealing is essentially flat (${dlt(BL.a, BL.c)}). Campaign 1 ran in February for C&C and Tiger and in May for Bealing; Campaign 2 ran in October for all three. Tiger and Bealing bases are small (${TG.n1} and ${BL.n1} responses in Campaign 1), so the size of their moves is directional.`
     ),
   },
 });
@@ -360,29 +365,30 @@ const s6 = slide({
 const ces2 = ttl(C2, "Customer Engagement Specialist"), ces1 = ttl(C1, "Customer Engagement Specialist");
 const ps2 = ttl(C2, "Production Scheduler");
 const cesEx = ces2.filter((d) => d.ID !== "190");
-assert.equal(ces2.length, 3); assert.equal(ces1.length, 2); assert.equal(ps2.length, 2);
+assert.equal(ces2.length, 2); assert.equal(ces1.length, 2); assert.equal(ps2.length, 2);
 const allTitles = [...new Set(all.map(title))];
 assert.equal(allTitles.length, 20);
 const multi = [...new Set(C2.map(title))].filter((t) => ttl(C2, t).length >= 2).map((t) => ({ t, s: ov(ttl(C2, t)) })).sort((a, b) => a.s - b.s);
-assert.equal(multi[0].t, "Customer Engagement Specialist");
-assert.equal(multi[1].t, "Production Scheduler");
+assert.equal(multi[0].t, "Production Scheduler");
+const cesFall = r2(ov(ces2)) - r2(ov(ces1));
+assert(multi.every((m) => { const a = ttl(C1, m.t), c = ttl(C2, m.t); return !a.length || r2(ov(c)) - r2(ov(a)) >= cesFall; }), "CES has the largest fall");
 const s7 = slide({
   label: "Job title view",
   pill: { color: "red", text: "Where the heat is" },
   accent: "red",
-  headline: "Customer Engagement Specialists and Production Schedulers feel the most heat.",
+  headline: "Production Schedulers sit lowest, and Customer Engagement Specialists have fallen furthest.",
   blurb: "Every job title on one view, with Campaign 2 scores and change.",
   widths: [0.36, 0.64],
   colA: ["d1", "d2", "t-read"],
   colB: ["v"],
   blocks: {
     v: visual("s7", "Job title heat map", "All 20 job titles by statement on one screen, Campaign 2 scores with change from Campaign 1. Rebuilt to fit without scrolling."),
-    d1: dp(7, f2(ov(ces2)), `CUSTOMER ENGAGEMENT SPECIALISTS · ${dlt(ov(ces1), ov(ces2))} FROM ${f2(ov(ces1))} · ${ces2.length} RESPONSES`),
-    d2: dp(7, f2(ov(ps2)), `PRODUCTION SCHEDULERS · NEW TITLE IN CAMPAIGN 2 · ${ps2.length} RESPONSES`),
+    d1: dp(7, f2(ov(ces2)), `CUSTOMER ENGAGEMENT SPECIALISTS · ${dlt(ov(ces1), ov(ces2))} FROM ${f2(ov(ces1))} · LARGEST FALL OF ANY TITLE · ${ces2.length} RESPONSES`),
+    d2: dp(7, f2(ov(ps2)), `PRODUCTION SCHEDULERS · LOWEST TITLE WITH 2+ RESPONSES · NEW IN CAMPAIGN 2 · ${ps2.length} RESPONSES`),
     "t-read": text(
       0,
       "How to read it",
-      `Among titles with more than one respondent, these two sit lowest. Single-response titles are shown for completeness and are one person's voice, not a role average. Sales Representative and Sales Consultant are shown as one title (four employees answered both campaigns under the two names), and Customer Engagement is shown with Customer Engagement Specialist.\nNote: the Customer Engagement Specialist average includes one response that rated every statement at the lowest possible score. Without it the title scores ${f2(ov(cesEx))}.`
+      `Production Schedulers score lowest among titles with more than one respondent. Customer Engagement Specialists show the largest drop of any such title. Single-response titles are shown for completeness and are one person's voice, not a role average. Sales Representative and Sales Consultant are shown as one title (four employees answered both campaigns under the two names), and Customer Engagement is shown with Customer Engagement Specialist.`
     ),
   },
 });
@@ -399,7 +405,7 @@ const roleCols = {
     "• Operations Manager (1 response): Sharp fall from a very positive start, hottest on the process, communication and having a voice.",
   ],
   b: [
-    "• Customer Engagement Specialists: Hottest group. Feeling heard and a smooth process are the pain points, and the sharpest fall of any title with more than one response. Includes one very low response (see the heat map slide).",
+    "• Customer Engagement Specialists: The sharpest fall of any title with more than one response, from a very positive start. Feeling heard and a smooth process are the pain points; role clarity is a strength.",
     "• Production Schedulers: Hot on respect for the legacy, the process and pace. Knowing who to contact and corporate support are what is working. New title.",
     "• Production Manager (1 response): Hot on communication, role clarity and pace. Respect for the brand and support from corporate are holding.",
     "• Accounts Receivable Specialist (1 response): Steady and agreeable across the board, with strong role clarity. Nothing running hot.",
@@ -427,7 +433,7 @@ const s8 = slide({
 
 // ---- Slide 9: employee voice (manual coding of every Campaign 2 comment)
 const CODING = {
-  positive: ["3030", "3041", "3006", "2022", "190"],
+  positive: ["3030", "3041", "3006", "2022"],
   mixed: ["3034", "3002", "3008", "3036", "3037", "3000", "2024", "2004", "12"],
   negative: ["3005", "3017", "3011", "3023", "3035", "3014", "3015", "2016", "2009"],
   neutral: ["3024", "3009", "2029", "2002", "2003", "185"],
@@ -437,7 +443,7 @@ const THEMES = {
   systems: ["3030", "3041", "3006", "3002", "3035", "3036", "3015", "2024", "2016", "2009", "2002", "2004", "3023"],
   communication: ["3011", "3017", "3008", "3034", "3000", "3015", "2029", "12", "3037", "2009"],
   unheard: ["3011", "3015", "3035", "3014", "3017"],
-  support: ["3005", "3006", "3041", "3034", "190", "2004", "3008"],
+  support: ["3005", "3006", "3041", "3034", "2004", "3008"],
   management: ["3005", "3017", "3034", "3014", "3002"],
   departures: ["3011", "3035", "3017"],
   workload: ["2009", "2004", "3008", "3034"],
@@ -445,8 +451,9 @@ const THEMES = {
 };
 const c2ids = new Set(C2.map((d) => d.ID));
 const coded = Object.values(CODING).flat();
-assert.equal(coded.length, 34);
-assert.equal(new Set(coded).size, 34);
+assert.equal(coded.length, 33);
+assert.equal(new Set(coded).size, 33);
+assert(!coded.includes(EXCLUDED_C2_ID));
 assert(coded.every((id) => c2ids.has(id)));
 for (const ids of Object.values(THEMES)) assert(ids.every((id) => c2ids.has(id)));
 const n = (k) => CODING[k].length;
