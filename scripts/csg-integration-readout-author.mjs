@@ -50,11 +50,10 @@ const [dbBuf] = await bucket.file("clients/csg/data/Canopy Integration Database 
 const rawRows = parseCSV(dbBuf.toString("utf8").replace(/^﻿/, ""));
 const H = rawRows[0].map((h) => h.trim());
 // Respondent 190 (Campaign 2, Bealing) rated all 11 statements at the minimum while
-// writing positive comments; Dustin chose to exclude that response from every figure.
-const EXCLUDED_C2_ID = "190";
+// writing positive comments; Dustin removed that response from the database itself.
 const allRaw = rawRows.slice(1).filter((r) => r.length > 5).map((r) => Object.fromEntries(H.map((h, i) => [h, (r[i] ?? "").trim()])));
 
-const all = allRaw.filter((d) => !(d.ID === EXCLUDED_C2_ID && d.Campaign === "Second"));
+const all = allRaw;
 const ITEMS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const sc = (v) => Math.round(Number.parseFloat(v)) / 10;
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -76,7 +75,7 @@ const TITLE_MAP = {
 const title = (d) => TITLE_MAP[d["Job Title"]] ?? d["Job Title"];
 const C1 = all.filter((d) => d.Campaign === "Initial");
 const C2 = all.filter((d) => d.Campaign === "Second");
-assert.equal(allRaw.length, 67);
+assert.equal(allRaw.length, 66);
 assert.equal(all.length, 66);
 assert.equal(C1.length, 33);
 assert.equal(C2.length, 33);
@@ -442,7 +441,7 @@ const c2ids = new Set(C2.map((d) => d.ID));
 const coded = Object.values(CODING).flat();
 assert.equal(coded.length, 33);
 assert.equal(new Set(coded).size, 33);
-assert(!coded.includes(EXCLUDED_C2_ID));
+assert(!coded.includes("190"));
 assert(coded.every((id) => c2ids.has(id)));
 for (const ids of Object.values(THEMES)) assert(ids.every((id) => c2ids.has(id)));
 const n = (k) => CODING[k].length;
