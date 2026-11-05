@@ -1677,7 +1677,9 @@ function DashboardLinkEditor({
       ? options?.collabPerspectives ?? []
       : family === "employee_experience"
         ? options?.eePerspectives ?? []
-        : [];
+        : family === "integration"
+          ? options?.integrationPerspectives?.[selected?.instanceId ?? ""] ?? []
+          : [];
   const filterFields = dashboardLinkFilterFields(family, link?.perspectiveId);
   const campaigns = options?.campaigns ?? [];
   const linkedLabel = selected?.title?.trim() || link?.perspectiveId || null;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ArrowDownUp } from "lucide-react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { usePersistedDashboardFilter } from "@/hooks/use-persisted-dashboard-filter";
@@ -1956,6 +1957,17 @@ export function IntegrationEffectivenessDashboardClient({
   );
   const [activeTab, setActiveTab] = useState(perspectiveDefinitions[0]?.id ?? "overview");
   const [activeCategory, setActiveCategory] = useState(categorySections[0]?.id ?? "");
+  const searchParams = useSearchParams();
+  const deepLinkAppliedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || !searchParams) return;
+    deepLinkAppliedRef.current = true;
+    const perspectiveParam = searchParams.get("perspective");
+    if (!perspectiveParam) return;
+    const section = categorySections.find((entry) => entry.tabIds.includes(perspectiveParam));
+    if (section) setActiveCategory(section.id);
+    if (perspectiveDefinitions.some((tab) => tab.id === perspectiveParam)) setActiveTab(perspectiveParam);
+  }, [searchParams, categorySections, perspectiveDefinitions]);
   const activeCategorySection =
     categorySections.find((section) => section.id === activeCategory) ?? categorySections[0];
   const visibleTabs =

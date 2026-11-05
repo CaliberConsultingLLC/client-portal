@@ -3,6 +3,7 @@ import {
   getFirebaseDashboardAssignments,
   getFirebaseDashboardInstances,
 } from "@/lib/firebase/dashboard-store";
+import { getDashboardPerspectiveInstances } from "@/lib/firebase/perspective-store";
 import type { PortalDashboardFamily } from "@/types/portal";
 import {
   READOUT_COLLAB_PERSPECTIVE_OPTIONS,
@@ -22,6 +23,8 @@ export type ReadoutDashboardLinkOptions = {
   campaigns: string[];
   eePerspectives: Array<{ id: string; label: string }>;
   collabPerspectives: Array<{ id: string; label: string }>;
+  /** Integration dashboards: perspectives per dashboard instance id. */
+  integrationPerspectives: Record<string, Array<{ id: string; label: string }>>;
 };
 
 export async function getReadoutDashboardLinkOptions(
@@ -52,6 +55,25 @@ export async function getReadoutDashboardLinkOptions(
     })
     .sort((a, b) => a.title.localeCompare(b.title));
 
+  const integrationPerspectives: Record<string, Array<{ id: string; label: string }>> = {};
+  try {
+    const wanted = new Set(dashboards.filter((d) => d.family === "integration").map((d) => d.instanceId));
+    const all = await getDashboardPerspectiveInstances();
+    all
+      .filter(
+        (p) =>
+          wanted.has(p.dashboardInstanceId) &&
+          p.status === "active" &&
+          p.rendererKey !== "integration.protectPrioritize"
+      )
+      .sort((a, b) => a.order - b.order)
+      .forEach((p) => {
+        (integrationPerspectives[p.dashboardInstanceId] ??= []).push({ id: p.id, label: p.title });
+      });
+  } catch {
+    // Picker falls back to "no perspectives" if the lookup fails.
+  }
+
   let campaigns: string[] = [];
   try {
     const data = await loadDwsEmployeeExperienceDashboardData({
@@ -73,5 +95,6 @@ export async function getReadoutDashboardLinkOptions(
       id: p.id,
       label: p.label,
     })),
+    integrationPerspectives,
   };
 }
