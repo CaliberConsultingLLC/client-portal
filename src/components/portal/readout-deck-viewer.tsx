@@ -1065,7 +1065,7 @@ function ReadoutDeckViewerInner({
               className="mb-8 min-w-0 overflow-wrap-anywhere whitespace-pre-wrap text-[24px] leading-[1.35] text-[#152238]"
               style={{ fontFamily: '"Playfair Display", Georgia, serif' }}
             />
-            <div className="flex flex-col gap-3.5">
+            <div className="flex flex-col gap-2">
               {deck.order.map((key, idx) => {
                 const sl = deck.slides[key];
                 const accent = sl.focusAccent || READOUT_FOCUS_ACCENT_DEFAULT;
@@ -1080,11 +1080,11 @@ function ReadoutDeckViewerInner({
                     onKeyDown={(e) => {
                       if (!editable && (e.key === "Enter" || e.key === " ")) setSlide(idx + 1);
                     }}
-                    className="flex cursor-pointer items-start gap-4 rounded-2xl border bg-white px-5 py-4 hover:shadow-[0_6px_16px_rgba(21,34,56,0.08)]"
+                    className="flex cursor-pointer items-center gap-3 rounded-xl border bg-white px-4 py-2.5 hover:shadow-[0_6px_16px_rgba(21,34,56,0.08)]"
                     style={{ borderColor: accent }}
                   >
                     <span
-                      className="min-w-[40px] shrink-0 text-[24px] font-semibold leading-[1.2]"
+                      className="min-w-[36px] shrink-0 text-[20px] font-semibold leading-[1.2]"
                       style={{
                         fontFamily: '"Playfair Display", Georgia, serif',
                         color: accent,
@@ -1097,13 +1097,7 @@ function ReadoutDeckViewerInner({
                         editing={editable}
                         value={sl.label}
                         onChange={(label) => patchSlide(key, { label })}
-                        className="mb-1 min-w-0 overflow-wrap-anywhere whitespace-pre-wrap text-[15px] font-bold text-[#152238]"
-                      />
-                      <ReadoutEditableText
-                        editing={editable}
-                        value={sl.blurb}
-                        onChange={(blurb) => patchSlide(key, { blurb })}
-                        className="min-w-0 overflow-wrap-anywhere whitespace-pre-wrap text-[14px] leading-[1.5] text-[#6E7E96]"
+                        className="min-w-0 overflow-wrap-anywhere whitespace-pre-wrap text-[15px] font-bold text-[#152238]"
                       />
                       {editable ? (
                         <div className="mt-2.5 flex items-center gap-1.5">

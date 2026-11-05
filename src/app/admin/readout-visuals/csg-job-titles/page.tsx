@@ -18,8 +18,9 @@ function textOn(hex: string) {
   return l > 150 ? DARK : "#FFFFFF";
 }
 const r2 = (x: number) => Math.round(x * 100) / 100;
-const f = (x: number) => r2(x).toFixed(2);
-const sgn = (x: number) => `${x >= 0 ? "+" : "-"}${Math.abs(x).toFixed(2)}`;
+// Scores are shown on the 100-point scale (internal 0-10 value x 10), one decimal.
+const f = (x: number) => (Math.round(x * 100) / 10).toFixed(1);
+const sgn = (x: number) => `${x >= 0 ? "+" : "-"}${Math.abs(Math.round(x * 100) / 10).toFixed(1)}`;
 
 function Cell({ value, delta, muted }: { value: number | null; delta: number | null; muted?: boolean }) {
   const bg = scoreScaleColor(value, minValue, midpoint, maxValue);
@@ -63,8 +64,8 @@ export default async function CsgJobTitleHeatmapPage() {
       <div id="job-title-heatmap" className="mx-auto w-[1240px] bg-white p-4">
         <h1 className="text-[20px] font-bold text-[#152238]">Job title heat map</h1>
         <p className="mb-3 text-[12px] text-[#6E7E96]">
-          Canopy Services Group integration, Campaign 2 (Sep/Oct 2026). Each cell shows the Campaign 2 score and the change from
-          Campaign 1. Responses (n) shown as Campaign 1 / Campaign 2. Sales Representative is shown with Sales Consultant, and
+          Canopy Services Group integration, Campaign 2 (Sep/Oct 2026). Each cell shows the Campaign 2 score (100-point scale) and the
+          change in points from Campaign 1. Responses (n) shown as Campaign 1 / Campaign 2. Sales Representative is shown with Sales Consultant, and
           Customer Engagement with Customer Engagement Specialist. Titles are ordered lowest to highest.
         </p>
         <table className="w-full table-fixed border-collapse">

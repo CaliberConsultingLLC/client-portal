@@ -106,8 +106,15 @@ const brandSpread = Math.max(...brandRange) - Math.min(...brandRange);
 assert(Math.abs(BL.c - BL.a) < 0.1, "Bealing is flat once the outlier is excluded");
 assert(Math.abs(CC.c - TG.c) < 0.2);
 
-// Statement-level helper strings
-const S = (i, set1 = C1, set2 = C2) => `${f2(item(set2, i))}, ${dlt(item(set1, i), item(set2, i))} from ${f2(item(set1, i))}`;
+// Scores are shown on the 100-point scale (internal 0-10 value x 10), one decimal.
+// Each sentence states either the CURRENT score or the CHANGE in points, never both.
+const P1 = (x) => (Math.round(x * 100) / 10).toFixed(1); // current score, 100-point scale
+const ptsNum = (a, b) => Math.round(b * 100) / 10 - Math.round(a * 100) / 10; // change in points
+const ptsAbs = (a, b) => Math.abs(ptsNum(a, b)).toFixed(1);
+const ptsSgn = (a, b) => `${ptsNum(a, b) >= 0 ? "+" : "-"}${ptsAbs(a, b)}`;
+const moved = (a, b) => `${ptsNum(a, b) >= 0 ? "rose" : "fell"} ${ptsAbs(a, b)} points`;
+// Statement change helper: "fell 14.2 points"
+const SD = (i, set1 = C1, set2 = C2) => moved(item(set1, i), item(set2, i));
 
 // ---------------------------------------------------------------- slides
 const PILL = {
@@ -162,55 +169,37 @@ const s1 = slide({
   colB: ["v"],
   blocks: {
     v: visual("s1", "Item scores, Campaign 1 vs Campaign 2", "All 11 integration statements, Campaign 1 on the left and Campaign 2 on the right, with change."),
-    d1: dp(7, f2(O2), `OVERALL INTEGRATION SCORE · CAMPAIGN 2 · ${dlt(O1, O2)} FROM ${f2(O1)}`),
+    d1: dp(7, ptsSgn(O1, O2), "OVERALL INTEGRATION SCORE · POINTS · CAMPAIGN 1 TO CAMPAIGN 2"),
     d2: dp(7, "11 of 11", "STATEMENTS DECLINED · C&C AND TIGER DOWN, BEALING FLAT"),
     "t-perception": text(
       0,
       "What employees are telling us",
-      `The perception is that integration has not been smooth, the pace is too quick, and communication is not frequent enough. The two larger brands sit almost on top of each other in Campaign 2 (C&C ${f2(CC.c)}, Tiger ${f2(TG.c)}), so there is parity between them. The story is the decline, not a gap between brands.`
+      `The perception is that integration has not been smooth, the pace is too quick, and communication is not frequent enough. The two larger brands sit almost on top of each other in Campaign 2 (C&C ${P1(CC.c)}, Tiger ${P1(TG.c)}), so there is parity between them. The story is the decline, not a gap between brands.`
     ),
     "t-lowest": text(
       7,
       "Lowest and declining",
       [
-        `• The integration process has been smooth and well organized: ${S(7)}. Lowest statement in the survey.`,
-        `• The pace of change feels appropriate: ${S(8)}. Third lowest in the survey.`,
-        `• Canopy respects the legacy and unique strengths of our brand: ${S(3)}.`,
-        `• The acquisition will help the brand succeed long term: ${S(10)}. The largest single drop, though it remains well above the lowest statements. Dipped, still okay.`,
+        `• The integration process has been smooth and well organized: the lowest statement in the survey, and it ${SD(7)}.`,
+        `• The pace of change feels appropriate: third lowest in the survey, and it ${SD(8)}.`,
+        `• Canopy respects the legacy and unique strengths of our brand: ${SD(3)}.`,
+        `• The acquisition will help the brand succeed long term: ${SD(10)}, the largest single drop. It dipped but is still okay.`,
       ].join("\n")
     ),
     "t-comm": text(
       7,
       "Communication is low and slipping",
-      `• Brand leadership has clearly communicated why this acquisition benefits us: ${S(1)}.\n• Communication from Canopy leadership is clear and frequent enough: ${S(2)}.\nBoth are low and both are declining, with brand leadership declining more (${dabs(I1[1], I2[1])} versus ${dabs(I1[2], I2[2])}).`
+      `• Brand leadership has clearly communicated why this acquisition benefits us: ${SD(1)}.\n• Communication from Canopy leadership is clear and frequent enough: ${SD(2)}.\nBoth are low and both are declining, with brand leadership declining more.`
     ),
     "t-ideas": text(
       3,
       "Contingency note: \"My ideas are welcome\"",
-      `I feel my ideas and feedback are welcomed and valued during this transition: ${S(5)}. It was low to start and is lower now, the second lowest statement in the survey. Recommendation: reconsider asking this item in future campaigns, because asking may plant the idea that ideas are not welcome. Listed here for completeness.`
+      `I feel my ideas and feedback are welcomed and valued during this transition: ${P1(I2[5])}, the second lowest statement in the survey. It was low to start and is lower now. Recommendation: reconsider asking this item in future campaigns, because asking may plant the idea that ideas are not welcome. Listed here for completeness.`
     ),
   },
 });
 
 // ---- Brand slides
-function ranked(set1, set2) {
-  const rows = ITEMS.map((i) => ({ i, c2: item(set2, i), d: r2(item(set2, i)) - r2(item(set1, i)) }));
-  return rows;
-}
-const NAME = {
-  1: "brand leadership explaining why the acquisition benefits us",
-  2: "communication from Canopy leadership",
-  3: "respect for the brand's legacy and strengths",
-  4: "role clarity under the new structure",
-  5: "ideas and feedback being welcomed",
-  6: "support and resources from Canopy corporate teams",
-  7: "the integration process being smooth and well organized",
-  8: "the pace of change feeling appropriate",
-  9: "knowing who to contact with a concern",
-  10: "belief the acquisition will succeed long term",
-  11: "being glad the brand joined Canopy",
-};
-
 // C&C
 const ccA = brand(C1, "C&C"), ccB = brand(C2, "C&C");
 assert(r2(item(ccB, 9)) - r2(item(ccA, 9)) > 0.5);
@@ -220,8 +209,8 @@ const s2 = slide({
   label: "C&C",
   pill: { color: "red", text: "Main focus" },
   accent: "red",
-  headline: `C&C slipped ${dabs(CC.a, CC.c)}, with Sales feeling the integration most.`,
-  blurb: `C&C overall ${f2(CC.a)} to ${f2(CC.c)} (${dlt(CC.a, CC.c)}). ${CC.n1} responses in Campaign 1, ${CC.n2} in Campaign 2.`,
+  headline: `C&C fell ${ptsAbs(CC.a, CC.c)} points, with Sales feeling the integration most.`,
+  blurb: `C&C overall ${ptsSgn(CC.a, CC.c)} points. ${CC.n1} responses in Campaign 1, ${CC.n2} in Campaign 2.`,
   colA: ["pos", "neg"],
   colB: ["v"],
   blocks: {
@@ -229,13 +218,13 @@ const s2 = slide({
     pos: text(
       1,
       "Biggest positive",
-      `Knowing who to contact with a concern is the one measure that clearly improved: ${S(9, ccA, ccB)}. Support from Canopy corporate teams (${S(6, ccA, ccB)}) and communication from Canopy leadership (${S(2, ccA, ccB)}) held or edged up. Role clarity remains the highest statement at ${f2(item(ccB, 4))}. Back Office nearly held (${f2(ov(ccBO1))} to ${f2(ov(ccBO2))}, ${dlt(ov(ccBO1), ov(ccBO2))}, ${ccBO2.length} responses).`,
+      `Knowing who to contact with a concern is the one measure that clearly improved: it ${SD(9, ccA, ccB)}. Support from Canopy corporate teams ${SD(6, ccA, ccB)} and communication from Canopy leadership ${SD(2, ccA, ccB)}. Role clarity is the highest statement at ${P1(item(ccB, 4))}. Back Office nearly held (${moved(ov(ccBO1), ov(ccBO2))}, ${ccBO2.length} responses).`,
       1
     ),
     neg: text(
       7,
       "Biggest concern",
-      `Belief in long-term success fell most (${S(10, ccA, ccB)}), followed by ideas being welcomed (${S(5, ccA, ccB)}) and a smooth, well-organized process (${S(7, ccA, ccB)}). Sales is the lowest large group at ${f2(ov(ccSales2))} (${dlt(ov(ccSales1), ov(ccSales2))}, ${ccSales2.length} responses), where the process (${f2(item(ccSales2, 7))}) and ideas being welcomed (${f2(item(ccSales2, 5))}) are the weakest statements.`,
+      `Belief in long-term success fell most (${ptsAbs(item(ccA, 10), item(ccB, 10))} points), followed by ideas being welcomed (${ptsAbs(item(ccA, 5), item(ccB, 5))}) and a smooth, well-organized process (${ptsAbs(item(ccA, 7), item(ccB, 7))}). Sales is the lowest large group at ${P1(ov(ccSales2))} (${ccSales2.length} responses), and its weakest statements are the process (${P1(item(ccSales2, 7))}) and ideas being welcomed (${P1(item(ccSales2, 5))}).`,
       1
     ),
   },
@@ -252,8 +241,8 @@ const s3 = slide({
   label: "Tiger",
   pill: { color: "red", text: "Largest decline" },
   accent: "red",
-  headline: `Tiger fell the furthest, ${dabs(TG.a, TG.c)}, from the highest starting point.`,
-  blurb: `Tiger overall ${f2(TG.a)} to ${f2(TG.c)} (${dlt(TG.a, TG.c)}). Small base: ${TG.n1} responses in Campaign 1, ${TG.n2} in Campaign 2.`,
+  headline: `Tiger fell the furthest, ${ptsAbs(TG.a, TG.c)} points.`,
+  blurb: `Tiger overall ${ptsSgn(TG.a, TG.c)} points. Small base: ${TG.n1} responses in Campaign 1, ${TG.n2} in Campaign 2.`,
   colA: ["pos", "neg"],
   colB: ["v"],
   blocks: {
@@ -261,13 +250,13 @@ const s3 = slide({
     pos: text(
       1,
       "Biggest positive",
-      `Brand leadership explaining why the acquisition benefits us is still the highest statement at ${f2(item(tgB, 1))} (${dlt(item(tgA, 1), item(tgB, 1))}), with role clarity next (${S(4, tgA, tgB)}). Tiger Sales is the strongest group at ${f2(ov(tgSales2))} (${tgSales2.length} responses, new in Campaign 2).`,
+      `Brand leadership explaining why the acquisition benefits us is still the highest statement at ${P1(item(tgB, 1))}, with role clarity next at ${P1(item(tgB, 4))}. Tiger Sales is the strongest group at ${P1(ov(tgSales2))} (${tgSales2.length} responses, new in Campaign 2).`,
       1
     ),
     neg: text(
       7,
       "Biggest concern",
-      `Knowing who to contact fell the most (${S(9, tgA, tgB)}), followed by support from corporate teams (${S(6, tgA, tgB)}) and a smooth, organized process (${S(7, tgA, tgB)}). Back Office dropped from ${f2(ov(tgBO1))} to ${f2(ov(tgBO2))} (${dlt(ov(tgBO1), ov(tgBO2))}). With only ${TG.n1} responses in Campaign 1, the swings are large and should be read as direction.`,
+      `Knowing who to contact fell the most (${ptsAbs(item(tgA, 9), item(tgB, 9))} points), followed by support from corporate teams (${ptsAbs(item(tgA, 6), item(tgB, 6))}) and a smooth, organized process (${ptsAbs(item(tgA, 7), item(tgB, 7))}). Back Office ${moved(ov(tgBO1), ov(tgBO2))}. With only ${TG.n1} responses in Campaign 1, the swings are large and should be read as direction.`,
       1
     ),
   },
@@ -280,8 +269,8 @@ const s4 = slide({
   label: "Bealing",
   pill: { color: "green", text: "Holding, small base" },
   accent: "green",
-  headline: `Bealing is the one brand holding steady (${dlt(BL.a, BL.c)}), with legacy and role clarity slipping.`,
-  blurb: `Bealing overall ${f2(BL.a)} to ${f2(BL.c)} (${dlt(BL.a, BL.c)}). Small base: ${BL.n1} responses in Campaign 1 (May), ${BL.n2} in Campaign 2.`,
+  headline: `Bealing is the one brand holding steady (${ptsSgn(BL.a, BL.c)} points), with legacy and role clarity slipping.`,
+  blurb: `Bealing overall ${ptsSgn(BL.a, BL.c)} points. Small base: ${BL.n1} responses in Campaign 1 (May), ${BL.n2} in Campaign 2.`,
   colA: ["pos", "neg"],
   colB: ["v"],
   blocks: {
@@ -289,19 +278,20 @@ const s4 = slide({
     pos: text(
       1,
       "Biggest positive",
-      `Being glad the brand joined Canopy rose the most (${S(11, blA, blB)}). Communication from Canopy leadership (${S(2, blA, blB)}) and knowing who to contact (${S(9, blA, blB)}) also improved. Long-term belief in the acquisition stays among the highest at ${f2(item(blB, 10))}, and Sales edged up (${f2(ov(blSales1))} to ${f2(ov(blSales2))}, ${dlt(ov(blSales1), ov(blSales2))}, ${blSales2.length} responses each campaign).`,
+      `Being glad the brand joined Canopy rose the most (${ptsAbs(item(blA, 11), item(blB, 11))} points). Communication from Canopy leadership rose ${ptsAbs(item(blA, 2), item(blB, 2))} and knowing who to contact rose ${ptsAbs(item(blA, 9), item(blB, 9))}. Sales ${moved(ov(blSales1), ov(blSales2))} (${blSales2.length} responses each campaign).`,
       1
     ),
     neg: text(
       7,
       "Biggest concern",
-      `Respect for the brand's legacy and role clarity each fell ${dabs(item(blA, 3), item(blB, 3))} (${f2(item(blA, 3))} to ${f2(item(blB, 3))}), and ideas being welcomed (${S(5, blA, blB)}) and a smooth process (${S(7, blA, blB)}) slipped too. Legacy, ideas and the process are also among the largest falls across the organization. With only ${BL.n2} responses in Campaign 2, read this as direction.`,
+      `Respect for the brand's legacy and role clarity each fell ${ptsAbs(item(blA, 3), item(blB, 3))} points, and ideas being welcomed and a smooth process each fell ${ptsAbs(item(blA, 5), item(blB, 5))}. Legacy, ideas and the process are also among the largest falls across the organization. With only ${BL.n2} responses in Campaign 2, read this as direction.`,
       1
     ),
   },
 });
 assert(item(blB, 11) - item(blA, 11) > 1);
 assert(r2(item(blB, 3)) - r2(item(blA, 3)) < -0.7 && r2(item(blB, 4)) - r2(item(blA, 4)) < -0.7);
+assert.equal(ptsAbs(item(blA, 5), item(blB, 5)), ptsAbs(item(blA, 7), item(blB, 7)));
 
 // ---- Slide 5: longitudinal
 const s5 = slide({
@@ -309,19 +299,19 @@ const s5 = slide({
   pill: { color: "red", text: "Down, led by C&C and Tiger" },
   accent: "red",
   headline: "Overall, C&C and Tiger are clearly lower than in Campaign 1, and Bealing has not moved.",
-  blurb: "Integration score by campaign, oldest on the left, newest on the right.",
+  blurb: "Change in integration score by campaign, oldest on the left, newest on the right.",
   colA: ["d1", "d2", "d3", "d4", "t-read"],
   colB: ["v"],
   blocks: {
     v: visual("s5", "Integration score over time", "Overall and each brand across Campaign 1 and Campaign 2, oldest on the left, with change."),
-    d1: dp(7, f2(O2), `OVERALL · ${dlt(O1, O2)} FROM ${f2(O1)} · ${C2.length} RESPONSES`),
-    d2: dp(7, f2(CC.c), `C&C · ${dlt(CC.a, CC.c)} FROM ${f2(CC.a)} · ${CC.n2} RESPONSES`),
-    d3: dp(7, f2(TG.c), `TIGER · ${dlt(TG.a, TG.c)} FROM ${f2(TG.a)} · ${TG.n2} RESPONSES`),
-    d4: dp(7, f2(BL.c), `BEALING · ${dlt(BL.a, BL.c)} FROM ${f2(BL.a)} · ${BL.n2} RESPONSES`),
+    d1: dp(7, ptsSgn(O1, O2), `OVERALL · POINTS · ${C2.length} RESPONSES IN CAMPAIGN 2`),
+    d2: dp(7, ptsSgn(CC.a, CC.c), `C&C · POINTS · ${CC.n2} RESPONSES IN CAMPAIGN 2`),
+    d3: dp(7, ptsSgn(TG.a, TG.c), `TIGER · POINTS · ${TG.n2} RESPONSES IN CAMPAIGN 2`),
+    d4: dp(7, ptsSgn(BL.a, BL.c), `BEALING · POINTS · ${BL.n2} RESPONSES IN CAMPAIGN 2`),
     "t-read": text(
       0,
       "The read",
-      `The overall line and both larger brands point down, and all 11 statements declined. C&C and Tiger have landed in the same place (${f2(CC.c)} and ${f2(TG.c)}) after starting apart (${f2(CC.a)} and ${f2(TG.a)}). Bealing is essentially flat (${dlt(BL.a, BL.c)}). Campaign 1 ran in February for C&C and Tiger and in May for Bealing; Campaign 2 ran in October for all three. Tiger and Bealing bases are small (${TG.n1} and ${BL.n1} responses in Campaign 1), so the size of their moves is directional.`
+      `The overall line and both larger brands point down, and all 11 statements declined. C&C and Tiger have landed in the same place (${P1(CC.c)} and ${P1(TG.c)}). Bealing is essentially flat. Campaign 1 ran in February for C&C and Tiger and in May for Bealing; Campaign 2 ran in October for all three. Tiger and Bealing bases are small (${TG.n1} and ${BL.n1} responses in Campaign 1), so the size of their moves is directional.`
     ),
   },
 });
@@ -346,17 +336,17 @@ const s6 = slide({
   colB: ["v"],
   blocks: {
     v: visual("s6", "Department and GM comparison", "Department scores with change, and General Managers versus all other respondents, Campaign 1 on the left and Campaign 2 on the right."),
-    d1: dp(7, f2(ov(ops)), `OPERATIONS SUPPORT · LOWEST DEPARTMENT · ${ops.length} RESPONSES · NO CAMPAIGN 1 BASELINE`),
-    d2: dp(7, f2(ov(sales2)), `SALES · ${dlt(ov(sales1), ov(sales2))} FROM ${f2(ov(sales1))} · LARGEST GROUP · ${sales2.length} RESPONSES`),
+    d1: dp(7, P1(ov(ops)), `OPERATIONS SUPPORT · LOWEST DEPARTMENT · ${ops.length} RESPONSES`),
+    d2: dp(7, P1(ov(sales2)), `SALES · LARGEST GROUP · ${sales2.length} RESPONSES`),
     "t-gm": text(
       2,
       "General Managers versus everyone else",
-      `GMs overall: ${f2(ov(gm2))} (${dlt(ov(gm1), ov(gm2))} from ${f2(ov(gm1))}), against ${f2(ov(rest2))} for everyone else (${dlt(ov(rest1), ov(rest2))} from ${f2(ov(rest1))}).\n• Support and resources: GMs ${f2(item(gm2, 6))}, everyone else ${f2(item(rest2, 6))}.\n• Role clarity under the new structure: GMs ${f2(item(gm2, 4))}, everyone else ${f2(item(rest2, 4))}.\n• Pace of change: GMs ${f2(item(gm2, 8))}, everyone else ${f2(item(rest2, 8))}.\n• Smooth integration: GMs fell from ${f2(item(gm1, 7))} to ${f2(item(gm2, 7))} (${dlt(item(gm1, 7), item(gm2, 7))}); everyone else is lower still at ${f2(item(rest2, 7))}.\nWhen the leaders running the brands feel under-supported and rushed, it likely trickles down to their teams. Only ${gm1.length + gm2.length} GM responses (${gm2.length} per campaign), so treat this as directional.`
+      `GMs score ${P1(ov(gm2))} overall, against ${P1(ov(rest2))} for everyone else.\n• Support and resources: GMs ${P1(item(gm2, 6))}, everyone else ${P1(item(rest2, 6))}.\n• Role clarity under the new structure: GMs ${P1(item(gm2, 4))}, everyone else ${P1(item(rest2, 4))}.\n• Pace of change: GMs ${P1(item(gm2, 8))}, everyone else ${P1(item(rest2, 8))}.\n• Smooth integration: GMs ${P1(item(gm2, 7))}, everyone else ${P1(item(rest2, 7))}.\nWhen the leaders running the brands feel under-supported and rushed, it likely trickles down to their teams. Only ${gm1.length + gm2.length} GM responses (${gm2.length} per campaign), so treat this as directional.`
     ),
     "t-comm": text(
       0,
       "Communication",
-      `GMs rate brand leadership's explanation of why (${f2(item(gm2, 1))}) and Canopy updates (${f2(item(gm2, 2))}) above everyone else (${f2(item(rest2, 1))} and ${f2(item(rest2, 2))}). Leaders feel informed; teams feel less so. Sales rates Canopy updates ${f2(item(sales2, 2))} (${dlt(item(sales1, 2), item(sales2, 2))}) and Operations Support ${f2(item(ops, 2))}. Across the organization, brand leadership communication (${f2(I2[1])}, ${dlt(I1[1], I2[1])}) and Canopy communication (${f2(I2[2])}, ${dlt(I1[2], I2[2])}) are both low and both declining.`
+      `GMs rate brand leadership's explanation of why (${P1(item(gm2, 1))}) and Canopy updates (${P1(item(gm2, 2))}) above everyone else (${P1(item(rest2, 1))} and ${P1(item(rest2, 2))}). Leaders feel informed; teams feel less so. Sales rates Canopy updates ${P1(item(sales2, 2))} and Operations Support ${P1(item(ops, 2))}. Across the organization, brand leadership communication (${P1(I2[1])}) and Canopy communication (${P1(I2[2])}) are both low, and both are declining.`
     ),
   },
 });
@@ -364,7 +354,6 @@ const s6 = slide({
 // ---- Slide 7: job title heat map
 const ces2 = ttl(C2, "Customer Engagement Specialist"), ces1 = ttl(C1, "Customer Engagement Specialist");
 const ps2 = ttl(C2, "Production Scheduler");
-const cesEx = ces2.filter((d) => d.ID !== "190");
 assert.equal(ces2.length, 2); assert.equal(ces1.length, 2); assert.equal(ps2.length, 2);
 const allTitles = [...new Set(all.map(title))];
 assert.equal(allTitles.length, 20);
@@ -383,8 +372,8 @@ const s7 = slide({
   colB: ["v"],
   blocks: {
     v: visual("s7", "Job title heat map", "All 20 job titles by statement on one screen, Campaign 2 scores with change from Campaign 1. Rebuilt to fit without scrolling."),
-    d1: dp(7, f2(ov(ces2)), `CUSTOMER ENGAGEMENT SPECIALISTS · ${dlt(ov(ces1), ov(ces2))} FROM ${f2(ov(ces1))} · LARGEST FALL OF ANY TITLE · ${ces2.length} RESPONSES`),
-    d2: dp(7, f2(ov(ps2)), `PRODUCTION SCHEDULERS · LOWEST TITLE WITH 2+ RESPONSES · NEW IN CAMPAIGN 2 · ${ps2.length} RESPONSES`),
+    d1: dp(7, ptsSgn(ov(ces1), ov(ces2)), `CUSTOMER ENGAGEMENT SPECIALISTS · POINTS · LARGEST FALL OF ANY TITLE · ${ces2.length} RESPONSES`),
+    d2: dp(7, P1(ov(ps2)), `PRODUCTION SCHEDULERS · LOWEST TITLE WITH 2+ RESPONSES · NEW IN CAMPAIGN 2 · ${ps2.length} RESPONSES`),
     "t-read": text(
       0,
       "How to read it",
