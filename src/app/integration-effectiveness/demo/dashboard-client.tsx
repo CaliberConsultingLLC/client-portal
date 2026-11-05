@@ -12,17 +12,13 @@ import {
   VisualExportMetaSetter,
 } from "@/components/dashboard/visual-export-registry";
 import { FieldRedesignShell } from "@/app/employee-experience/dws/field-redesign-shell";
-import { EmbeddedFilterCard, FilterStack, PillOptionRow } from "@/app/employee-experience/dws/ee-report-kit";
+import { EmbeddedFilterCard, FilterStack, PillOptionRow, pillButtonStyle } from "@/app/employee-experience/dws/ee-report-kit";
 import { CompositeVisualExportButton } from "@/components/dashboard/composite-visual-export-button";
 import { RegisteredVisualExportFrame } from "@/components/dashboard/registered-visual-export-frame";
 import {
   buildDashboardExportFilename,
   DASHBOARD_VISUAL_EXPORT_TARGET_ID,
 } from "@/lib/dashboard/export-visual";
-import {
-  scoreScaleColor,
-  scoreScaleTextColor,
-} from "@/components/collaboration/score-color-scale";
 import {
   Card,
   CardContent,
@@ -33,7 +29,11 @@ import {
 import { DataTable } from "@/components/ui/data-table";
 import { formatScoreForDisplay } from "@/lib/collaboration/display-format";
 import { getDataBoxSurfaceStyle } from "@/lib/collaboration/data-box-surface";
-import { INTEGRATION_SCORE_SCALE } from "@/lib/integration-effectiveness/score-scale";
+import {
+  INTEGRATION_SCORE_SCALE,
+  integrationScoreColor,
+  integrationScoreTextColor,
+} from "@/lib/integration-effectiveness/score-scale";
 import {
   resolveAllowedValuesForPerspective,
   type EmployeeExperienceUserAccess,
@@ -211,40 +211,19 @@ function campaignSequenceRank(label: string) {
   return 2;
 }
 
+// Scores use the Canopy 40-80 gold / white / blue scale shown in the Score Scale legend.
 function getScoreBadgeStyle(score: number) {
   return {
-    backgroundColor: scoreScaleColor(
-      score,
-      INTEGRATION_SCORE_SCALE.minValue,
-      INTEGRATION_SCORE_SCALE.midpoint,
-      INTEGRATION_SCORE_SCALE.maxValue
-    ),
-    color: scoreScaleTextColor(
-      score,
-      INTEGRATION_SCORE_SCALE.midpoint,
-      0.8,
-      INTEGRATION_SCORE_SCALE.minValue,
-      INTEGRATION_SCORE_SCALE.maxValue
-    ),
+    backgroundColor: integrationScoreColor(score),
+    color: integrationScoreTextColor(score),
   };
 }
 
 function getScoreCardStyle(score: number) {
   return {
     ...getDataBoxSurfaceStyle(),
-    backgroundColor: scoreScaleColor(
-      score,
-      INTEGRATION_SCORE_SCALE.minValue,
-      INTEGRATION_SCORE_SCALE.midpoint,
-      INTEGRATION_SCORE_SCALE.maxValue
-    ),
-    color: scoreScaleTextColor(
-      score,
-      INTEGRATION_SCORE_SCALE.midpoint,
-      0.8,
-      INTEGRATION_SCORE_SCALE.minValue,
-      INTEGRATION_SCORE_SCALE.maxValue
-    ),
+    backgroundColor: integrationScoreColor(score),
+    color: integrationScoreTextColor(score),
   };
 }
 
@@ -883,9 +862,9 @@ function GrowthPill({ value, large = false }: { value: number | null; large?: bo
   const rounded = Math.round(value * 10) / 10;
   const tone =
     rounded > 0
-      ? { bg: "#E9F0F7", fg: "#5E7898", arrow: "▲" }
+      ? { bg: "#E3F0E6", fg: "#2F6B3F", arrow: "▲" }
       : rounded < 0
-        ? { bg: "#F8EAEA", fg: "#C96B60", arrow: "▼" }
+        ? { bg: "#F6E1DE", fg: "#B2483E", arrow: "▼" }
         : { bg: "#EEF1F4", fg: "#6E7E96", arrow: "•" };
   return (
     <span
@@ -903,7 +882,7 @@ function PointGap({ value }: { value: number | null }) {
     return <span className="text-text-muted">—</span>;
   }
   const scaled = Math.round(value * 100) / 10; // display scale is raw x 10
-  const color = scaled > 0.05 ? "#5E7898" : scaled < -0.05 ? "#C96B60" : "#6E7E96";
+  const color = scaled > 0.05 ? "#2F6B3F" : scaled < -0.05 ? "#B2483E" : "#6E7E96";
   return (
     <span className="text-xs font-bold" style={{ color }}>
       {scaled > 0.05 ? "+" : ""}
@@ -1064,9 +1043,14 @@ function TrendTable({
     </button>
   );
 
-  const scoreCell = (value: number | null) =>
+  // The first (initial) campaign is the baseline: plain black text, no color chip.
+  const scoreCell = (value: number | null, plain = false) =>
     value == null ? (
       <span className="text-text-muted">—</span>
+    ) : plain ? (
+      <span className="inline-block min-w-[52px] text-center text-xs font-bold text-black">
+        {formatScoreForDisplay(value)}
+      </span>
     ) : (
       <span
         className="inline-block min-w-[52px] rounded-2xl px-2 py-0.5 text-center text-xs font-bold"
@@ -1088,7 +1072,7 @@ function TrendTable({
       </td>
       {activeKeys.map((key) => (
         <td key={key} className="px-3 py-3 text-center">
-          {scoreCell(row[key])}
+          {scoreCell(row[key], key === activeKeys[0] && activeKeys.length > 1)}
         </td>
       ))}
       {hasChange ? (
@@ -1260,6 +1244,7 @@ function HeatmapSection({
             minValue={INTEGRATION_SCORE_SCALE.minValue}
             midpoint={INTEGRATION_SCORE_SCALE.midpoint}
             maxValue={INTEGRATION_SCORE_SCALE.maxValue}
+            scoreColorResolver={integrationScoreColor}
             rowLabelHeader={rowLabelHeader}
             abbreviateHeaders={false}
             columnMinWidthClassName="min-w-[112px]"
@@ -1593,6 +1578,9 @@ function buildIntegrationPerspectiveDefinitions(
     voiceSelectedBrand: string;
     voiceSelectedCampaign: string;
     voiceSelectedSentiment: "all" | "positive" | "neutral" | "negative";
+    investigationBrands: string[];
+    investigationDepartments: string[];
+    investigationJobTitles: string[];
   },
   perspectiveInstances?: DashboardPerspectiveInstance[]
 ): IntegrationPerspectiveDefinition[] {
@@ -1622,7 +1610,14 @@ function buildIntegrationPerspectiveDefinitions(
         selectedCampaign={filters.heatMapCampaign}
       />
     ),
-    "integration.protectPrioritize": withResponses(data, <PrioritiesTab data={data} />),
+    "integration.investigation": (
+      <InvestigationTab
+        data={data}
+        brands={filters.investigationBrands}
+        departments={filters.investigationDepartments}
+        jobTitles={filters.investigationJobTitles}
+      />
+    ),
     "integration.brandReport": (
       <BrandReportTab
         data={data}
@@ -1676,12 +1671,12 @@ function buildIntegrationPerspectiveDefinitions(
         content: rendererMap["integration.heatMaps"],
       },
       {
-        id: "priorities",
-        label: "Protect & Prioritize",
-        rendererKey: "integration.protectPrioritize",
+        id: "investigation",
+        label: "Investigation",
+        rendererKey: "integration.investigation",
         categoryIds: ["canopy"],
         categoryLabels: ["Executive"],
-        content: rendererMap["integration.protectPrioritize"],
+        content: rendererMap["integration.investigation"],
       },
       {
         id: "brand",
@@ -1705,7 +1700,10 @@ function buildIntegrationPerspectiveDefinitions(
   const definitions: IntegrationPerspectiveDefinition[] = [];
 
   perspectiveInstances
-    .filter((instance) => instance.status === "active")
+    .filter(
+      (instance) =>
+        instance.status === "active" && instance.rendererKey !== "integration.protectPrioritize"
+    )
     .sort((left, right) => left.order - right.order)
     .forEach((instance) => {
       const content = rendererMap[instance.rendererKey];
@@ -1739,6 +1737,25 @@ function buildIntegrationPerspectiveDefinitions(
         categoryIds: statementDefinition.categoryIds,
         categoryLabels: statementDefinition.categoryLabels,
         content: rendererMap["integration.heatMaps"],
+      });
+    }
+  }
+
+  // Investigation is new: dashboards configured before it keep working by getting it
+  // right after Heat Maps.
+  if (!definitions.some((definition) => definition.rendererKey === "integration.investigation")) {
+    const heatMapIndex = definitions.findIndex(
+      (definition) => definition.rendererKey === "integration.heatMaps"
+    );
+    if (heatMapIndex >= 0) {
+      const heatMapDefinition = definitions[heatMapIndex];
+      definitions.splice(heatMapIndex + 1, 0, {
+        id: "investigation",
+        label: "Investigation",
+        rendererKey: "integration.investigation",
+        categoryIds: heatMapDefinition.categoryIds,
+        categoryLabels: heatMapDefinition.categoryLabels,
+        content: rendererMap["integration.investigation"],
       });
     }
   }
@@ -1860,6 +1877,9 @@ export function IntegrationEffectivenessDashboardClient({
     "heatMapCampaign",
     "all"
   );
+  const [investigationBrands, setInvestigationBrands] = useState<string[]>([]);
+  const [investigationDepartments, setInvestigationDepartments] = useState<string[]>([]);
+  const [investigationJobTitles, setInvestigationJobTitles] = useState<string[]>([]);
   const [voiceSelectedBrand, setVoiceSelectedBrand] = usePersistedDashboardFilter(
     filterStoreKey,
     "voiceSelectedBrand",
@@ -1936,6 +1956,14 @@ export function IntegrationEffectivenessDashboardClient({
   const statementToCampaign = resolveCampaignPref(statementToPref, false);
   const heatMapCampaignResolved = resolveCampaignPref(heatMapCampaign, true);
   const allBrandNames = data.meta.brands;
+  const investigationDepartmentOptions = useMemo(
+    () => Array.from(new Set(data.investigation.respondents.map((r) => r.department))).sort(),
+    [data.investigation.respondents]
+  );
+  const investigationJobTitleOptions = useMemo(
+    () => Array.from(new Set(data.investigation.respondents.map((r) => r.jobTitle))).sort(),
+    [data.investigation.respondents]
+  );
   const resolvedStatementBrand =
     statementBrand === "all" || allBrandNames.includes(statementBrand) ? statementBrand : "all";
   const resolvedHeatMapBrand =
@@ -1957,6 +1985,9 @@ export function IntegrationEffectivenessDashboardClient({
           voiceSelectedBrand: resolvedVoiceSelectedBrand,
           voiceSelectedCampaign,
           voiceSelectedSentiment,
+          investigationBrands,
+          investigationDepartments,
+          investigationJobTitles,
         },
         perspectiveInstances
       );
@@ -1978,6 +2009,9 @@ export function IntegrationEffectivenessDashboardClient({
       resolvedVoiceSelectedBrand,
       voiceSelectedCampaign,
       voiceSelectedSentiment,
+      investigationBrands,
+      investigationDepartments,
+      investigationJobTitles,
     ]);
   const categorySections = useMemo(
     () => buildIntegrationCategorySections(perspectiveDefinitions),
@@ -2150,6 +2184,36 @@ export function IntegrationEffectivenessDashboardClient({
           </EmbeddedFilterCard>
         </>
       )
+    ) : activePerspective?.rendererKey === "integration.investigation" ? (
+      railStack(
+        <>
+          <EmbeddedFilterCard defaultOpen title="Brand">
+            <MultiPillRow
+              selected={investigationBrands}
+              onChange={setInvestigationBrands}
+              options={data.meta.brands}
+              allLabel="All Brands"
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Department">
+            <MultiPillRow
+              selected={investigationDepartments}
+              onChange={setInvestigationDepartments}
+              options={investigationDepartmentOptions}
+              allLabel="All Departments"
+            />
+          </EmbeddedFilterCard>
+          <EmbeddedFilterCard defaultOpen title="Job Title">
+            <MultiPillRow
+              selected={investigationJobTitles}
+              onChange={setInvestigationJobTitles}
+              options={investigationJobTitleOptions}
+              allLabel="All Job Titles"
+            />
+            {railHint("Pick any mix. Choices within a group widen the view; choices across groups narrow it. Scores need at least 2 responses per campaign.")}
+          </EmbeddedFilterCard>
+        </>
+      )
     ) : activePerspective?.rendererKey === "integration.employeeVoice" ? (
       railStack(
         <>
@@ -2228,8 +2292,20 @@ export function IntegrationEffectivenessDashboardClient({
   return (
     <VisualExportProvider active client={data.meta.organizationName} logoUrl="/canopy-services-logo.png">
       <VisualExportMetaSetter
-        title={activePerspective?.label ?? "Integration Effectiveness"}
-        filters={[latestCampaign]}
+        title={
+          activePerspective?.rendererKey === "integration.investigation"
+            ? "Statement Scores"
+            : (activePerspective?.label ?? "Integration Effectiveness")
+        }
+        filters={
+          activePerspective?.rendererKey === "integration.investigation"
+            ? investigationFilterList({
+                brands: investigationBrands,
+                departments: investigationDepartments,
+                jobTitles: investigationJobTitles,
+              })
+            : [latestCampaign]
+        }
       />
       <FieldRedesignShell
         clientName={data.meta.organizationName}
@@ -2554,32 +2630,163 @@ function LongitudinalTrendsTab({
   );
 }
 
-function PrioritiesTab({ data }: { data: IntegrationDashboardData }) {
-  const [strengthItems, priorityItems] = dedupePriorityGroups(data.strengths, data.priorities);
-  const visibleStrengthItems = strengthItems.slice(0, 3);
-  const visiblePriorityItems = priorityItems.slice(0, 3);
+const INVESTIGATION_MIN_RESPONSES = 2;
 
-  const prFile = (section: string) =>
-    buildDashboardExportFilename({ client: "integration", perspective: `priorities-${section}` });
+function InvestigationTab({
+  data,
+  brands,
+  departments,
+  jobTitles,
+}: {
+  data: IntegrationDashboardData;
+  brands: string[];
+  departments: string[];
+  jobTitles: string[];
+}) {
+  const { statements, respondents } = data.investigation;
+  const scoped = useMemo(
+    () =>
+      respondents.filter(
+        (respondent) =>
+          (brands.length === 0 || brands.includes(respondent.brand)) &&
+          (departments.length === 0 || departments.includes(respondent.department)) &&
+          (jobTitles.length === 0 || jobTitles.includes(respondent.jobTitle))
+      ),
+    [respondents, brands, departments, jobTitles]
+  );
+
+  const counts = useMemo(() => {
+    const next = { campaign1: 0, campaign2: 0, campaign3: 0 };
+    scoped.forEach((respondent) => {
+      next[respondent.slot] += 1;
+    });
+    return next;
+  }, [scoped]);
+
+  const rows = useMemo(() => {
+    const buildRow = (
+      id: string,
+      label: string,
+      scoreOf: (respondent: (typeof scoped)[number]) => number[]
+    ): IntegrationTrendRow => {
+      const row: IntegrationTrendRow = {
+        id,
+        label,
+        respondentCount: scoped.length,
+        campaign1: null,
+        campaign2: null,
+        campaign3: null,
+        overall: null,
+        counts,
+      };
+      CAMPAIGN_SLOT_KEYS.forEach((slot) => {
+        const inSlot = scoped.filter((respondent) => respondent.slot === slot);
+        const values = inSlot.flatMap(scoreOf);
+        row[slot] =
+          inSlot.length >= INVESTIGATION_MIN_RESPONSES && values.length > 0
+            ? Math.round(averageScore(values) * 100) / 100
+            : null;
+      });
+      return row;
+    };
+    return {
+      statementRows: statements.map((statement) =>
+        buildRow(`question-${statement.itemId}`, statement.statement, (respondent) => {
+          const value = respondent.scores[statement.itemId];
+          return value == null ? [] : [value];
+        })
+      ),
+      selectionRow: buildRow("selection", "Selection overall", (respondent) =>
+        Object.values(respondent.scores).filter((value): value is number => value != null)
+      ),
+    };
+  }, [scoped, counts, statements]);
+  const benchmarkById = useMemo(
+    () => Object.fromEntries(data.trends.statements.map((row) => [row.id, row])),
+    [data.trends.statements]
+  );
+
+  const filterSummary = investigationFilterList({ brands, departments, jobTitles });
+  const invFile = buildDashboardExportFilename({
+    client: "integration",
+    perspective: "investigation-statement-scores",
+  });
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-2">
-        <RegisteredVisualExportFrame order={10} label="Download list" filename={prFile("strengths")} className="h-full">
-          <CompactPriorityList
-            title="Strength Signals"
-            description="These are the clearest positive signals in the current read and the areas leaders should continue reinforcing so progress does not erode as integration continues."
-            items={visibleStrengthItems}
-          />
-        </RegisteredVisualExportFrame>
-        <RegisteredVisualExportFrame order={20} label="Download list" filename={prFile("opportunities")} className="h-full">
-          <CompactPriorityList
-            title="Opportunity Signals"
-            description="These are the most actionable gaps in the current read and the places where focused leadership attention is most likely to improve the experience over time."
-            items={visiblePriorityItems}
-          />
-        </RegisteredVisualExportFrame>
-      </div>
+      <ResponsesCard total={scoped.length} counts={counts} scope={filterSummary.join(", ")} />
+      <RegisteredVisualExportFrame order={10} label="Download table" filename={invFile}>
+        <TrendTable
+          title="Statement Scores"
+          description={filterSummary.join(", ")}
+          labelHeader="Statement"
+          rows={rows.statementRows}
+          pinnedRow={rows.selectionRow}
+          benchmarkById={benchmarkById}
+          benchmarkHeader="vs. Canopy"
+          wideLabels
+        />
+      </RegisteredVisualExportFrame>
+    </div>
+  );
+}
+
+/** Every active filter value, comma separated; an untouched dimension reads "All ...". */
+function investigationFilterList({
+  brands,
+  departments,
+  jobTitles,
+}: {
+  brands: string[];
+  departments: string[];
+  jobTitles: string[];
+}) {
+  return [
+    ...(brands.length ? brands : ["All brands"]),
+    ...(departments.length ? departments : ["All departments"]),
+    ...(jobTitles.length ? jobTitles : ["All job titles"]),
+  ];
+}
+
+function MultiPillRow({
+  selected,
+  onChange,
+  options,
+  allLabel,
+}: {
+  selected: string[];
+  onChange: (next: string[]) => void;
+  options: string[];
+  allLabel: string;
+}) {
+  const toggle = (option: string) =>
+    onChange(
+      selected.includes(option) ? selected.filter((value) => value !== option) : [...selected, option]
+    );
+  return (
+    <div className="flex flex-wrap gap-[6px]">
+      <button
+        type="button"
+        onClick={() => onChange([])}
+        className={`fr-pill${selected.length === 0 ? " fr-pill-active" : ""}`}
+        style={pillButtonStyle(selected.length === 0)}
+      >
+        {allLabel}
+      </button>
+      {options.map((option) => {
+        const active = selected.includes(option);
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => toggle(option)}
+            className={`fr-pill${active ? " fr-pill-active" : ""}`}
+            style={pillButtonStyle(active)}
+          >
+            {option}
+          </button>
+        );
+      })}
     </div>
   );
 }

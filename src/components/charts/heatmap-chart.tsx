@@ -55,7 +55,7 @@ function DeltaCell({ value, strong = false }: { value: number | null | undefined
     return <span style={{ color: "#8798AA" }}>—</span>;
   }
   const rounded = Math.round(value * 10) / 10;
-  const color = rounded > 0 ? "#5E7898" : rounded < 0 ? "#C96B60" : "#6E7E96";
+  const color = rounded > 0 ? "#2F6B3F" : rounded < 0 ? "#B2483E" : "#6E7E96";
   const arrow = rounded > 0 ? "▲" : rounded < 0 ? "▼" : "";
   return (
     <span style={{ color, fontWeight: strong ? 800 : 700 }}>
@@ -101,6 +101,9 @@ export function HeatmapChart({
     }
     return name.substring(0, 10);
   };
+
+  // Custom resolvers (Canopy gold/white/blue) can go dark, so pick text per background.
+  const fillText = (background: string) => (scoreColorResolver ? readableText(background) : "#1C252A");
 
   const resolveScoreColor = (value: number | null) =>
     scoreColorResolver ? scoreColorResolver(value) : scoreScaleColor(value, minValue, midpoint, maxValue);
@@ -270,7 +273,7 @@ export function HeatmapChart({
                       backgroundColor: isSelf
                         ? "#EFE9DB"
                         : resolveScoreColor(val),
-                      color: "#1C252A",
+                      color: isSelf ? "#1C252A" : fillText(resolveScoreColor(val)),
                       opacity: isHovered ? 1 : 0.94,
                       borderRight: `1px solid ${gridLineColor}`,
                       borderTop: `1px solid ${gridLineColor}`,
@@ -325,7 +328,7 @@ export function HeatmapChart({
                     className="p-[6px_8px] text-center text-[12.5px] font-bold"
                     style={{
                       backgroundColor: resolveScoreColor(rowTotals[row.department] ?? null),
-                      color: "#1C252A",
+                      color: fillText(resolveScoreColor(rowTotals[row.department] ?? null)),
                       borderTop: `1px solid ${gridLineColor}`,
                     }}
                   >
@@ -383,7 +386,7 @@ export function HeatmapChart({
                     className="p-[6px_8px] text-center text-[12.5px] font-bold"
                     style={{
                       backgroundColor: resolveScoreColor(totalVal),
-                      color: "#1C252A",
+                      color: fillText(resolveScoreColor(totalVal)),
                       borderTop: `2px solid ${strongGridLineColor}`,
                       borderRight: `1px solid ${gridLineColor}`,
                     }}

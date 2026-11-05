@@ -1204,6 +1204,26 @@ export async function loadCanopyIntegrationDashboardData(
       ]),
     ]),
     longitudinal: buildLongitudinalData(respondents, questions),
+    investigation: {
+      statements: questions.map((question) => ({
+        itemId: question.itemId,
+        statement: question.statement,
+      })),
+      respondents: respondents.flatMap((respondent) => {
+        const slot = campaignSlotForLabel(respondent.campaign);
+        return slot
+          ? [
+              {
+                brand: respondent.brand,
+                department: respondent.department,
+                jobTitle: respondent.jobTitle,
+                slot,
+                scores: respondent.scores,
+              },
+            ]
+          : [];
+      }),
+    },
     priorities: buildPriorityList(questionMetrics, departmentMetrics),
     strengths: buildStrengthList(questionMetrics, departmentMetrics),
     commentThemes: buildCommentThemes(improvementVoice),

@@ -179,10 +179,10 @@ export function buildDefaultPerspectiveLibraryItems(): PerspectiveLibraryItem[] 
     buildLibraryItem(
       "integration-effectiveness-v1",
       "integration",
-      "integration-protect-prioritize",
-      "Protect & Prioritize",
-      "Strength and opportunity signal view for leadership action.",
-      "integration.protectPrioritize",
+      "integration-investigation",
+      "Investigation",
+      "Every statement with initial, secondary, growth and Canopy comparison, filtered by any mix of brand, department and job title.",
+      "integration.investigation",
       {
         defaultCategoryIds: ["canopy"],
         defaultCategoryLabels: ["Canopy"],
@@ -301,14 +301,14 @@ export function buildDefaultDashboardPerspectiveInstances(): DashboardPerspectiv
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-overview"), 1),
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-longitudinal-trends"), 2),
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-statement-trends"), 3),
-    buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-protect-prioritize"), 4),
+    buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-investigation"), 4),
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-brand-report"), 5),
     buildDashboardPerspectiveInstance("integration-demo-instance", byId("integration-employee-voice"), 6),
 
     buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-overview"), 1),
     buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-longitudinal-trends"), 2),
     buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-statement-trends"), 3),
-    buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-protect-prioritize"), 4),
+    buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-investigation"), 4),
     buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-brand-report"), 5),
     buildDashboardPerspectiveInstance("csg-integration-instance", byId("integration-employee-voice"), 6),
 

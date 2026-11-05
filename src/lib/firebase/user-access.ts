@@ -48,7 +48,7 @@ export const EE_PERSPECTIVE_ACCESS_OPTIONS = [
   { id: "integration.longitudinalTrends", label: "Integration - Longitudinal Trends" },
   { id: "integration.statementTrends", label: "Integration - Statement Trends" },
   { id: "integration.heatMaps", label: "Integration - Heat Maps" },
-  { id: "integration.protectPrioritize", label: "Integration - Protect & Prioritize" },
+  { id: "integration.investigation", label: "Integration - Investigation" },
   { id: "integration.brandReport", label: "Integration - Brand Report" },
   { id: "integration.employeeVoice", label: "Integration - Employee Voice" },
   ...ALL_EMPLOYEE_EXPERIENCE_PERSPECTIVE_ACCESS_OPTIONS,

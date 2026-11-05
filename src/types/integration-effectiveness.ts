@@ -125,6 +125,15 @@ export interface IntegrationLongitudinalScope {
   brands: IntegrationLongitudinalSeries[];
 }
 
+/** One anonymized response, used by the Investigation report to slice scores any way. */
+export interface IntegrationInvestigationRespondent {
+  brand: string;
+  department: string;
+  jobTitle: string;
+  slot: "campaign1" | "campaign2" | "campaign3";
+  scores: Record<number, number | null>;
+}
+
 export interface IntegrationDashboardData {
   meta: {
     organizationName: string;
@@ -172,6 +181,11 @@ export interface IntegrationDashboardData {
     overall: IntegrationLongitudinalScope;
     statements: Record<string, IntegrationLongitudinalScope>;
     departments: Record<string, IntegrationLongitudinalScope>;
+  };
+  /** Statement list plus every response, so the Investigation report can mix and match filters. */
+  investigation: {
+    statements: { itemId: number; statement: string }[];
+    respondents: IntegrationInvestigationRespondent[];
   };
   priorities: IntegrationPriority[];
   strengths: IntegrationPriority[];
