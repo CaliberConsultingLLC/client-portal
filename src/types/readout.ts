@@ -190,6 +190,8 @@ export type ReadoutCover = {
   closingBody: string;
   /** Closing focus-card accent (Roman numeral + border). */
   closingAccent?: string | null;
+  /** When true the cover omits the standalone closing card (the deck has its own closing slide). */
+  closingHidden?: boolean;
 };
 
 export type ReadoutDeck = {

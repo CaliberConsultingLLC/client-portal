@@ -1426,7 +1426,7 @@ function ReadoutDeckViewerInner({
                   </div>
                 );
               })}
-              {(() => {
+              {cover.closingHidden ? null : (() => {
                 const closingAccent = cover.closingAccent || READOUT_FOCUS_ACCENT_DEFAULT;
                 return (
                   <div
