@@ -193,6 +193,8 @@ export type ReadoutCover = {
 };
 
 export type ReadoutDeck = {
+  /** Text size scale marker: 2 = the 13/15/17/19px scale. Missing means the older scale (remapped on load). */
+  textSizes?: number;
   waveLabel: string;
   cover: ReadoutCover;
   order: string[];

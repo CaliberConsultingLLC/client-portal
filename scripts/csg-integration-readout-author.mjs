@@ -218,13 +218,13 @@ const s2 = slide({
       1,
       "Biggest positive",
       `Knowing who to contact with a concern is the one measure that clearly improved: it ${SD(9, ccA, ccB)}. Support from Canopy corporate teams ${SD(6, ccA, ccB)} and communication from Canopy leadership ${SD(2, ccA, ccB)}. Role clarity is the highest statement at ${P1(item(ccB, 4))}. Back Office nearly held (${moved(ov(ccBO1), ov(ccBO2))}, ${ccBO2.length} responses).`,
-      1
+      3
     ),
     neg: text(
       7,
       "Biggest concern",
       `Belief in long-term success fell most (${ptsAbs(item(ccA, 10), item(ccB, 10))} points), followed by ideas being welcomed (${ptsAbs(item(ccA, 5), item(ccB, 5))}) and a smooth, well-organized process (${ptsAbs(item(ccA, 7), item(ccB, 7))}). Sales is the lowest large group at ${P1(ov(ccSales2))} (${ccSales2.length} responses), and its weakest statements are the process (${P1(item(ccSales2, 7))}) and ideas being welcomed (${P1(item(ccSales2, 5))}).`,
-      1
+      3
     ),
   },
 });
@@ -250,13 +250,13 @@ const s3 = slide({
       1,
       "Biggest positive",
       `Brand leadership explaining why the acquisition benefits us is still the highest statement at ${P1(item(tgB, 1))}, with role clarity next at ${P1(item(tgB, 4))}. Tiger Sales is the strongest group at ${P1(ov(tgSales2))} (${tgSales2.length} responses, new in Campaign 2).`,
-      1
+      3
     ),
     neg: text(
       7,
       "Biggest concern",
       `Knowing who to contact fell the most (${ptsAbs(item(tgA, 9), item(tgB, 9))} points), followed by support from corporate teams (${ptsAbs(item(tgA, 6), item(tgB, 6))}) and a smooth, organized process (${ptsAbs(item(tgA, 7), item(tgB, 7))}). Back Office ${moved(ov(tgBO1), ov(tgBO2))}. With only ${TG.n1} responses in Campaign 1, the swings are large and should be read as direction.`,
-      1
+      3
     ),
   },
 });
@@ -278,13 +278,13 @@ const s4 = slide({
       1,
       "Biggest positive",
       `Being glad the brand joined Canopy rose the most (${ptsAbs(item(blA, 11), item(blB, 11))} points). Communication from Canopy leadership rose ${ptsAbs(item(blA, 2), item(blB, 2))} and knowing who to contact rose ${ptsAbs(item(blA, 9), item(blB, 9))}. Sales ${moved(ov(blSales1), ov(blSales2))} (${blSales2.length} responses each campaign).`,
-      1
+      3
     ),
     neg: text(
       7,
       "Biggest concern",
       `Respect for the brand's legacy and role clarity each fell ${ptsAbs(item(blA, 3), item(blB, 3))} points, and ideas being welcomed and a smooth process each fell ${ptsAbs(item(blA, 5), item(blB, 5))}. Legacy, ideas and the process are also among the largest falls across the organization. With only ${BL.n2} responses in Campaign 2, read this as direction.`,
-      1
+      3
     ),
   },
 });
@@ -515,6 +515,7 @@ const existing = await db.collection("readouts").doc(NEW_ID).get();
 const now = new Date().toISOString();
 
 const newDeck = {
+  textSizes: 2,
   waveLabel: "Sep/Oct 2026",
   cover: {
     ...cover,

@@ -96,7 +96,18 @@ export function normalizeReadoutDeck(deck: ReadoutDeck): ReadoutDeck {
       ...(grid ? { grid, gridRes } : {}),
     };
   }
-  return { ...deck, slides };
+  if (deck.textSizes !== 2) {
+    // Older text sizes were 13/19/31/40px. 13px keeps index 0; 19px is now index 3.
+    for (const [key, slide] of Object.entries(slides)) {
+      const blocks = Object.fromEntries(
+        Object.entries(slide.blocks ?? {}).map(([id, b]) =>
+          b.type === "text" && (b.size ?? 0) >= 1 ? [id, { ...b, size: 3 as const }] : [id, b]
+        )
+      );
+      slides[key] = { ...slide, blocks };
+    }
+  }
+  return { ...deck, slides, textSizes: 2 };
 }
 
 export function buildDefaultReadoutDeck(clientName = "Deep Well Services"): ReadoutDeck {

@@ -36,11 +36,14 @@ export const READOUT_PILL_PRESETS = [
   { id: "red", label: "Red", bg: "#F8EAEA", fg: "#A2483A", dot: "#C96B60" },
 ] as const;
 
+// Four even steps from the smallest to the largest text a slide needs. Decks
+// saved before this scale (no `textSizes` marker) are remapped on load in
+// normalizeReadoutDeck: old size 0 stays 0, old sizes 1-3 become 3 (19px).
 export const READOUT_TEXT_SIZES = [
   { body: "13px", lineHeight: "1.55", subtitle: "10px" },
+  { body: "15px", lineHeight: "1.5", subtitle: "10px" },
+  { body: "17px", lineHeight: "1.47", subtitle: "11px" },
   { body: "19px", lineHeight: "1.45", subtitle: "12px" },
-  { body: "31px", lineHeight: "1.25", subtitle: "14px" },
-  { body: "40px", lineHeight: "1.18", subtitle: "15px" },
 ] as const;
 
 /** Data-point value sizes — includes one step larger than text cards. */
