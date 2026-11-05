@@ -1759,7 +1759,7 @@ function DeckCard({
           {editing ? (
             <div
               title="Drag to set this visual's height · double-click to auto-fill"
-              className="flex h-[13px] shrink-0 cursor-row-resize items-center justify-center border-t border-[#EDF1EE] bg-[#F7F9F8] hover:bg-[rgba(201,154,60,0.12)]"
+              className="absolute inset-x-0 bottom-0 z-10 flex h-[13px] cursor-row-resize items-center justify-center border-t border-[#EDF1EE] bg-[#F7F9F8] hover:bg-[rgba(201,154,60,0.12)]"
               onMouseDown={onVResize}
               onDoubleClick={onVReset}
             >
@@ -1873,7 +1873,7 @@ function DeckCard({
           {editing ? (
             <div
               title="Drag to set this data point's height · double-click to auto-fit"
-              className="flex h-[13px] shrink-0 cursor-row-resize items-center justify-center border-t border-[rgba(0,0,0,0.06)] hover:bg-[rgba(201,154,60,0.12)]"
+              className="absolute inset-x-0 bottom-0 z-10 flex h-[13px] cursor-row-resize items-center justify-center border-t border-[rgba(0,0,0,0.06)] bg-[rgba(255,255,255,0.55)] hover:bg-[rgba(201,154,60,0.25)]"
               onMouseDown={onVResize}
               onDoubleClick={onVReset}
             >
