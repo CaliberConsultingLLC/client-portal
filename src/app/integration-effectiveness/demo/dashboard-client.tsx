@@ -883,9 +883,9 @@ function GrowthPill({ value, large = false }: { value: number | null; large?: bo
   const rounded = Math.round(value * 10) / 10;
   const tone =
     rounded > 0
-      ? { bg: "#E3F0E6", fg: "#2F6B3F", arrow: "▲" }
+      ? { bg: "#E9F0F7", fg: "#5E7898", arrow: "▲" }
       : rounded < 0
-        ? { bg: "#F6E1DE", fg: "#B2483E", arrow: "▼" }
+        ? { bg: "#F8EAEA", fg: "#C96B60", arrow: "▼" }
         : { bg: "#EEF1F4", fg: "#6E7E96", arrow: "•" };
   return (
     <span
@@ -903,7 +903,7 @@ function PointGap({ value }: { value: number | null }) {
     return <span className="text-text-muted">—</span>;
   }
   const scaled = Math.round(value * 100) / 10; // display scale is raw x 10
-  const color = scaled > 0.05 ? "#2F6B3F" : scaled < -0.05 ? "#B2483E" : "#6E7E96";
+  const color = scaled > 0.05 ? "#5E7898" : scaled < -0.05 ? "#C96B60" : "#6E7E96";
   return (
     <span className="text-xs font-bold" style={{ color }}>
       {scaled > 0.05 ? "+" : ""}

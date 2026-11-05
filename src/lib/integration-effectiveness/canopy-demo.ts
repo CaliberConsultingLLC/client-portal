@@ -455,6 +455,16 @@ function parseRespondents(questionIds: number[], databaseCsvText: string): Parse
   };
 
   return records
+    // One Campaign 2 response (ID 190) rated every statement at the minimum; excluded
+    // from all figures, matching the readout and the job-title heat map.
+    .filter(
+      (row) =>
+        !(
+          getValue(row, "ID").trim() === "190" &&
+          canonicalCampaignLabel(cleanLabel(getValue(row, "Campaign"), "")) ===
+            canonicalCampaignLabel("Second")
+        )
+    )
     .map((row) => {
       const scores = Object.fromEntries(
         questionIds.map((itemId) => [itemId, normalizeScore(getValue(row, String(itemId)))])

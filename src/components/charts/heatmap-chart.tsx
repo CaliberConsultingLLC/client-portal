@@ -55,7 +55,7 @@ function DeltaCell({ value, strong = false }: { value: number | null | undefined
     return <span style={{ color: "#8798AA" }}>—</span>;
   }
   const rounded = Math.round(value * 10) / 10;
-  const color = rounded > 0 ? "#2F6B3F" : rounded < 0 ? "#B2483E" : "#6E7E96";
+  const color = rounded > 0 ? "#5E7898" : rounded < 0 ? "#C96B60" : "#6E7E96";
   const arrow = rounded > 0 ? "▲" : rounded < 0 ? "▼" : "";
   return (
     <span style={{ color, fontWeight: strong ? 800 : 700 }}>
