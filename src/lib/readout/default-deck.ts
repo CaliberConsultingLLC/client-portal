@@ -78,12 +78,22 @@ export function normalizeReadoutDeck(deck: ReadoutDeck): ReadoutDeck {
       colCount === 2 && (!slide.widths || slide.widths.length !== 2)
         ? [slide.r ?? 0.5, 1 - (slide.r ?? 0.5)].map((w) => Math.round(w * 1000) / 1000)
         : normalizeWidths(colCount, slide.widths);
+    let grid = slide.grid;
+    let gridRes = slide.gridRes;
+    if (grid && gridRes !== READOUT_GRID_RES) {
+      // Older slides were laid out on a 12 x 8 grid; the grid is now 36 x 16.
+      grid = Object.fromEntries(
+        Object.entries(grid).map(([id, r]) => [id, { x: r.x * 3, y: r.y * 2, w: r.w * 3, h: r.h * 2 }])
+      );
+      gridRes = READOUT_GRID_RES;
+    }
     slides[key] = {
       ...slide,
       colCount,
       cols,
       widths,
       r: slide.r ?? widths[0] ?? 0.5,
+      ...(grid ? { grid, gridRes } : {}),
     };
   }
   return { ...deck, slides };
@@ -223,8 +233,10 @@ export function buildDefaultReadoutDeck(clientName = "Deep Well Services"): Read
 }
 
 /** Free-form grid resolution: coarse on purpose so boxes line up without fiddling. */
-export const READOUT_GRID_COLS = 12;
-export const READOUT_GRID_ROWS = 8;
+export const READOUT_GRID_COLS = 36;
+export const READOUT_GRID_ROWS = 16;
+/** Current grid resolution marker stored on slides (`gridRes`). */
+export const READOUT_GRID_RES = 2;
 
 function overlaps(a: ReadoutGridRect, b: ReadoutGridRect) {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -233,8 +245,8 @@ function overlaps(a: ReadoutGridRect, b: ReadoutGridRect) {
 /** First open spot of the requested size, scanning top-left to bottom-right. */
 export function findFreeGridRect(
   grid: Record<string, ReadoutGridRect>,
-  w = 4,
-  h = 2
+  w = 12,
+  h = 6
 ): ReadoutGridRect {
   const taken = Object.values(grid);
   for (let y = 0; y + h <= READOUT_GRID_ROWS; y++) {
@@ -265,7 +277,7 @@ export function columnsToGrid(slide: ReadoutSlide): Record<string, ReadoutGridRe
   const xs: Array<[number, number]> = [];
   let cursor = 0;
   widths.forEach((w, i) => {
-    const span = i === widths.length - 1 ? READOUT_GRID_COLS - cursor : Math.max(2, Math.round(w * READOUT_GRID_COLS));
+    const span = i === widths.length - 1 ? READOUT_GRID_COLS - cursor : Math.max(6, Math.round(w * READOUT_GRID_COLS));
     xs.push([cursor, span]);
     cursor += span;
   });
@@ -292,12 +304,12 @@ export function columnsToGrid(slide: ReadoutSlide): Record<string, ReadoutGridRe
     flush();
     if (!rows.length) return;
     const total = rows.reduce((s, r) => s + r.weight, 0);
-    const heights = rows.map((r) => Math.max(1, Math.round((r.weight / total) * READOUT_GRID_ROWS)));
+    const heights = rows.map((r) => Math.max(2, Math.round((r.weight / total) * READOUT_GRID_ROWS)));
     // Make the column fill the area exactly.
     let sum = heights.reduce((a, b) => a + b, 0);
     for (let guard = 0; sum !== READOUT_GRID_ROWS && guard < 64; guard++) {
       const idx = sum > READOUT_GRID_ROWS ? heights.indexOf(Math.max(...heights)) : heights.indexOf(Math.min(...heights));
-      if (sum > READOUT_GRID_ROWS && heights[idx] <= 1) break;
+      if (sum > READOUT_GRID_ROWS && heights[idx] <= 2) break;
       heights[idx] += sum > READOUT_GRID_ROWS ? -1 : 1;
       sum = heights.reduce((a, b) => a + b, 0);
     }

@@ -171,6 +171,8 @@ export type ReadoutSlide = {
   layout?: "columns" | "grid";
   /** Free-form placement per block id, used when layout === "grid". */
   grid?: Record<string, ReadoutGridRect>;
+  /** Grid resolution marker: 2 = the 36 x 16 grid. Missing means the older 12 x 8 grid (upgraded on load). */
+  gridRes?: number;
   /** Column block ids. Object form (not nested arrays) for Firestore compatibility. */
   cols: ReadoutSlideCols;
   blocks: Record<string, ReadoutBlock>;

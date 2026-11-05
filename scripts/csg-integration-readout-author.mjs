@@ -486,7 +486,8 @@ const order = Object.keys(slides);
 
 // Free-form grid placement (12 columns x 8 rows) for every slide. Each slide keeps
 // its column layout too, so a slide can be switched back to columns in the editor.
-const R = (x, y, w, h) => ({ x, y, w, h });
+// Coordinates below are written on the original 12 x 8 layout and scaled to the 36 x 16 grid.
+const R = (x, y, w, h) => ({ x: x * 3, y: y * 2, w: w * 3, h: h * 2 });
 const GRIDS = {
   s1: { d1: R(0, 0, 2, 2), d2: R(2, 0, 2, 2), "t-perception": R(4, 0, 5, 2), "t-lowest": R(0, 2, 5, 4), "t-comm": R(5, 2, 4, 4), "t-ideas": R(0, 6, 9, 2), v: R(9, 0, 3, 8) },
   s2: { pos: R(0, 0, 5, 4), neg: R(0, 4, 5, 4), v: R(5, 0, 7, 8) },
@@ -502,6 +503,7 @@ for (const k of Object.keys(slides)) {
   assert.deepEqual(Object.keys(GRIDS[k]).sort(), Object.keys(slides[k].blocks).sort(), "grid covers every block on " + k);
   slides[k].layout = "grid";
   slides[k].grid = GRIDS[k];
+  slides[k].gridRes = 2;
 }
 
 let baseSnap = await db.collection("readouts").doc(BASE_READOUT_ID).get();

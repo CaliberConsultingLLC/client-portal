@@ -21,6 +21,7 @@ import type { ReadoutDashboardLinkOptions } from "@/lib/readout/dashboard-link-o
 import {
   READOUT_COL_KEYS,
   READOUT_GRID_COLS,
+  READOUT_GRID_RES,
   READOUT_GRID_ROWS,
   activeColKeys,
   buildDefaultReadoutDeck,
@@ -343,7 +344,7 @@ function ReadoutDeckViewerInner({
             cols,
             grid:
               sl.layout === "grid"
-                ? { ...(sl.grid ?? {}), [id]: findFreeGridRect(sl.grid ?? {}, 4, 2) }
+                ? { ...(sl.grid ?? {}), [id]: findFreeGridRect(sl.grid ?? {}) }
                 : sl.grid,
             blocks: { ...sl.blocks, [id]: block },
           },
@@ -397,7 +398,10 @@ function ReadoutDeckViewerInner({
       const sl = d.slides[key];
       if (sl.layout === "grid") return d;
       const grid = sl.grid && Object.keys(sl.grid).length ? sl.grid : columnsToGrid(sl);
-      return { ...d, slides: { ...d.slides, [key]: { ...sl, layout: "grid", grid } } };
+      return {
+        ...d,
+        slides: { ...d.slides, [key]: { ...sl, layout: "grid", grid, gridRes: READOUT_GRID_RES } },
+      };
     });
   }
 
@@ -725,7 +729,7 @@ function ReadoutDeckViewerInner({
     const placed: Record<string, ReadoutGridRect> = { ...(sl.grid ?? {}) };
     // Blocks with no saved spot (added while the slide was in columns) get one.
     for (const id of Object.keys(sl.blocks)) {
-      if (!placed[id]) placed[id] = findFreeGridRect(placed, 4, 2);
+      if (!placed[id]) placed[id] = findFreeGridRect(placed);
     }
     const ids = Object.keys(sl.blocks).filter((id) => placed[id]);
     return (
